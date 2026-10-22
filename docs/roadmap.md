@@ -30,7 +30,7 @@ the turn simulation understood well enough to write it down as rules.
 | # | Subsystem | Entry points | Status |
 |---|---|---|---|
 | 1 | Turn loop / game state machine | `CmBeenden`, `NextPlayer`, `CpuTurn`, `Victory`, `EmailGameStep` — see `docs/rules/turn-loop.md` | ✅ structure; yearly processing → #2 |
-| 2 | Grain & population | `Do_KornVerteilen` 1040:8551, `Do_DemographischeDaten` 1040:62f8 | |
+| 2 | Grain, population, happiness, events | `PlayerTurnStart`, `UpdateBirthDeathRates`, `UpdateHappiness`, `RollYearlyEvent` — `docs/rules/population-grain.md`, `events.md` | ✅ formulas, validated on saves |
 | 3 | Land & market | `Do_LandHandeln` 1040:7e4b, `Do_HandelMitGuetern` 1040:1439 | |
 | 4 | Buildings | `Do_Gebaeude` 1040:6cff | |
 | 5 | Taxes & finances | `Do_SteuernFestsetzen` 1040:669d, `Do_Finanzhaushalt` 1040:5b3a | |

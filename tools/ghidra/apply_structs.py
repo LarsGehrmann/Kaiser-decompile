@@ -24,6 +24,7 @@ _ks = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_ks)
 HEADER, HEADER_SIZE = _ks.HEADER, _ks.HEADER_SIZE
 PLAYER, PLAYER_SIZE = _ks.PLAYER, _ks.PLAYER_SIZE
+PLAYER_PTR_PARAMS = _ks.PLAYER_PTR_PARAMS
 
 WINDOW_SIZE = 0x4959
 WINDOW_FIELDS = [
@@ -105,6 +106,32 @@ def main():
         from ghidra.util.task import TaskMonitor
         ifc = DecompInterface()
         ifc.openProgram(program)
+        def commit_params(f):
+            res = ifc.decompileFunction(f, 60, TaskMonitor.DUMMY)
+            if res.decompileCompleted():
+                HighFunctionDBUtil.commitParamsToDatabase(
+                    res.getHighFunction(), True,
+                    HighFunctionDBUtil.ReturnCommitOption.NO_COMMIT,
+                    SourceType.ANALYSIS)
+
+        far_player = PointerDataType(player, 4, dtm)
+        typed_players = 0
+        for f in program.getFunctionManager().getFunctions(True):
+            idx = PLAYER_PTR_PARAMS.get(f.getName())
+            if idx is None:
+                continue
+            if f.getParameterCount() == 0:
+                commit_params(f)
+            params = list(f.getParameters())
+            if idx >= len(params) or params[idx].getLength() != 4:
+                print('cannot type player param of', f.getName())
+                continue
+            params[idx] = ParameterImpl('player', far_player, program)
+            f.replaceParameters(
+                FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS, True,
+                SourceType.USER_DEFINED, params)
+            typed_players += 1
+
         typed = 0
         for f in program.getFunctionManager().getFunctions(True):
             if f.getParentNamespace().getName() != 'KaiserWindow':
@@ -126,7 +153,8 @@ def main():
                 FunctionUpdateType.DYNAMIC_STORAGE_FORMAL_PARAMS, True,
                 SourceType.USER_DEFINED, params)
             typed += 1
-        print(f'structs applied; Self typed in {typed} KaiserWindow methods')
+        print(f'structs applied; Self typed in {typed} KaiserWindow methods, '
+              f'player param in {typed_players} functions')
 
 
 if __name__ == '__main__':

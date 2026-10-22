@@ -36,6 +36,8 @@ def real48(b):
 def read_field(data, off, typ):
     if typ == 'u8':
         return data[off]
+    if typ == 's8':
+        return struct.unpack_from('<b', data, off)[0]
     if typ == 's16':
         return struct.unpack_from('<h', data, off)[0]
     if typ == 'u16':
@@ -49,7 +51,7 @@ def read_field(data, off, typ):
         return data[off:off + n].split(b'\0')[0].decode('cp1252')
     if typ.startswith('raw'):
         n = int(typ[3:])
-        return data[off:off + n].hex(' ')
+        return f'<{n} bytes>'
     raise ValueError(typ)
 
 
@@ -68,9 +70,9 @@ def s32(v):
 
 
 def checksums_ok(p):
-    a = s32(p['v22_q'] + (p['v54_q'] - p['vcb_q']))
-    b = s32(p['v22_q'] + (p['vcb_q'] - p['v54_q']))
-    c = ldiv(p['v54_q'] + p['vcb_q'], 1000)
+    a = s32(p['lifetime'] + (p['taler'] - p['land']))
+    b = s32(p['lifetime'] + (p['land'] - p['taler']))
+    c = ldiv(p['taler'] + p['land'], 1000)
     return a == p['check_a'] and b == p['check_b'] and c == p['check_c']
 
 
