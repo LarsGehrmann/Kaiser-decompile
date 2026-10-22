@@ -52,7 +52,8 @@ PLAYER = [
     (0x01e, 'u8', 'cpu_level',
      '0 = human; 3-6 in saves for computer players (difficulty?). '
      'NextPlayer runs CpuTurn when != 0; only humans get high scores'),
-    (0x01f, 'u8', 'v1f_q', 'Random(6)+1 at game start'),
+    (0x01f, 'u8', 'ai_aggression_q',
+     'Random(6)+1 at game start; AI war weight (7 - x)*5, attack chance (7 - x)*3 %'),
     (0x020, 'u8', 'skip_turn',
      'NextPlayer skips the player once and clears it (AUSSETZDLG)'),
     (0x021, 'u8', 'first_king_bonus', 'set when the player became the first Koenig'),

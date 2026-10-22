@@ -1,0 +1,13 @@
+address,name,kind,comment
+1008:0002,Ai_Turn,func,"The computer player's year: ageing, events, simulation, diplomacy, population, budget, grain, land, buildings, military (renamed from Ai_Economy)"
+1008:01fd,Ai_YearlySimulation,func,"Harvest, goods, grain price, initiative, experience for a computer player"
+1008:0ff7,Ai_PopulationModel,func,"Birth/death rates, happiness, migration"
+1008:1131,Ai_Budget,func,"Income items like PlayerTurnStart"
+1008:13b9,Ai_GrainPolicy,func,"Distribution band from rating 1030:0002 (<6 min..need, 6-10 need..max, >10 max); buys/sells grain"
+1008:1594,Ai_LandPolicy,func,"Land trading"
+1008:18ca,Ai_BuildingPolicy,func,"Palace/cathedral parts, granaries, warehouses, markets, mills"
+1008:2006,Ai_MilitaryPolicy,func,"Recruiting and sabotage"
+1008:3088,Ai_FirstYear,func,"Year 0 setup for a computer player"
+1030:0002,Ai_GrainRating_q,func,"Rating used by Ai_GrainPolicy"
+1030:08ba,Ai_StrengthComparison_q,func,"Used by Ai_ChooseWarTarget"
+1030:0fe9,Ai_BanditBattle,func,"Auto-resolved battle against bandits (event 17)"
