@@ -56,8 +56,12 @@ tools/.venv/bin/python -I tools/ne_resources.py Kaiser/kaiser.exe extracted/res 
 
 tools/ghidra/import.sh                          # fresh import + auto-analysis (only when starting over)
 tools/.venv/bin/python -I tools/ghidra/fixup_analysis.py
+python3 -I tools/owl_tables.py Kaiser/kaiser.exe docs/owl-tables.md tools/ghidra/names/25_handlers.csv
+python3 -I tools/ghidra/derive_actions.py       # needs a previous export_all run
 tools/.venv/bin/python -I tools/ghidra/apply_names.py
+tools/.venv/bin/python -I tools/ghidra/apply_structs.py   # types from tools/kaiser_structs.py
 tools/.venv/bin/python -I tools/ghidra/export_all.py
+python3 -I tools/field_index.py > docs/field-index.md
 
 python3 -I tools/ksr.py --check Kaiser/*.KSR Kaiser/*.ksr
 ```

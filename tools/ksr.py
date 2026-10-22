@@ -3,40 +3,23 @@
 Layout (from the save/load routines 1050:058b / 1050:07ed):
   header   0x295 bytes  raw copy of the global game record at DS:6108
   players  N x 0x6d5    raw copies of the player records (N = header[1])
-  extra    0x192 bytes  only if header.flag_0b and header.mode_0a == 3
+  extra    0x192 bytes  only if header.email_game_q and game_state == 3
 
-Field names are provisional; docs/ksr-format.md tracks the evidence.
+Field layouts live in tools/kaiser_structs.py; docs/ksr-format.md tracks
+the evidence.
 Usage:
   python3 -I tools/ksr.py Kaiser/NILSLARS.KSR          dump one save
   python3 -I tools/ksr.py --check Kaiser/*.KSR         verify all saves
 """
+import os
 import struct
 import sys
 
-HEADER_SIZE = 0x295
-PLAYER_SIZE = 0x6d5
-EXTRA_SIZE = 0x192
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kaiser_structs import (EXTRA_SIZE, HEADER_FIELDS, HEADER_SIZE,  # noqa: E402,F401
+                            PLAYER_FIELDS, PLAYER_SIZE)
+
 MAGIC = 0x7B  # '{' -- also the version number 123 (v1.23)
-
-# (offset, type, name) -- types: u8 s16 u16 s32 real cstr<N> raw<N>
-HEADER_FIELDS = [
-    (0x00, 'u8', 'magic'),
-    (0x01, 'u8', 'num_players'),
-    (0x0a, 'u8', 'mode_0a'),           # == 3 -> extra block present
-    (0x0b, 'u8', 'flag_0b'),           # != 0 -> RandSeed restored on load
-    (0x0e, 's32', 'rand_seed'),        # Random($FFFF) at save time
-]
-
-PLAYER_FIELDS = [
-    (0x00, 'cstr32', 'name'),
-    (0x22, 's16', 'check_salt'),       # input of the checksums
-    (0x26, 's32', 'check_a'),          # salt + (val_54 - val_cb)
-    (0x54, 's32', 'val_54'),           # probably Taler (goes negative)
-    (0xc7, 's32', 'check_c'),          # (val_54 + val_cb) div 1000
-    (0xcb, 's32', 'val_cb'),           # probably Land (~100000 at start)
-    (0x133, 's32', 'check_b'),         # salt + (val_cb - val_54)
-    (0x139, 'cstr40', 'name_139'),     # often a CP name from the string table
-]
 
 
 def real48(b):
@@ -85,9 +68,9 @@ def s32(v):
 
 
 def checksums_ok(p):
-    a = s32(p['check_salt'] + (p['val_54'] - p['val_cb']))
-    b = s32(p['check_salt'] + (p['val_cb'] - p['val_54']))
-    c = ldiv(p['val_54'] + p['val_cb'], 1000)
+    a = s32(p['v22_q'] + (p['v54_q'] - p['vcb_q']))
+    b = s32(p['v22_q'] + (p['vcb_q'] - p['v54_q']))
+    c = ldiv(p['v54_q'] + p['vcb_q'], 1000)
     return a == p['check_a'] and b == p['check_b'] and c == p['check_c']
 
 
@@ -104,7 +87,7 @@ class Save:
         self.players = [parse_fields(p, PLAYER_FIELDS)
                         for p in self.players_raw]
         expected = HEADER_SIZE + n * PLAYER_SIZE
-        if self.header['flag_0b'] and self.header['mode_0a'] == 3:
+        if self.header['email_game_q'] and self.header['game_state'] == 3:
             expected += EXTRA_SIZE
         self.size_ok = len(self.raw) == expected
 

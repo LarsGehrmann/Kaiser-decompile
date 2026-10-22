@@ -34,11 +34,16 @@ So file size = 661 + N × 1749 (+ 402), N = 2..10.
 |---|---|---|---|
 | 0x00 | byte | magic = `0x7B` (`'{'`, = 123 = v1.23) | written before saving; load rejects anything else (error 3) |
 | 0x01 | byte | number of players | load loop runs `0 .. header[1]-1` |
-| 0x0a | byte | game mode? | `== 3` together with 0x0b enables the extra block |
+| 0x02 | byte | number of human players | 2 in NILSLARS, 1 in solo saves; decremented when a human is eliminated |
+| 0x03 | byte | current player | every menu handler indexes the player array with it |
+| 0x05 | byte | last eliminated player? | set on elimination in `CmBeenden` |
+| 0x07 | integer | year − 1400 | `CmBeenden` uses `year + 0x578`; saves hold e.g. 45 = 1445 |
+| 0x0a | byte | game state | 1 = running (all menu handlers check it); 3 and 5 also used |
 | 0x0b | byte | flag (e-mail game?) | when set: extra block, and `RandSeed` restored from 0x0e on load |
 | 0x0e | longint | random seed | set to `Random($FFFF)` on save |
 
-Unknown: 0x02–0x09, 0x0c–0x0d, 0x12–0x294. The bytes from 0x15 hold the zero-terminated
+Unknown: 0x04, 0x06, 0x08–0x09, 0x0c–0x0d, 0x12–0x294. Field definitions are maintained in
+`tools/kaiser_structs.py`; `docs/field-index.md` lists the functions touching each header byte. The bytes from 0x15 hold the zero-terminated
 string "Reisiger Rächer" in every save (a unit or hero name default?).
 
 ## Player record (0x6d5 bytes)
@@ -46,7 +51,8 @@ string "Reisiger Rächer" in every save (a unit or hero name default?).
 | Off | Type | Name | Evidence |
 |---|---|---|---|
 | 0x000 | char[≈32], zero-padded | player name | "Nils", "Lars", CP names like `*Ludwig*` (INI keys `*Otto*` …) |
-| 0x022 | integer | checksum salt | input to all three checksums |
+| 0x019 | byte | title rank? | `== 10` triggers the victory routine |
+| 0x022 | integer | v22 (population?) | `< 1` eliminates the player; also the input of all three checksums |
 | 0x026 | longint | check A = salt + (v54 − vCB) | recomputed on load |
 | 0x054 | longint | **v54**, probably Taler | can be negative (debt) |
 | 0x0c7 | longint | check C = (v54 + vCB) div 1000 | divisor `0x3e8` in the disassembly at `1050:074a` |
