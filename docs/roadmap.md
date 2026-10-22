@@ -40,7 +40,7 @@ the turn simulation understood well enough to write it down as rules.
 | 9 | Computer players (AI) | `Ai_Turn` and policies — `docs/rules/ai.md` | ✅ structure + main heuristics |
 | 10 | Hidden commands | boss key, Census Editor (password = hero name), Ctrl+L, 1024×768 — `docs/rules/hidden-features.md` | ✅ |
 
-## Phase 3 – reimplementation (later)
+## Phase 3 – reimplementation (in progress)
 
-Language decision, then a port validated by loading the same savegame in both versions and
-comparing the next turn.
+Free Pascal port with differential testing against the original machine code; plan and
+status in [phase3.md](phase3.md).

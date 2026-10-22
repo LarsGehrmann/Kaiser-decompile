@@ -6,3 +6,5 @@ extracted/res/**/*.bmp
 __pycache__/
 ghidra_out/import.log
 win311/
+port/bin/
+port/obj/
