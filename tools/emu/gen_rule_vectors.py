@@ -44,6 +44,9 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   B:lo:hi / W:lo:hi / L:lo:hi   random byte / word / longint value
 #   R      random Real48 value                  O  out longint (reported in out=)
 #   OP     out far pointer, reported as offset into the player array
+#   OB:n   pointer to an n-byte out record (zeroed), reported as hex
+#   PJ     pointer to another player J != test player (J shown)
+#   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
 # Mutations: player fields; 'u.FIELD' = that field of a random unit (both
 # armies); 'h.FIELD' = a header field.
@@ -63,6 +66,12 @@ GOODS = ['salt', 'beer', 'wine', 'weapons', 'price_salt', 'price_beer',
          'prokurist_weapons', 'taler', 'warehouses', 'h.goods_trade_enabled']
 ARMY = ['army1_count', 'army2_count', 'u.type', 'u.level', 'u.ability',
         'u.attack', 'u.defence', 'u.pay', 'u.base_pay', 'spell', 'fame']
+BUILD = ['land', 'land_used', 'markets', 'mills', 'palace_parts',
+         'cathedral_parts', 'granaries', 'warehouses', 'university_parts',
+         'taverns', 'smithies', 'fame', 'grain', 'salt', 'beer', 'wine',
+         'weapons']
+SABOTAGE = ['taverns', 'spell', 'title', 'taler', 'sabotage_agents',
+            'sabotage_agents_returning_q', 'sabotage_budget', 'sabotage_funds']
 SPECS = {
     'GrainCapacity': ('1068:0885', ['P'], 'long', ECON),
     'SmithyOutput': ('1068:0bd3', ['P'], 'long', ECON),
@@ -126,6 +135,27 @@ SPECS = {
     'ClearBit': ('1068:6f23', ['F:report_flags', 'B:0:15'], 'none',
                  ['report_flags']),
     'TestBit': ('1068:6f52', ['B:0:255', 'B:0:15'], 'byte', []),
+    # batch 3
+    'MaximizeTaxes': ('1068:1e29', ['P'], 'none', POP + ECON),
+    'CanBePromoted': ('1068:3076', ['P'], 'byte',
+                      POP + ECON + ARMY + ['maximize_taxes']),
+    'RemoveGranaries': ('1068:0900', ['P', 'L:-2:30'], 'none',
+                        ['granaries', 'mills', 'grain']),
+    'RemoveWarehouses': ('1068:09b4', ['P', 'L:-2:30'], 'none',
+                         ['warehouses', 'salt', 'beer', 'wine', 'weapons']),
+    'ProduceGoods': ('1068:0c22', ['P'], 'byte',
+                     ECON + GOODS + ['country', 'brew_beer']),
+    'BuildingsLostForLand': ('1068:22c0', ['P', 'OB:44'], 'byte', BUILD),
+    'UpdateMarketPrices': ('1068:2a77', ['A', 'I', 'N', 'W:0:5'], 'none',
+                           BUILD + ['harvest_quality']),
+    'TransferLand': ('1068:41d5', ['P', 'PJ', 'OB:44', 'L:-1000:200000',
+                                   'B:0:1'], 'none', BUILD),
+    'SkipTurnLosses': ('1068:438c', ['P', 'B:0:1'], 'none',
+                       ['land', 'taler', 'population', 'markets', 'mills']),
+    'SabotageYearlyCost': ('1068:32b2', ['A', 'I', 'N'], 'long', SABOTAGE),
+    'SabotageFunding': ('1068:3386', ['A', 'I', 'N'], 'none', SABOTAGE),
+    'SabotageYearsToNextOp': ('1068:35c1', ['A', 'RI', 'RJ'], 'sword',
+                              SABOTAGE),
 }
 
 
@@ -268,9 +298,11 @@ def main():
             emu.reset_ds()
             emu.write(emu.ds_para, HDR_DS, bytes(header))
             emu.write(sp, 0, bytes(players))
-            emu.write(sp, OUT_AREA, bytes(64))
+            emu.write(sp, OUT_AREA, bytes(0x400))
             emu.rand_seed(seed)
             call_args, shown, outs = [], [], []
+            j = rng.choice([i for i in range(num) if i != p] or [p])
+            byte_refs = OUT_AREA + 0x100
             for a in args:
                 kind, _, rest = a.partition(':')
                 if kind == 'P':
@@ -284,9 +316,18 @@ def main():
                     call_args.append(('word', p))
                     shown.append(str(p))
                 elif kind == 'J':
-                    j = rng.randrange(num)
                     call_args.append(('word', j))
                     shown.append(str(j))
+                elif kind == 'PJ':
+                    call_args.append(('ptr', (sp, j * PSIZE)))
+                    shown.append(str(j))
+                elif kind in ('RI', 'RJ'):
+                    v = p if kind == 'RI' else j
+                    emu.write(sp, byte_refs, bytes([v]))
+                    call_args.append(('ptr', (sp, byte_refs)))
+                    byte_refs += 2
+                    if kind == 'RJ':
+                        shown.append(str(j))
                 elif kind == 'Q':
                     q = rng.randint(1, 5)
                     call_args.append(('word', q))
@@ -310,6 +351,10 @@ def main():
                 elif kind in ('O', 'OP'):
                     off = OUT_AREA + 4 * len(outs)
                     outs.append((kind, off))
+                    call_args.append(('ptr', (sp, off)))
+                elif kind == 'OB':
+                    off = OUT_AREA + 0x200
+                    outs.append((int(rest), off))
                     call_args.append(('ptr', (sp, off)))
                 else:
                     raise ValueError(a)
@@ -335,7 +380,9 @@ def main():
             out_vals = []
             for kind, off in outs:
                 v = emu.read(sp, off, 4)
-                if kind == 'O':
+                if isinstance(kind, int):
+                    out_vals.append(emu.read(sp, off, kind).hex())
+                elif kind == 'O':
                     out_vals.append(str(struct.unpack('<i', v)[0]))
                 else:
                     o, s = struct.unpack('<HH', v)

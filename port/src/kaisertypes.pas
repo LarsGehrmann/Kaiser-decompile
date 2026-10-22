@@ -146,7 +146,8 @@ type
     SabotageAgents: array[0..8] of Byte;  { +0x586 byte per other player (9 entries, indexed via a lookup list): agents; strikes need > 0 }
     SabotageAgentsReturningQ: array[0..8] of Byte;  { +0x58f byte per target: agents added back next year }
     SabotageBudget: array[0..8] of Byte;  { +0x598 byte per other player x 100 Taler, at most (title+1)*5 }
-    Pad5A1: array[0..27] of Byte;
+    SabotageFunds: array[0..19] of Byte;  { +0x5a1 word per target player: Taler paid in so far; buys an agent at (target title + 1) * 1000 (700 with Ambassador), SabotageFunding 1068:3386 }
+    Pad5B5: array[0..7] of Byte;
     Flags5bdQ: Word;  { +0x5bd temporary effects, cleared in PlayerTurnEnd (sabotage?): 0x800 grain loss + death rate, 0x40/0x80/0x100 happiness -0.18/-0.09/-0.07 }
     Pad5BF: array[0..1] of Byte;
     AttacksWon: SmallInt;  { +0x5c1 }

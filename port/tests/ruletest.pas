@@ -104,7 +104,9 @@ var
   Before, After, HBefore, HAfter: TBytes;
   I, Num, Pass, Fail, PIdx: Integer;
   O1, O2, O3: LongInt;
-  HasOuts: Boolean;
+  HasOuts, HasLoss: Boolean;
+  Loss: TLandLoss;
+  B1, B2: Byte;
   U: PUnit;
 
   function ArgI(N: Integer): LongInt;
@@ -168,6 +170,8 @@ begin
     Outs := '-';
     HasOuts := False;
     O1 := 0; O2 := 0; O3 := 0;
+    HasLoss := False;
+    FillChar(Loss, SizeOf(Loss), 0);
     try
       with Save do
         case Func of
@@ -232,6 +236,36 @@ begin
           'SetBit': begin SetBit(Pl^.ReportFlags, ArgI(0)); Got := '-'; end;
           'ClearBit': begin ClearBit(Pl^.ReportFlags, ArgI(0)); Got := '-'; end;
           'TestBit': Got := B2S(TestBit(ArgI(0), ArgI(1)));
+          'MaximizeTaxes': begin MaximizeTaxes(Pl^); Got := '-'; end;
+          'CanBePromoted': Got := B2S(CanBePromoted(Pl^));
+          'RemoveGranaries': begin RemoveGranaries(Pl^, ArgI(0)); Got := '-'; end;
+          'RemoveWarehouses': begin RemoveWarehouses(Pl^, ArgI(0)); Got := '-'; end;
+          'ProduceGoods': Got := B2S(ProduceGoods(Pl^));
+          'BuildingsLostForLand':
+            begin
+              HasLoss := True;
+              Got := B2S(BuildingsLostForLand(Pl^, Loss));
+            end;
+          'UpdateMarketPrices':
+            begin
+              UpdateMarketPrices(Players, ArgI(0), ArgI(1), ArgI(2));
+              Got := '-';
+            end;
+          'TransferLand':
+            begin
+              HasLoss := True;
+              TransferLand(Pl^, Players[ArgI(0)], Loss, ArgI(1), ArgI(2));
+              Got := '-';
+            end;
+          'SkipTurnLosses': begin SkipTurnLosses(Pl^, ArgI(0)); Got := '-'; end;
+          'SabotageYearlyCost': Got := IntToStr(SabotageYearlyCost(Players, ArgI(0), ArgI(1)));
+          'SabotageFunding': begin SabotageFunding(Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'SabotageYearsToNextOp':
+            begin
+              B1 := PIdx;
+              B2 := ArgI(0);
+              Got := IntToStr(SabotageYearsToNextOp(Players, B1, B2));
+            end;
         else
           begin
             WriteLn('unknown function ', Func);
@@ -244,6 +278,8 @@ begin
     { out parameters written before a runtime error count too }
     if HasOuts then
       Outs := IntToStr(O1) + ',' + IntToStr(O2) + ',' + IntToStr(O3);
+    if HasLoss then
+      Outs := HexOf(Snapshot(Loss, SizeOf(Loss)));
     After := Snapshot(Save.Players[0], Num * PlayerSize);
     HAfter := Snapshot(DS.Game, HeaderSize);
     Got := 'ret=' + Got + ' out=' + Outs + ' seedout=' + IntToStr(RandSeed) +

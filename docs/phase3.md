@@ -37,7 +37,7 @@ original resources.
 |---|---|---|---|
 | 1 | Data layer: `TGameHeader`, `TPlayer`, `TUnit`, load/save `.KSR` | all 30 saves round-trip byte-identically | ✅ |
 | 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical |
-| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 48 of 102 functions (`port/src/rules.pas`), 113,000 / 113,000 vectors identical |
+| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 60 of 102 functions (`port/src/rules.pas`), 141,000 / 141,000 vectors identical |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |

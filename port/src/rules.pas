@@ -19,6 +19,15 @@ type
   PUnit = ^TUnit;
   PPlayer = ^TPlayer;
 
+  { buildings a player loses when the land no longer carries them
+    (BuildingsLostForLand), handed over in TransferLand }
+  TLandLoss = packed record
+    Total: LongInt;   { refund in Taler; TransferLand: number of buildings handed over }
+    Unused4: LongInt;
+    Markets, Mills, PalaceParts, CathedralParts, Granaries, Warehouses,
+    UniversityParts, Taverns, Smithies: LongInt;
+  end;
+
 { Real48 constant from the three register words of the original code }
 function RC(W0, W1, W2: Word): TReal48;
 
@@ -71,6 +80,21 @@ function Chance(Percent: LongInt): Boolean;                 { 1068:6a65 }
 procedure SetBit(var B: Byte; Bit: Byte);                   { 1068:6eec }
 procedure ClearBit(var B: Byte; Bit: Byte);                 { 1068:6f23 }
 function TestBit(B: Byte; Bit: Byte): Boolean;              { 1068:6f52 }
+
+procedure MaximizeTaxes(var P: TPlayer);                    { 1068:1e29 }
+function CanBePromoted(var P: TPlayer): Boolean;            { 1068:3076 }
+procedure RemoveGranaries(var P: TPlayer; N: LongInt);      { 1068:0900 }
+procedure RemoveWarehouses(var P: TPlayer; N: LongInt);     { 1068:09b4 }
+function ProduceGoods(var P: TPlayer): Boolean;             { 1068:0c22 }
+function BuildingsLostForLand(var P: TPlayer; var L: TLandLoss): Boolean;  { 1068:22c0 }
+procedure UpdateMarketPrices(var Players: TPlayers; Me, NumPlayers: Byte;
+  Unused: Word);                                            { 1068:2a77 }
+procedure TransferLand(var From, Dest: TPlayer; var L: TLandLoss; Amount: LongInt;
+  WithFiefs: Byte);                                         { 1068:41d5 }
+procedure SkipTurnLosses(var P: TPlayer; Mode: ShortInt);   { 1068:438c }
+function SabotageYearlyCost(const Players: TPlayers; Me, NumPlayers: Byte): LongInt;  { 1068:32b2 }
+procedure SabotageFunding(var Players: TPlayers; Me, NumPlayers: Byte);  { 1068:3386 }
+function SabotageYearsToNextOp(const Players: TPlayers; var Me, Target: Byte): SmallInt;  { 1068:35c1 }
 
 implementation
 
@@ -703,6 +727,429 @@ end;
 function TestBit(B: Byte; Bit: Byte): Boolean;
 begin
   Result := (B and Byte(1 shl Bit)) <> 0;
+end;
+
+{ ---- batch 3 ---- }
+
+procedure MaximizeTaxes(var P: TPlayer);
+var
+  F, Base, T, Total, Best, BestTax, BestJustice: TReal48;
+  I, J, TaxLo, TaxHi, JusLo, JusHi: Byte;
+  V: SmallInt;
+
+  { try the current tax/justice pair: keep it if happiness stays above
+    0.3 and the income is the best so far }
+  procedure TryPair;
+  begin
+    UpdateHappiness(P);
+    if R48Cmp(P.Happiness, RC($9A7F, $9999, $1999)) > 0 then      { 0.3 }
+    begin
+      Total := R48Add(R48Add(R48Mul(Base, P.Happiness), T), FromLong(JusticeIncome(P)));
+      if R48Cmp(Total, Best) > 0 then
+      begin
+        Best := Total;
+        BestTax := P.TaxRate;
+        BestJustice := P.Justice;
+      end;
+    end;
+  end;
+
+begin
+  if P.Spell = 2 then                                  { Bienenfleiss }
+    F := RC($0081, $0000, $2000)                       { 1.25 }
+  else
+    F := RC($0081, $0000, $0000);
+  Base := R48Mul(FromLong(P.Mills * 330 + P.Markets * 155), F);
+  UpdateBirthDeathRates(P);
+  Best := R48Zero;
+  BestTax := R48Zero;
+  BestJustice := R48Zero;
+  { coarse search in steps of 10 % }
+  for I := 0 to 5 do
+  begin
+    P.TaxRate := R48Div(FromLong(I), RC($0084, $0000, $2000));    { / 10 }
+    T := FromLong(TaxIncome(P));
+    for J := 0 to 5 do
+    begin
+      P.Justice := R48Div(FromLong(J), RC($0084, $0000, $2000));
+      TryPair;
+    end;
+  end;
+  { fine search in steps of 1 % around the best pair }
+  V := SmallInt(R48Round(R48Mul(RC($0087, $0000, $4800), BestTax)) - 5);
+  if V < 0 then V := 0;
+  TaxLo := Byte(V);
+  V := SmallInt(R48Round(R48Mul(RC($0087, $0000, $4800), BestTax)) + 5);
+  if V > 50 then V := 50;
+  TaxHi := Byte(V);
+  V := SmallInt(R48Round(R48Mul(RC($0087, $0000, $4800), BestJustice)) - 5);
+  if V < 0 then V := 0;
+  JusLo := Byte(V);
+  V := SmallInt(R48Round(R48Mul(RC($0087, $0000, $4800), BestJustice)) + 5);
+  if V > 50 then V := 50;
+  JusHi := Byte(V);
+  Best := R48Zero;
+  for I := TaxLo to TaxHi do
+  begin
+    P.TaxRate := R48Div(FromLong(I), RC($0087, $0000, $4800));    { / 100 }
+    T := FromLong(TaxIncome(P));
+    for J := JusLo to JusHi do
+    begin
+      P.Justice := R48Div(FromLong(J), RC($0087, $0000, $4800));
+      TryPair;
+    end;
+  end;
+  P.TaxRate := BestTax;
+  P.Justice := BestJustice;
+  UpdateHappiness(P);
+end;
+
+function CanBePromoted(var P: TPlayer): Boolean;
+var
+  T: Byte;
+begin
+  if P.MaximizeTaxes <> 0 then
+    MaximizeTaxes(P);
+  UpdateBirthDeathRates(P);
+  UpdateHappiness(P);
+  T := Byte(P.Title + 1);
+  Result := (DS.PromotionLand[T] <= P.Land) and
+    (DS.PromotionTaler[T] <= P.Taler) and
+    (DS.PromotionPopulation[T] <= P.Population) and
+    (DS.PromotionPalaceParts[T] <= P.PalaceParts) and
+    (DS.PromotionCathedralParts[T] <= P.CathedralParts) and
+    (DS.PromotionArmyStrength[T] <= ArmyStrength(P, 1)) and
+    (R48Cmp(DS.PromotionHappiness[T], P.Happiness) <= 0);
+end;
+
+procedure RemoveGranaries(var P: TPlayer; N: LongInt);
+var
+  Ratio: TReal48;
+  OldCap: LongInt;
+begin
+  { the grain stock keeps its share of the (smaller) capacity }
+  OldCap := GrainCapacity(P);
+  if P.Granaries < N then
+    N := P.Granaries;
+  Ratio := R48Div(FromLong(P.Grain), FromLong(OldCap));
+  P.Granaries := P.Granaries - N;
+  P.Grain := R48Round(R48Mul(FromLong(GrainCapacity(P)), Ratio));
+end;
+
+procedure RemoveWarehouses(var P: TPlayer; N: LongInt);
+var
+  Ratio: array[1..4] of TReal48;
+  Cap: LongInt;
+  I: Byte;
+begin
+  Cap := WarehouseCapacity(P);
+  if P.Warehouses < N then
+    N := P.Warehouses;
+  if Cap <= 0 then
+    Exit;
+  for I := 1 to 4 do
+    Ratio[I] := R48Div(FromLong(Stock(P, I)^), FromLong(Cap));
+  P.Warehouses := P.Warehouses - N;
+  Cap := WarehouseCapacity(P);
+  for I := 1 to 4 do
+    Stock(P, I)^ := R48Round(R48Mul(FromLong(Cap), Ratio[I]));
+end;
+
+function ProduceGoods(var P: TPlayer): Boolean;
+var
+  F: TReal48;
+  Free, V: LongInt;
+begin
+  { yearly salt or wine, beer and weapons; returns True when the
+    warehouses are full }
+  F := P.Happiness;
+  if P.Spell = 2 then
+    F := R48Mul(F, RC($0081, $0000, $2000));
+  Free := WarehouseFreeSpace(P);
+  if DS.Game.GoodsTradeEnabled <> 0 then
+  begin
+    if DS.CountryProduct[P.Country] = 1 then
+    begin
+      V := R48Round(R48Mul(FromLong(P.Population div 25), F));
+      if V > Free then V := Free;
+      P.Salt := P.Salt + V;
+    end
+    else
+    begin
+      V := R48Round(R48Mul(FromLong(P.Population div SmallInt(320 - P.HarvestQuality * 20)), F));
+      if V > Free then V := Free;
+      P.Wine := P.Wine + V;
+    end;
+    if P.BrewBeer <> 0 then
+    begin
+      V := R48Round(R48Mul(FromLong(P.Grain div 100), F));
+      if P.Population div 1000 < V then
+        V := P.Population div 100;
+      Free := WarehouseFreeSpace(P);
+      if V > Free then V := Free;
+      P.Beer := P.Beer + V;
+      P.Grain := P.Grain - V * 100;
+    end;
+  end;
+  V := MinLong(SmithyOutput(P), P.Smithies);
+  if DS.Game.GoodsTradeEnabled <> 0 then
+  begin
+    Free := WarehouseFreeSpace(P);
+    if V > Free then V := Free;
+  end;
+  P.Weapons := P.Weapons + V;
+  Result := (P.Warehouses > 0) and (WarehouseFreeSpace(P) = 0);
+end;
+
+function BuildingsLostForLand(var P: TPlayer; var L: TLandLoss): Boolean;
+var
+  K: LongInt;
+
+  { Lost := Count - K; if positive refund a fifth of the price }
+  function Lose(Count: LongInt; var Lost: LongInt; Price: Byte): Boolean;
+  begin
+    Lost := Count - K;
+    Result := Lost > 0;
+    if Result then
+      L.Total := L.Total + LongInt(Lost * DS.BuildingPrices[Price]) div 5
+    else
+      Lost := 0;
+  end;
+
+begin
+  { every building needs 1000 of free (non-fief) land }
+  K := LongInt(P.Land - P.LandUsed) div 1000;
+  L.Total := 0;
+  Result := False;
+  if Lose(P.Markets, L.Markets, 0) then
+  begin
+    P.Markets := P.Markets - L.Markets;
+    Result := True;
+  end;
+  if Lose(P.Mills, L.Mills, 1) then
+  begin
+    P.Mills := P.Mills - L.Mills;
+    Result := True;
+  end;
+  L.PalaceParts := P.PalaceParts - K;
+  if L.PalaceParts > 0 then
+  begin
+    if P.PalaceParts = 12 then
+      LoseFame(P.Fame, 10);
+    L.Total := L.Total + LongInt(L.PalaceParts * DS.BuildingPrices[2]) div 5;
+    P.PalaceParts := Byte(P.PalaceParts - Byte(L.PalaceParts));
+    Result := True;
+  end
+  else
+    L.PalaceParts := 0;
+  L.CathedralParts := P.CathedralParts - K;
+  if L.CathedralParts > 0 then
+  begin
+    if P.CathedralParts = 12 then
+      LoseFame(P.Fame, 20);
+    L.Total := L.Total + LongInt(L.CathedralParts * DS.BuildingPrices[3]) div 5;
+    P.CathedralParts := Byte(P.CathedralParts - Byte(L.CathedralParts));
+    Result := True;
+  end
+  else
+    L.CathedralParts := 0;
+  if Lose(P.Granaries, L.Granaries, 4) then
+  begin
+    RemoveGranaries(P, L.Granaries);
+    Result := True;
+  end;
+  if Lose(P.Warehouses, L.Warehouses, 5) then
+  begin
+    RemoveWarehouses(P, L.Warehouses);
+    Result := True;
+  end;
+  if Lose(P.UniversityParts, L.UniversityParts, 6) then
+  begin
+    P.UniversityParts := Byte(P.UniversityParts - Byte(L.UniversityParts));
+    Result := True;
+  end;
+  if Lose(P.Taverns, L.Taverns, 7) then
+  begin
+    P.Taverns := P.Taverns - L.Taverns;
+    Result := True;
+  end;
+  if Lose(P.Smithies, L.Smithies, 8) then
+  begin
+    P.Smithies := P.Smithies - L.Smithies;
+    Result := True;
+  end;
+end;
+
+procedure UpdateMarketPrices(var Players: TPlayers; Me, NumPlayers: Byte; Unused: Word);
+var
+  P: PPlayer;
+  U, U4: TReal48;
+  R: LongInt;
+begin
+  P := @Players[Me];
+  { land: scarce unclaimed land makes it expensive }
+  U := R48Div(R48Div(FromLong(UnclaimedLand(Players, NumPlayers)), FromLong(NumPlayers)),
+              RC($0091, $0000, $4350));                                      { / 100000 }
+  R := Random(16);
+  U4 := R48Mul(R48Mul(R48Mul(U, U), U), U);
+  P^.LandPrice := MinLong(60, MaxLong(17,
+    LongInt(R48Round(R48Div(RC($0081, 0, 0), R48Add(U4, RC($717A, $0A3D, $23D7)))) + 15 -
+      FreeBuildingLand(P^) div 2000))) + R;
+  R := Random(6);
+  P^.PriceSalt := MaxLong(5, 10 - P^.Salt div 100) + R;
+  R := Random(11);
+  P^.PriceBeer := MaxLong(25, SmallInt((6 - P^.HarvestQuality) * 7 + 25) - P^.Beer div 50) + R;
+  R := Random(11);
+  P^.PriceWine := MaxLong(70, SmallInt((6 - P^.HarvestQuality) * 10 + 70) - P^.Wine div 50) + R;
+  R := Random(41);
+  P^.PriceWeapons := MaxLong(300, LongInt(560 - P^.Weapons * 2)) + R;
+end;
+
+procedure TransferLand(var From, Dest: TPlayer; var L: TLandLoss; Amount: LongInt;
+  WithFiefs: Byte);
+var
+  Share: TReal48;
+begin
+  if Amount = 0 then
+    Exit;
+  Share := R48Div(FromLong(Amount), FromLong(From.Land));
+  From.Land := From.Land - Amount;
+  Dest.Land := Dest.Land + Amount;
+  if WithFiefs <> 0 then
+    From.LandUsed := From.LandUsed - R48Round(R48Mul(FromLong(From.LandUsed), Share));
+  if BuildingsLostForLand(From, L) then
+  begin
+    { the receiver gets all but one of each lost market, mill, granary,
+      warehouse (at most 30 warehouses) }
+    Dest.Markets := Dest.Markets + MaxLong(0, L.Markets - 1);
+    Dest.Mills := Dest.Mills + MaxLong(0, L.Mills - 1);
+    Dest.Granaries := Dest.Granaries + MaxLong(0, L.Granaries - 1);
+    Dest.Warehouses := Dest.Warehouses + MaxLong(0, L.Warehouses - 1);
+    if Dest.Warehouses > 30 then
+      Dest.Warehouses := 30;
+    L.Total := L.Markets + L.Mills + L.Granaries + L.Warehouses;
+  end
+  else
+    L.Total := 0;
+end;
+
+procedure SkipTurnLosses(var P: TPlayer; Mode: ShortInt);
+var
+  D: LongInt;
+
+  { f * (1 + RandomReal): RandomReal is drawn first }
+  function Loss: TReal48;
+  var
+    R: TReal48;
+  begin
+    R := R48Mul(RandomReal, DS.SkipTurnLoss[Mode]);
+    Result := R48Add(DS.SkipTurnLoss[Mode], R);
+  end;
+
+begin
+  ReduceByFraction(P.Land, Loss);
+  if P.Land < 2000 then
+    P.Land := 2000;
+  D := R48Round(R48Mul(FromLong(P.Taler), Loss));
+  P.Taler := P.Taler - D;
+  P.TotalEventMoney := P.TotalEventMoney - D;
+  ReduceByFraction(P.Population, Loss);
+  if P.Population < 50 then
+    P.Population := 50;
+  if P.Markets > 0 then
+    ReduceByFraction(P.Markets, Loss);
+  if P.Mills > 0 then
+    ReduceByFraction(P.Mills, Loss);
+end;
+
+{ Sabotage arrays are indexed by the target's player index; the 9-entry
+  arrays overlap the next one for index 9 (never the player himself). }
+function Funds(var P: TPlayer; T: Byte): PSmallInt; inline;
+begin
+  Result := @PSmallInt(@P.SabotageFunds)[T];
+end;
+
+function SabotageYearlyCost(const Players: TPlayers; Me, NumPlayers: Byte): LongInt;
+var
+  Others: array[0..15] of Byte;
+  I, K, Last: Byte;
+begin
+  Result := 0;
+  if Players[Me].Taverns <= 0 then
+    Exit;
+  K := 0;
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    if I <> Me then
+    begin
+      Others[K] := I;
+      Inc(K);
+    end;
+  Last := Byte(NumPlayers - 2);
+  for I := 0 to Last do
+    Result := Result + SmallInt(Players[Me].SabotageBudget[Others[I]] * 100);
+end;
+
+procedure SabotageFunding(var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  Others: array[0..15] of Byte;
+  I, K, Last, T: Byte;
+  Price, MaxBudget, Cost: Word;
+  P: PPlayer;
+begin
+  { agents come back, the yearly budget is paid in, and every
+    (target title + 1) * price Taler paid in buys one agent }
+  if Players[Me].Spell = 1 then                        { Ambassador }
+    Price := 700
+  else
+    Price := 1000;
+  K := 0;
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    if I <> Me then
+    begin
+      Others[K] := I;
+      Inc(K);
+    end;
+  P := @Players[Me];
+  MaxBudget := (P^.Title + 1) * 5;
+  Last := Byte(NumPlayers - 2);
+  for I := 0 to Last do
+  begin
+    T := Others[I];
+    P^.SabotageAgents[T] := Byte(P^.SabotageAgents[T] + P^.SabotageAgentsReturningQ[T]);
+    P^.SabotageAgentsReturningQ[T] := 0;
+    if P^.Taverns > 0 then
+    begin
+      if SmallInt(P^.SabotageBudget[T]) > SmallInt(MaxBudget) then
+        P^.SabotageBudget[T] := Byte(MaxBudget);
+      Funds(P^, T)^ := SmallInt(Funds(P^, T)^ + P^.SabotageBudget[T] * 100);
+      P^.Taler := P^.Taler - SmallInt(P^.SabotageBudget[T] * 100);
+      P^.TotalSabotage := P^.TotalSabotage - SmallInt(P^.SabotageBudget[T] * 100);
+      Cost := Word((Players[T].Title + 1) * Price);
+      if Funds(P^, T)^ >= SmallInt(Cost) then
+      begin
+        P^.SabotageAgents[T] := Byte(P^.SabotageAgents[T] + 1);
+        Funds(P^, T)^ := SmallInt(Funds(P^, T)^ - Cost);
+      end;
+    end;
+  end;
+end;
+
+function SabotageYearsToNextOp(const Players: TPlayers; var Me, Target: Byte): SmallInt;
+var
+  Price, C, B, F: TReal48;
+begin
+  if Players[Me].SabotageBudget[Target] = 0 then
+    Exit(0);
+  if Players[Me].Spell = 1 then
+    Price := RC($008A, $0000, $2F00)                   { 700 }
+  else
+    Price := RC($008A, $0000, $7A00);                  { 1000 }
+  C := R48Mul(FromLong(Players[Target].Title + 1), Price);
+  B := FromLong(SmallInt(Players[Me].SabotageBudget[Target] * 100));
+  F := FromLong(PSmallInt(@Players[Me].SabotageFunds)[Target]);
+  Result := SmallInt(MaxLong(1, R48Round(R48Div(R48Sub(C, F), B))));
 end;
 
 end.

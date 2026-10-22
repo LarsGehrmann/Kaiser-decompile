@@ -26,13 +26,15 @@ type
     UnitRoughTerrain: array[0..35] of Byte;  { +0x2cc4 trees, rivers, no winter step loss (Lindwurm) }
     Pad2CE8: array[0..5485] of Byte;
     AttackInitiativeCost: array[0..9, 0..9] of Byte;  { +0x4256 [defender country, attacker country] 2..4 }
-    Pad42BA: array[0..667] of Byte;
+    Pad42BA: array[0..15] of Byte;
+    SkipTurnLoss: array[0..1] of TReal48;  { +0x42ca SkipTurnLosses fraction: 0.1 (mode 0), 0.3 (mode 1) }
+    Pad42D6: array[0..639] of Byte;
     TitleNames: array[0..10] of array[0..24] of Char;  { +0x4556 Herr .. Kaiser }
     Pad4669: array[0..0] of Byte;
     FemaleTitleNames: array[0..10] of array[0..24] of Char;  { +0x466a }
     Pad477D: array[0..0] of Byte;
     CountryNames: array[0..19] of array[0..24] of Char;  { +0x477e }
-    Pad4972: array[0..9] of Byte;
+    CountryProduct: array[0..9] of Byte;  { +0x4972 1 = salt, 3 = wine (ProduceGoods) }
     SpellNames: array[0..12] of array[0..24] of Char;  { +0x497c Nichts .. Terror }
     Pad4AC1: array[0..0] of Byte;
     UnitNames: array[-10..35] of array[0..24] of Char;  { +0x4ac2 unit type -10..35 }
@@ -62,7 +64,9 @@ type
     PromotionCathedralParts: array[1..10] of Byte;  { +0x587a }
     PromotionHappiness: array[1..10] of TReal48;  { +0x5884 }
     PromotionArmyStrength: array[1..10] of LongInt;  { +0x58c0 ArmyStrength(player, 1) }
-    Pad58E8: array[0..1815] of Byte;
+    Pad58E8: array[0..551] of Byte;
+    BuildingPrices: array[0..8] of LongInt;  { +0x5b10 markets, mills, palace part, cathedral part, granaries, warehouses, university part, taverns, smithies }
+    Pad5B34: array[0..1227] of Byte;
     RandSeed: LongInt;  { +0x6000 System.RandSeed (the port keeps it in Real48.RandSeed) }
     Pad6004: array[0..259] of Byte;
     Game: TGameHeader;  { +0x6108 the global game record = savegame header }

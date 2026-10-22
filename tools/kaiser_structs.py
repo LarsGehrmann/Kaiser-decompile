@@ -162,6 +162,8 @@ PLAYER = [
     (0x586, 'raw9', 'sabotage_agents', 'byte per other player (9 entries, indexed via a lookup list): agents; strikes need > 0'),
     (0x58f, 'raw9', 'sabotage_agents_returning_q', 'byte per target: agents added back next year'),
     (0x598, 'raw9', 'sabotage_budget', 'byte per other player x 100 Taler, at most (title+1)*5'),
+    (0x5a1, 'raw20', 'sabotage_funds',
+     'word per target player: Taler paid in so far; buys an agent at (target title + 1) * 1000 (700 with Ambassador), SabotageFunding 1068:3386'),
     (0x5bd, 'u16', 'flags_5bd_q',
      'temporary effects, cleared in PlayerTurnEnd (sabotage?): 0x800 grain '
      'loss + death rate, 0x40/0x80/0x100 happiness -0.18/-0.09/-0.07'),
@@ -232,9 +234,11 @@ DS = [
     (0x2ca0, 'u8[0..35]', 'unit_melee', '0: Artillerie, Alchimisten'),
     (0x2cc4, 'u8[0..35]', 'unit_rough_terrain', 'trees, rivers, no winter step loss (Lindwurm)'),
     (0x4256, 'u8[0..9,0..9]', 'attack_initiative_cost', '[defender country, attacker country] 2..4'),
+    (0x42ca, 'real[0..1]', 'skip_turn_loss', 'SkipTurnLosses fraction: 0.1 (mode 0), 0.3 (mode 1)'),
     (0x4556, 'cstr25[0..10]', 'title_names', 'Herr .. Kaiser'),
     (0x466a, 'cstr25[0..10]', 'female_title_names', ''),
     (0x477e, 'cstr25[0..19]', 'country_names', ''),
+    (0x4972, 'u8[0..9]', 'country_product', '1 = salt, 3 = wine (ProduceGoods)'),
     (0x497c, 'cstr25[0..12]', 'spell_names', 'Nichts .. Terror'),
     (0x4ac2, 'cstr25[-10..35]', 'unit_names', 'unit type -10..35'),
     (0x4f40, 'u8[0..35]', 'unit_knight', 'receives the Knappen bonus'),
@@ -260,6 +264,7 @@ DS = [
     (0x587a, 'u8[1..10]', 'promotion_cathedral_parts', ''),
     (0x5884, 'real[1..10]', 'promotion_happiness', ''),
     (0x58c0, 's32[1..10]', 'promotion_army_strength', 'ArmyStrength(player, 1)'),
+    (0x5b10, 's32[0..8]', 'building_prices', 'markets, mills, palace part, cathedral part, granaries, warehouses, university part, taverns, smithies'),
     (0x6000, 's32', 'rand_seed', 'System.RandSeed (the port keeps it in Real48.RandSeed)'),
     (0x6108, 'header', 'game', 'the global game record = savegame header'),
 ]
