@@ -1,6 +1,6 @@
 # Savegame format (`*.KSR`)
 
-Status: container layout and checksums **confirmed** (all 30 saves in `Kaiser/` pass
+Status: container layout and checksums **confirmed**; ~100 player fields are now defined in `tools/kaiser_structs.py` (see `docs/rules/` for their meaning) (all 30 saves in `Kaiser/` pass
 `python3 -I tools/ksr.py --check Kaiser/*.KSR Kaiser/*.ksr`). Most field meanings are still open.
 
 ## Where it comes from
@@ -59,7 +59,8 @@ string "Reisiger Rächer" in every save (a unit or hero name default?).
 | 0x0cb | longint | **vCB**, probably Land (ha) | ~100000 for new players |
 | 0x133 | longint | check B = salt + (vCB − v54) | recomputed on load |
 | 0x139 | char[] | second name, e.g. "Castor" | names from the string table (ids 101–320) |
-| 0x16a… | 61-byte records | army units? | each has a unit type ("Templer", "Kreuzritter") and a commander name ("… von Holstein") |
+| 0x137 / 0x138 | bytes | unit counts of Heer / Garde | |
+| 0x139 / 0x35e | 8 × TUnit (0x3d) each | Heer (army1) / Garde (army2) | layout in `tools/kaiser_structs.py` (UNIT) |
 
 The checksums are anti-cheat: editing Taler or Land in a hex editor without fixing
 checks A, B and C makes the game reject the save (error 5). `tools/ksr.py` verifies them.

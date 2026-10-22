@@ -35,7 +35,7 @@ the turn simulation understood well enough to write it down as rules.
 | 4 | Buildings | `Do_Gebaeude`, `InvestDlg_Update` — `docs/rules/buildings.md` | ✅ (university has no effect) |
 | 5 | Taxes & finances | `TaxIncome`, `JusticeIncome`, `TradeAgreementIncome`, `ArmyPay`, `Interest`, `MaximizeTaxes` — `docs/rules/finances.md` | ✅ validated |
 | 6 | Titles, promotion, revolution | `CanBePromoted`, `PromotionCheck`, `RevolutionCheck` — `docs/rules/titles.md` | ✅ requirement tables |
-| 7 | Military & battles | unit tables, recruitment, war — `docs/rules/military.md`; tactical battle → `battle.md` (in progress) | ✅ / battle in progress |
+| 7 | Military & battles | unit tables, recruitment, war — `military.md`; tactical battle — `battle.md` | ✅ |
 | 8 | Diplomacy & sabotage | mailbox protocol, treaties, `SabotageAction` — `docs/rules/diplomacy.md` | ✅ protocol + sabotage effects; costs open |
 | 9 | Computer players (AI) | `Ai_Turn` and policies — `docs/rules/ai.md` | ✅ structure + main heuristics |
 | 10 | Hidden commands | boss key, Census Editor (password = hero name), Ctrl+L, 1024×768 — `docs/rules/hidden-features.md` | ✅ |

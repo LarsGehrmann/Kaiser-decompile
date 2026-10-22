@@ -32,8 +32,8 @@ HEADER = [
      'when set: no elimination by lifetime and no fortune-teller events (option?)'),
     (0x13, 'u8', 'goods_trade_enabled',
      'DS:611b: goods production, Prokurist, caravans, warehouses at start'),
-    (0x14, 'u8', 'tactical_battles_q',
-     'initiative points only accumulate when set (UpdateInitiative)'),
+    (0x14, 'u8', 'initiative_enabled',
+     'initiative points (and their costs for attacks/manoeuvres) only when set; battles are always tactical'),
 ]
 
 # Player record, array at KaiserWindow+0x41, stride 0x6d5
@@ -147,11 +147,20 @@ PLAYER = [
     (0x583, 's8', 'initiative',
      'initiative points: += fame/50 + 2 per turn (+1 Feldmarschall); attack costs DS:4256[def][att]'),
     (0x584, 'u8', 'army_away', 'Heer wintering abroad (initiative < 0 after an attack)'),
+    (0x585, 'u8', 'garrison_swapped', 'city battle: Garde moved into army1'),
     (0x5bd, 'u16', 'flags_5bd_q',
      'temporary effects, cleared in PlayerTurnEnd (sabotage?): 0x800 grain '
      'loss + death rate, 0x40/0x80/0x100 happiness -0.18/-0.09/-0.07'),
+    (0x5c1, 's16', 'attacks_won', ''),
+    (0x5c3, 's16', 'attacks_lost', ''),
+    (0x5c5, 's16', 'defences_won', ''),
+    (0x5c7, 's16', 'defences_lost', ''),
+    (0x5c9, 's16', 'raider_fights_won', 'bandits / Lindwurm'),
+    (0x5cb, 's16', 'raider_fights_lost', ''),
     (0x5cd, 's16', 'manoeuvres_held', '+1 per manoeuvre'),
-    (0x5d1, 's16', 'deserted_units_q', '+1 when a unit deserts (event 8)'),
+    (0x5cf, 's16', 'own_units_killed', ''),
+    (0x5d1, 's16', 'deserted_units', '+1 when a unit deserts (event 8, sabotage, battle)'),
+    (0x5d5, 's16', 'enemy_units_killed', ''),
     (0x5f0, 'real', 'year_factor_q', 'RandomReal*1.5+0.5, set every turn'),
     (0x5f6, 'u8', 'report_flags',
      'reports opened at turn start, bit n = menu Berichte entry 701+n: '
@@ -168,6 +177,7 @@ UNIT = [
     (0x00, 'cstr25', 'name', 'e.g. hero name "Castor", "Holsteinische Ritter"'),
     (0x19, 'u8', 'type',
      'unit type 0..35 = index into DS:4ac2 minus 10 (0 Miliz, 9 Held, 12 Lindwurm)'),
+    (0x1a, 'u8', 'hero_portrait', 'heroes: portrait bitmap index'),
     (0x1b, 'u8', 'attack', 'current, grows with level; ArmyStrength sums attack+defence'),
     (0x1c, 'u8', 'defence', 'current'),
     (0x1d, 'u8', 'max_hp', ''),
@@ -179,14 +189,17 @@ UNIT = [
     (0x23, 'u8', 'ammo', 'current'),
     (0x24, 'u8', 'level', 'rank: 0 Fuchs, 1 Offizier, 2 Haudegen, 3 Elite; heroes up to 105'),
     (0x25, 's16', 'experience', 'level up when >= level*2 + 10 (1068:4671)'),
-    (0x27, 'real', 'v27_q', '1.1 for nearly all units'),
+    (0x27, 's32', 'kills', 'Siege: +1 per enemy unit killed (1048:5055)'),
     (0x2b, 's16', 'pay', 'Sold per year, summed by ArmyPay; 0 after a fief'),
     (0x2d, 's16', 'base_pay', 'fief size = base_pay * 100 Hufen (/2 Chevalerie)'),
     (0x2f, 'u8', 'ability',
      'special ability, 1-based index into DS:53f1 (default per type: DS:5270)'),
-    (0x33, 's16', 'pos_x_q', 'battlefield position?'),
-    (0x35, 's16', 'pos_y_q', 'battlefield position?'),
-    (0x37, 'u8', 'flag_37_q', 'set to 1 for every unit at turn start'),
+    (0x30, 'real', 'motivation', '0.5..1.1; desertion if RandomReal*0.6 > motivation (battle.md)'),
+    (0x36, 's8', 'blind_rounds', 'battle: blinded (Sprengpulver)'),
+    (0x37, 's8', 'unconscious_rounds', 'battle: knocked out; outside battle often 1 (set at turn start)'),
+    (0x38, 'u8', 'stance', '0 active, 1 Eingraben (dug in), 2 Heilen (healing)'),
+    (0x39, 's16', 'pos_x', 'battlefield column 0..14, kept after the battle'),
+    (0x3b, 's16', 'pos_y', 'battlefield row 0..10'),
 ]
 UNIT_SIZE = 0x3d
 
