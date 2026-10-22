@@ -183,6 +183,10 @@ PLAYER = [
      'reports opened at turn start, bit n = menu Berichte entry 701+n: '
      '0 gossip, 1 population, 2 budget, 3 intelligence, 4 goods, 5 grain, '
      '6 land, 7 buildings'),
+    (0x5f7, 'u8', 'news_count', 'entries in news, at most 10 (AddNews 1068:68c5)'),
+    (0x5f8, 'raw30', 'news', '10 x (actor, target, kind) bytes for the gossip report'),
+    (0x616, 'u8', 'sabotage_log_count', 'entries in sabotage_log, at most 15'),
+    (0x617, 'raw90', 'sabotage_log', '15 x (attacker byte, kind byte, amount longint); kind 0 = agent caught (LogSabotageReport 1068:696f)'),
     (0x671, 'raw60', 'diplomacy_671_q', '6 bytes per player (pending offers?)'),
     (0x6ad, 'raw10', 'trade_agreement', 'byte per player: trade agreement with that player'),
     (0x6b7, 'raw10', 'peace_years', 'byte per player: years left on a peace treaty'),
@@ -234,6 +238,7 @@ DS = [
     (0x2ca0, 'u8[0..35]', 'unit_melee', '0: Artillerie, Alchimisten'),
     (0x2cc4, 'u8[0..35]', 'unit_rough_terrain', 'trees, rivers, no winter step loss (Lindwurm)'),
     (0x4256, 'u8[0..9,0..9]', 'attack_initiative_cost', '[defender country, attacker country] 2..4'),
+    (0x42ba, 'u8[0..15]', 'sabotage_chance', 'base success chance % per sabotage kind 1..14, minus justice*100 (SabotageAction)'),
     (0x42ca, 'real[0..1]', 'skip_turn_loss', 'SkipTurnLosses fraction: 0.1 (mode 0), 0.3 (mode 1)'),
     (0x42d6, 'cstr10', 'marauders_name', '"Marodeure" (GenerateMarauders)'),
     (0x42e0, 'cstr6', 'lindwurm_name', '"Lindi" (GenerateLindwurm)'),
@@ -283,6 +288,7 @@ DS = [
     (0x6000, 's32', 'rand_seed', 'System.RandSeed (the port keeps it in Real48.RandSeed)'),
     (0x6108, 'header', 'game', 'the global game record = savegame header'),
     (0x63a8, 'cstr25[0..9]', 'country_names_rt', 'runtime copy, editable (CountryNamesDlg)'),
+    (0x64a2, 'cstr25[0..9]', 'cpu_ruler_names', 'runtime, from KAISER.INI (InitPlayers, InitComputerRuler)'),
     (0x6696, 'cstr25[0..9]', 'country_adjectives', 'runtime, editable (CountryNamesDlg); knight names (MakeUnitName)'),
 ]
 DS_SIZE = 0x681c

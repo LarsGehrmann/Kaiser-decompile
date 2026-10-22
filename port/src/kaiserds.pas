@@ -26,7 +26,7 @@ type
     UnitRoughTerrain: array[0..35] of Byte;  { +0x2cc4 trees, rivers, no winter step loss (Lindwurm) }
     Pad2CE8: array[0..5485] of Byte;
     AttackInitiativeCost: array[0..9, 0..9] of Byte;  { +0x4256 [defender country, attacker country] 2..4 }
-    Pad42BA: array[0..15] of Byte;
+    SabotageChance: array[0..15] of Byte;  { +0x42ba base success chance % per sabotage kind 1..14, minus justice*100 (SabotageAction) }
     SkipTurnLoss: array[0..1] of TReal48;  { +0x42ca SkipTurnLosses fraction: 0.1 (mode 0), 0.3 (mode 1) }
     MaraudersName: array[0..9] of Char;  { +0x42d6 "Marodeure" (GenerateMarauders) }
     LindwurmName: array[0..5] of Char;  { +0x42e0 "Lindi" (GenerateLindwurm) }
@@ -87,7 +87,8 @@ type
     Game: TGameHeader;  { +0x6108 the global game record = savegame header }
     Pad639D: array[0..10] of Byte;
     CountryNamesRt: array[0..9] of array[0..24] of Char;  { +0x63a8 runtime copy, editable (CountryNamesDlg) }
-    Pad64A2: array[0..499] of Byte;
+    CpuRulerNames: array[0..9] of array[0..24] of Char;  { +0x64a2 runtime, from KAISER.INI (InitPlayers, InitComputerRuler) }
+    Pad659C: array[0..249] of Byte;
     CountryAdjectives: array[0..9] of array[0..24] of Char;  { +0x6696 runtime, editable (CountryNamesDlg); knight names (MakeUnitName) }
     Pad6790: array[0..139] of Byte;
   end;

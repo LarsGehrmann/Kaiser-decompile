@@ -105,9 +105,10 @@ var
   Before, After, HBefore, HAfter: TBytes;
   I, Num, Pass, Fail, PIdx: Integer;
   O1, O2, O3: LongInt;
-  HasOuts, HasLoss: Boolean;
+  HasLoss: Boolean;
+  OutCount: Integer;
   Loss: TLandLoss;
-  OutBuf: array[0..1023] of Byte;
+  OutBuf: array[0..4095] of Byte;
   OutSize, K: Integer;
   B1, B2: Byte;
   U: PUnit;
@@ -171,15 +172,19 @@ begin
     else
       Args.DelimitedText := Field(S, 'args');
     Outs := '-';
-    HasOuts := False;
-    O1 := 0; O2 := 0; O3 := 0;
+    OutCount := 0;
+    O1 := 0; O2 := 0; O3 := 0; B1 := 0;
     HasLoss := False;
     FillChar(Loss, SizeOf(Loss), 0);
     OutSize := 0;
     FillChar(OutBuf, SizeOf(OutBuf), 0);
     { runtime country adjectives (DS:6696) as a new game sets them }
+    { and computer ruler names (DS:64a2): here the country names }
     for K := 0 to 9 do
+    begin
       DS.CountryAdjectives[K] := DS.CountryNames[10 + K];
+      DS.CpuRulerNames[K] := DS.CountryNames[K];
+    end;
     try
       with Save do
         case Func of
@@ -204,7 +209,7 @@ begin
           'CanAffordWithCredit': Got := B2S(CanAffordWithCredit(Pl^, ArgI(0)));
           'GrainNeedMinMax':
             begin
-              HasOuts := True;
+              OutCount := 3;
               GrainNeedMinMax(Pl^, O1, O2, O3);
               Got := '-';
             end;
@@ -327,6 +332,40 @@ begin
               MakeVampire(PUnit(@OutBuf)^, UnitArg(0)^);
               Got := '-';
             end;
+          'CreateComputerPlayers':
+            begin
+              CreateComputerPlayers(Players, ArgI(0), ArgI(1), ArgI(2));
+              Got := '-';
+            end;
+          'InitPlayers': begin InitPlayers(Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'InitComputerRuler': begin InitComputerRuler(Players, ArgI(0)); Got := '-'; end;
+          'SabotageAction':
+            begin
+              OutCount := 2;
+              Got := B2S(SabotageAction(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3), O1, B1));
+              O2 := B1;
+            end;
+          'Distance': Got := IntToStr(Distance(ArgI(0), ArgI(1), ArgI(2), ArgI(3)));
+          'ClearHighScores':
+            begin
+              OutSize := 2750;
+              ClearHighScores(OutBuf);
+              Got := '-';
+            end;
+          'SortHighScoreTable': begin SortHighScoreTable(Pl^); Got := '-'; end;
+          'ClearMailboxSlot': begin ClearMailboxSlot(Pl^.Diplomacy671Q); Got := '-'; end;
+          'AddNews': begin AddNews(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3)); Got := '-'; end;
+          'LogSabotageReport':
+            begin
+              LogSabotageReport(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3), ArgI(4));
+              Got := '-';
+            end;
+          'FormatPercent': begin OutSize := 40; FormatPercent(@OutBuf, ArgI(0), ArgI(1)); Got := '-'; end;
+          'FormatThousands': begin OutSize := 40; FormatThousands(@OutBuf, ArgI(0)); Got := '-'; end;
+          'BuildingProgressText': begin OutSize := 40; BuildingProgressText(@OutBuf, ArgI(0)); Got := '-'; end;
+          'RealmName': begin OutSize := 40; RealmName(@OutBuf, ArgI(0)); Got := '-'; end;
+          'FameText': begin OutSize := 40; FameText(@OutBuf, ArgI(0)); Got := '-'; end;
+          'MagnitudeText': begin OutSize := 40; MagnitudeText(@OutBuf, ArgI(0)); Got := '-'; end;
           'SabotageYearsToNextOp':
             begin
               B1 := PIdx;
@@ -343,7 +382,9 @@ begin
       on E: ERealError do Got := 'E' + IntToStr(E.Code);
     end;
     { out parameters written before a runtime error count too }
-    if HasOuts then
+    if OutCount = 2 then
+      Outs := IntToStr(O1) + ',' + IntToStr(O2)
+    else if OutCount = 3 then
       Outs := IntToStr(O1) + ',' + IntToStr(O2) + ',' + IntToStr(O3);
     if HasLoss then
       Outs := HexOf(Snapshot(Loss, SizeOf(Loss)));

@@ -128,6 +128,26 @@ procedure UnitRankName(const U: TUnit; Dest: PChar);        { 1068:61db }
 procedure RaiderVictoryReward(var P: TPlayer; Kind: Byte);  { 1068:66af }
 procedure MakeVampire(var Dest: TUnit; const Src: TUnit);   { 1068:674b }
 
+procedure CreateComputerPlayers(var Players: TPlayers; NumHumans, NumCpu,
+  Difficulty: Byte);                                        { 1068:0002 }
+procedure InitPlayers(var Players: TPlayers; NumPlayers, Difficulty: Byte);  { 1068:01c1 }
+procedure InitComputerRuler(var Players: TPlayers; Index: Byte);  { 1068:0788 }
+function SabotageAction(var Players: TPlayers; Unused, Me, Target, Kind: Byte;
+  var Amount: LongInt; var Caught: Byte): Boolean;          { 1068:36ef }
+function Distance(X1, Y1, X2, Y2: SmallInt): Word;          { 1068:666b }
+procedure ClearHighScores(var Tables);                      { 1068:67c5 }
+procedure SortHighScoreTable(var Table);                    { 1068:67db }
+procedure ClearMailboxSlot(var Slot);                       { 1068:68b0 }
+procedure AddNews(var Players: TPlayers; NumPlayers, Actor, Target, Kind: Byte);  { 1068:68c5 }
+procedure LogSabotageReport(var Players: TPlayers; Unused, Attacker, Target, Kind: Byte;
+  Amount: LongInt);                                         { 1068:696f }
+procedure FormatPercent(Dest: PChar; Part, Total: LongInt); { 1068:6aa5 }
+procedure FormatThousands(Dest: PChar; V: LongInt);         { 1068:6b58 }
+procedure BuildingProgressText(Dest: PChar; Parts: Byte);   { 1068:6c36 }
+procedure RealmName(Dest: PChar; Land: LongInt);            { 1068:6cb4 }
+procedure FameText(Dest: PChar; Fame: Byte);                { 1068:6d8b }
+procedure MagnitudeText(Dest: PChar; V: LongInt);           { 1068:6e30 }
+
 implementation
 
 { Integer arithmetic: the original wraps at 32 bits (longint) or 16 bits
@@ -1945,6 +1965,496 @@ begin
   Dest.BlindRounds := 0;
   Dest.UnconsciousRounds := 0;
   Dest.Ability := Byte(DS.UnitDefaultAbility[10]);
+end;
+
+{ ---- batch 5: game setup, sabotage, texts ---- }
+
+{ a zero-terminated text constant of the data segment (offset given) }
+function DSText(Ofs: Word): PChar; inline;
+begin
+  Result := PChar(@PByte(@DS)[Ofs]);
+end;
+
+procedure CreateComputerPlayers(var Players: TPlayers; NumHumans, NumCpu,
+  Difficulty: Byte);
+var
+  Free: array[0..15] of Byte;
+  K, C, I, R, T, Last: Byte;
+  Used: Boolean;
+begin
+  { computer players get the countries no human took, in random order }
+  FillChar(Free, SizeOf(Free), 0);
+  K := 0;
+  for C := 0 to 9 do
+  begin
+    Used := False;
+    Last := Byte(NumHumans - 1);
+    for I := 0 to Last do
+      if Players[I].Country = C then
+        Used := True;
+    if not Used then
+    begin
+      Free[K] := C;
+      Inc(K);
+    end;
+  end;
+  Last := Byte(K - 1);
+  for I := 0 to Last do
+  begin
+    R := Random(K);
+    T := Free[I];
+    Free[I] := Free[R];
+    Free[R] := T;
+  end;
+  Last := Byte(NumHumans + NumCpu - 1);
+  for I := NumHumans to Last do
+  begin
+    FillChar(Players[I], PlayerSize, 0);
+    case Difficulty of
+      1: Players[I].CpuLevel := Random(2) + 5;         { Dorftrottel }
+      2: Players[I].CpuLevel := Random(2) + 3;
+      3: Players[I].CpuLevel := Random(2) + 1;
+      4: Players[I].CpuLevel := 1;                     { Absolutist }
+    end;
+    Players[I].Country := Free[I - NumHumans];
+  end;
+end;
+
+procedure InitPlayers(var Players: TPlayers; NumPlayers, Difficulty: Byte);
+var
+  I, J, R, Last, N: Byte;
+  Tmp: TPlayer;
+begin
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    with Players[I] do
+    begin
+      if CpuLevel = 0 then
+      begin
+        { humans; with the census editor on, the names "Alchimisten" and
+          "Berserker" start as Koenig with 999000 Taler }
+        if (DS.Game.CensusEditorEnabled <> 0) and
+           ((StrIComp(Name, DS.UnitNames[22]) = 0) or (StrIComp(Name, DS.UnitNames[28]) = 0)) then
+        begin
+          Title := 9;
+          Taler := 999000;
+        end
+        else
+        begin
+          Title := 0;
+          Taler := 1000;
+        end;
+        Land := 10000;
+        Population := 1000;
+        ReportFlags := $27;
+      end
+      else
+      begin
+        StrCopy(Name, DS.CpuRulerNames[Country]);
+        Spell := Random(12) + 1;
+        IsFemale := 0;
+        SkipTurn := 0;
+        BrewBeer := DS.Game.GoodsTradeEnabled;
+        if Difficulty = 4 then                         { Absolutist: strong start }
+        begin
+          Title := 7;
+          Markets := 25;
+          Mills := 25;
+          Taler := 10000;
+          Land := 30000;
+          Population := 3000;
+          Fame := 70;
+        end
+        else
+        begin
+          Title := 0;
+          Taler := 1000;
+          Land := 10000;
+          Population := 1000;
+          Fame := 0;
+        end;
+      end;
+      AiAggressionQ := Random(6) + 1;
+      TotalEventMoney := 1000;
+      BirthRate := RC($717A, $0A3D, $23D7);            { 0.01 }
+      DeathRate := RC($717A, $0A3D, $23D7);
+      Happiness := RC($0081, 0, 0);
+      TaxRate := RC($CD7D, $CCCC, $4CCC);              { 0.1 }
+      Justice := RC($717D, $0A3D, $23D7);              { 0.08 }
+      AsylumLaw := RC($1480, $47AE, $7AE1);            { 0.98 }
+      Grain := 5000;
+      LandPrice := Random(15) + 17;
+      GrainPrice := Random(100) + 20;
+      Granaries := 1;
+      if DS.Game.GoodsTradeEnabled <> 0 then
+        Warehouses := 1;
+      Weapons := 2;
+      SkipTurn := 0;
+      for J := 0 to Last do
+        PSmallInt(@AttitudeQ)[J] := 100;
+      Lifetime := Random(20) + 60;
+    end;
+  { shuffle the order of the first human_players entries }
+  N := DS.Game.HumanPlayers;
+  Last := Byte(N - 1);
+  for I := 0 to Last do
+  begin
+    R := Random(N);
+    if R <> I then
+    begin
+      Tmp := Players[I];
+      Players[I] := Players[R];
+      Players[R] := Tmp;
+    end;
+  end;
+end;
+
+procedure InitComputerRuler(var Players: TPlayers; Index: Byte);
+begin
+  { a new computer ruler after the old one died }
+  with Players[Index] do
+  begin
+    StrCopy(Name, DS.CpuRulerNames[Country]);
+    AiAggressionQ := Random(6) + 1;
+    Spell := Random(12) + 1;
+    BrewBeer := DS.Game.GoodsTradeEnabled;
+    Title := 0;
+    CpuLevel := Random(6) + 1;
+    IsFemale := 0;
+    Fame := 0;
+    Lifetime := Random(30) + 50;
+  end;
+end;
+
+function SabotageAction(var Players: TPlayers; Unused, Me, Target, Kind: Byte;
+  var Amount: LongInt; var Caught: Byte): Boolean;
+var
+  T: PPlayer;
+  Hero: PUnit;
+  Flags: PLongInt;
+  Pct: SmallInt;
+  I: Byte;
+begin
+  { one sabotage strike of Me against Target (kinds: docs/rules/diplomacy.md).
+    Flags at +0x5bd are handled as a longint, as in the original. }
+  Result := False;
+  Caught := 0;
+  Amount := 0;
+  T := @Players[Target];
+  Flags := PLongInt(@T^.Flags5bdQ);
+  Hero := nil;
+  case Kind of
+    1: Result := T^.Mills > 10;
+    2: Result := T^.PalaceParts > 1;
+    3: Result := T^.Warehouses > 0;
+    4: Result := True;
+    7: if (Flags^ and $40) = 0 then Result := True;
+    8: if (Flags^ and $80) = 0 then Result := True;
+    9: if (T^.Title > 0) and ((Flags^ and $100) = 0) then Result := True;
+    5, 6:
+      begin
+        if (T^.Army1Count > 0) and (T^.ArmyAway = 0) and HasDesertableUnit(T^, 0) then
+          Result := True;
+        if Players[Me].Army2Count > 8 then
+          Kind := 5;                         { no room in the own Garde }
+      end;
+    $0A: if (Flags^ and $200) = 0 then Result := True;
+    $0B:
+      if FindHero(T^, Hero, 1) and ((Flags^ and $400) = 0) and (ShortInt(Hero^.MaxHp) > 5) then
+        Result := True;
+    $0C: if (Flags^ and $800) = 0 then Result := True;
+    $0D: if (Flags^ and $1000) = 0 then Result := T^.Taler > 5000;
+    $0E: if (Flags^ and $2000) = 0 then Result := T^.Taler > 1000;
+  end;
+  Pct := SmallInt(DS.SabotageChance[Kind] - R48Round(R48Mul(T^.Justice, RC($0087, 0, $4800))));
+  if Pct < 1 then
+    Pct := 1;
+  Result := Result and Chance(Pct);
+  Caught := Ord(Chance(Pct));
+  if Result then
+  begin
+    case Kind of
+      1:
+        begin
+          Amount := T^.Mills div 10;
+          if T^.Spell = $0A then
+            Amount := LongInt(Random(2) + 1) * Amount
+          else
+            Amount := LongInt(Random(3) + 1) * Amount;
+          T^.Mills := T^.Mills - Amount;
+        end;
+      2:
+        begin
+          if T^.Spell = $0A then
+            Amount := MinLong(T^.PalaceParts, Random(3) + 1)
+          else
+            Amount := MinLong(T^.PalaceParts, Random(5) + 1);
+          T^.PalaceParts := Byte(T^.PalaceParts - Byte(Amount));
+        end;
+      3:
+        begin
+          Amount := 1;
+          RemoveWarehouses(T^, Amount);
+        end;
+      4:
+        begin
+          { experience lost, except for ability 9 }
+          for I := 1 to T^.Army1Count do
+            if T^.Army1[I].Ability <> 9 then
+              T^.Army1[I].Experience := 0;
+          for I := 1 to T^.Army2Count do
+            if T^.Army2[I].Ability <> 9 then
+              T^.Army2[I].Experience := 0;
+        end;
+      7: Flags^ := Flags^ + $40;
+      8: Flags^ := Flags^ + $80;
+      9:
+        begin
+          Flags^ := Flags^ + $100;
+          LoseFame(T^.Fame, Random(5) + 3);
+        end;
+      5, 6:
+        begin
+          { a random unit deserts (6: to the attacker's Garde) }
+          repeat
+            I := Random(T^.Army1Count) + 1;
+          until DS.UnitCanDesert[ShortInt(T^.Army1[I].UnitType)] <> 0;
+          Amount := ShortInt(T^.Army1[I].UnitType);
+          if Kind = 6 then
+          begin
+            Inc(Players[Me].Army2Count);
+            Players[Me].Army2[Players[Me].Army2Count] := T^.Army1[I];
+          end;
+          RemoveArmy1Unit(T^, I);
+          Inc(T^.DesertedUnits);
+        end;
+      $0A: Flags^ := Flags^ + $200;
+      $0B:
+        begin
+          case Random(4) of
+            0:
+              begin
+                if Hero^.Attack > 7 then Dec(Hero^.Attack);
+                Dec(Hero^.MaxHp);
+              end;
+            1:
+              begin
+                if Hero^.Defence > 7 then Dec(Hero^.Defence);
+                Dec(Hero^.MaxHp);
+              end;
+            2:
+              begin
+                if Hero^.MaxSteps > 2 then Dec(Hero^.MaxSteps);
+                Hero^.Steps := Hero^.MaxSteps;
+                Dec(Hero^.MaxHp);
+              end;
+            3: Dec(Hero^.MaxHp, 2);
+          end;
+          Hero^.Hp := Hero^.MaxHp;
+        end;
+      $0C: Flags^ := Flags^ + $800;
+      $0D:
+        begin
+          Flags^ := Flags^ + $1000;
+          Amount := T^.Taler div (Random(6) + 5);
+        end;
+      $0E:
+        begin
+          Flags^ := Flags^ + $2000;
+          Amount := T^.Taler div (Random(16) + 15);
+          Players[Me].Taler := Players[Me].Taler + Amount;
+          Players[Me].TotalSabotage := Players[Me].TotalSabotage + Amount;
+        end;
+    end;
+    LogSabotageReport(Players, Unused, Me, Target, Kind, Amount);
+  end;
+  if Caught <> 0 then
+  begin
+    LogSabotageReport(Players, Unused, Me, Target, 0, 0);
+    Inc(Players[Me].SabotageAgentsReturningQ[Target]);
+  end;
+  Dec(Players[Me].SabotageAgents[Target]);
+end;
+
+function Distance(X1, Y1, X2, Y2: SmallInt): Word;
+begin
+  { 16-bit squares as the original; a negative wrapped sum fails in Sqrt }
+  Result := Word(R48Round(R48Sqrt(FromLong(SmallInt((Y1 - Y2) * (Y1 - Y2) + (X1 - X2) * (X1 - X2))))));
+end;
+
+procedure ClearHighScores(var Tables);
+begin
+  FillChar(Tables, $ABE, 0);       { 5 tables x 11 entries x 50 bytes }
+end;
+
+procedure SortHighScoreTable(var Table);
+type
+  TEntry = array[0..49] of Byte;   { score: longint at +0x2a }
+  TTable = array[0..10] of TEntry;
+var
+  T: TTable absolute Table;
+  Tmp: TEntry;
+  I, J, Best: Byte;
+begin
+  for I := 0 to 9 do
+  begin
+    Tmp := T[I];
+    Best := I;
+    for J := I + 1 to 10 do
+      if PLongInt(@T[J][$2A])^ > PLongInt(@Tmp[$2A])^ then
+      begin
+        Tmp := T[J];
+        Best := J;
+      end;
+    T[Best] := T[I];
+    T[I] := Tmp;
+  end;
+end;
+
+procedure ClearMailboxSlot(var Slot);
+begin
+  FillChar(Slot, 6, 0);
+end;
+
+procedure AddNews(var Players: TPlayers; NumPlayers, Actor, Target, Kind: Byte);
+var
+  I, Last, N: Byte;
+begin
+  { tell everyone except actor and target (gossip report) }
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    with Players[I] do
+      if (I <> Actor) and (I <> Target) and (NewsCount < 10) then
+      begin
+        Inc(NewsCount);
+        N := NewsCount;
+        PByte(@News)[3 * N - 3] := Actor;
+        PByte(@News)[3 * N - 2] := Target;
+        PByte(@News)[3 * N - 1] := Kind;
+      end;
+end;
+
+procedure LogSabotageReport(var Players: TPlayers; Unused, Attacker, Target, Kind: Byte;
+  Amount: LongInt);
+var
+  N: Byte;
+begin
+  with Players[Target] do
+    if SabotageLogCount < 15 then
+    begin
+      Inc(SabotageLogCount);
+      N := SabotageLogCount;
+      SabotageLog[6 * N - 6] := Attacker;
+      SabotageLog[6 * N - 5] := Kind;
+      PLongInt(@SabotageLog[6 * N - 4])^ := Amount;
+    end;
+end;
+
+procedure FormatPercent(Dest: PChar; Part, Total: LongInt);
+begin
+  if Total = 0 then
+    StrCopy(Dest, DSText($42EE))                       { '0%' }
+  else
+  begin
+    IntToPChar(Dest, R48Round(R48Mul(R48Div(FromLong(Part), FromLong(Total)),
+      RC($0087, 0, $4800))));
+    StrCat(Dest, DSText($42EF));                       { '%' }
+  end;
+end;
+
+procedure FormatThousands(Dest: PChar; V: LongInt);
+var
+  Digits: array[0..13] of Char;
+  Grouped: array[0..13] of Char;
+  Len, OutLen, Count, I, K: SmallInt;
+begin
+  { digits in groups of three separated by ',' and a leading '-' }
+  if V < 0 then
+    IntToPChar(Digits, LongInt(-V))
+  else
+    IntToPChar(Digits, V);
+  StrCopy(Grouped, DSText($4304));                     { '' }
+  StrCopy(Dest, DSText($4304));
+  Len := StrLen(Digits);
+  if Len = 0 then
+    Exit;
+  OutLen := PSmallInt(@PByte(@DS)[$42F0 + 2 * Len])^;  { length with separators }
+  Count := 0;
+  I := Len - 1;
+  K := OutLen - 1;
+  repeat
+    Inc(Count);
+    if Count > 3 then
+    begin
+      Grouped[K] := ',';
+      Dec(K);
+      Count := 1;
+    end;
+    Grouped[K] := Digits[I];
+    Dec(K);
+    Dec(I);
+  until I = -1;
+  Grouped[OutLen] := #0;
+  if V < 0 then
+    StrCat(Dest, DSText($4305));                       { '-' }
+  StrCat(Dest, Grouped);
+end;
+
+procedure BuildingProgressText(Dest: PChar; Parts: Byte);
+begin
+  case Parts of
+    1..3: StrCopy(Dest, DSText($4308));                { Grundstein }
+    4..8: StrCopy(Dest, DSText($4313));                { in Bau }
+    9..11: StrCopy(Dest, DSText($431A));               { bald fertig }
+    12: StrCopy(Dest, DSText($4326));                  { vollendet }
+  else
+    StrCopy(Dest, DSText($4330));                      { - }
+  end;
+end;
+
+procedure RealmName(Dest: PChar; Land: LongInt);
+begin
+  { by the land needed for the titles 10, 9, 7, 5, 2 }
+  if Land >= DS.PromotionLand[10] then
+    StrCopy(Dest, DSText($4332))                       { Kaiserreich }
+  else if Land >= DS.PromotionLand[9] then
+    StrCopy(Dest, DSText($433E))                       { Koenigreich }
+  else if Land >= DS.PromotionLand[7] then
+    StrCopy(Dest, DSText($4349))                       { Fuerstentum }
+  else if Land >= DS.PromotionLand[5] then
+    StrCopy(Dest, DSText($4354))                       { Herzogtum }
+  else if Land >= DS.PromotionLand[2] then
+    StrCopy(Dest, DSText($435E))                       { Grafschaft }
+  else
+    StrCopy(Dest, DSText($4369));                      { Landstrich }
+end;
+
+procedure FameText(Dest: PChar; Fame: Byte);
+begin
+  case Fame of
+    0..19: StrCopy(Dest, DSText($4374));               { inexistent }
+    20..39: StrCopy(Dest, DSText($437F));              { windig }
+    40..59: StrCopy(Dest, DSText($4386));              { bekannt }
+    60..79: StrCopy(Dest, DSText($438E));              { angesehen }
+    80..94: StrCopy(Dest, DSText($4398));              { ehrwuerdig }
+    95..100: StrCopy(Dest, DSText($43A2));             { legendaer }
+  end;
+end;
+
+procedure MagnitudeText(Dest: PChar; V: LongInt);
+begin
+  if V >= 1000000 then
+    StrCopy(Dest, DSText($43AC))                       { Millionen }
+  else if V >= 100000 then
+    StrCopy(Dest, DSText($43B6))                       { Hunderttausende }
+  else if V >= 10000 then
+    StrCopy(Dest, DSText($43C6))                       { Zehntausende }
+  else if V >= 1000 then
+    StrCopy(Dest, DSText($43D3))                       { Tausende }
+  else if V >= 100 then
+    StrCopy(Dest, DSText($43DC))                       { Hunderte }
+  else
+    StrCopy(Dest, DSText($43E5));                      { - }
 end;
 
 end.

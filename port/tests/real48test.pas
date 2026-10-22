@@ -58,6 +58,16 @@ begin
           on E: ERealError do Got := 'E' + IntToStr(E.Code);
         end;
       end
+      else if Op = 'sqrt' then
+      begin
+        A := HexToR48(F[1]);
+        Want := F[2];
+        try
+          Got := R48ToHex(R48Sqrt(A));
+        except
+          on E: ERealError do Got := 'E' + IntToStr(E.Code);
+        end;
+      end
       else if Op = 'fromlong' then
       begin
         Want := F[2];

@@ -47,16 +47,29 @@ def rand_real(rng):
 
 
 def main():
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 20000
+    n = int(sys.argv[1]) if len(sys.argv) > 1 else 20000   # args: N [SEED [OPS]]
     rng = random.Random(int(sys.argv[2]) if len(sys.argv) > 2 else 1234)
     emu = KaiserEmu()
     out = sys.stdout
     # RunError would jump into the exit code; stop before: detect via CF in
     # the core instead by calling the far wrapper and catching the jump.
+    ops = ['add', 'sub', 'mul', 'div', 'cmp', 'add', 'mul',
+           'fromlong', 'round', 'trunc', 'random', 'randreal']
+    if len(sys.argv) > 3:                 # e.g. "sqrt" or "add,sqrt"
+        ops = sys.argv[3].split(',')
     for i in range(n):
-        op = rng.choice(['add', 'sub', 'mul', 'div', 'cmp', 'add', 'mul',
-                         'fromlong', 'round', 'trunc', 'random', 'randreal'])
-        if op in ('add', 'sub', 'mul', 'div', 'cmp'):
+        op = rng.choice(ops)
+        if op == 'sqrt':
+            a = rand_real(rng)
+            if rng.random() < 0.7:
+                a = bytes([a[0]]) + a[1:5] + bytes([a[5] & 0x7f])   # mostly >= 0
+            ra = regs(a)
+            try:
+                r = emu.call_regs('10c8:0f5c', ax=ra[0], bx=ra[1], dx=ra[2])
+                out.write(f'{op} {a.hex()} {unregs(r["ax"], r["bx"], r["dx"]).hex()}\n')
+            except EmuError:
+                out.write(f'{op} {a.hex()} E{emu.last_runerror}\n')
+        elif op in ('add', 'sub', 'mul', 'div', 'cmp'):
             a, b = rand_real(rng), rand_real(rng)
             if rng.random() < 0.1:
                 b = bytes([a[0]]) + bytes(rng.getrandbits(8) for _ in range(5))

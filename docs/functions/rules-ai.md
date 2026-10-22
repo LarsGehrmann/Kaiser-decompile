@@ -232,7 +232,7 @@ happiness < 0.25 (humans 0.3); exile costs only 1 year of lifetime (humans 2).
 | 1068:3386 | `SabotageFunding` * | Yearly sabotage funding and new operations |
 | 1068:35c1 | `SabotageYearsToNextOp` * | Years until the next operation is paid for |
 | 1068:36ef | `SabotageAction`  | Executes sabotage type 1..14 against a target: condition per type, sets target flags_5bd bits (0x40, 0x80, 0x100, 0x200, 0x400, 0x800 granary poiso... |
-| 1068:696f | `LogSabotageReport` * | Queue a sabotage report for the victim |
+| 1068:696f | `LogSabotageReport` * | Queue a sabotage report for the victim: (attacker, type, amount) into `sabotage_log` (+0x617, max 15; type 0 = agent caught) |
 
 ### Computer players (segment 2 1008, segment 7 1030)
 
@@ -437,13 +437,13 @@ happiness < 0.25 (humans 0.3); exile costs only 1 year of lifetime (humans 2).
 | 1068:2dcc | `ReduceByFraction` * | x -= round(x*f), at least 1 |
 | 1068:67c5 | `ClearHighScores` * | Zero the 0xabe-byte score table |
 | 1068:67db | `SortHighScoreTable` * | Sort 11 entries by score |
-| 1068:68c5 | `AddNews`  | News / Klatsch-und-Tratsch entry: (kind, player, other, num_players, players). kinds seen: 8 war won, 9 war lost, 0x10 eliminated |
+| 1068:68c5 | `AddNews`  | News / Klatsch-und-Tratsch entry (players, num_players, actor, target, kind) for everyone but actor and target: `news` (+0x5f8, max 10 of 3 bytes, count +0x5f7). kinds seen: 8 war won, 9 war lost, 0x10 eliminated |
 | 1068:69f1 | `MaxLong`  | max of two longints |
 | 1068:6a2b | `MinLong`  | min of two longints |
 | 1068:6a65 | `Chance`  | true with probability n percent (Random(100) < n) |
 | 1068:6aa5 | `FormatPercent` * | round(part/total*100) + % |
 | 1068:6b29 | `IntToStr` * | Longint to PChar |
-| 1068:6b58 | `FormatThousands` * | Number with digit groups |
+| 1068:6b58 | `FormatThousands` * | Number with ',' digit groups (lengths from DS:42f0; values ≥ 10^9 overrun the buffer in the original) |
 | 1068:6c36 | `BuildingProgressText` * | Palace/cathedral progress text |
 | 1068:6cb4 | `RealmName` * | Realm name by land size |
 | 1068:6d8b | `FameText` * | Fame in words |

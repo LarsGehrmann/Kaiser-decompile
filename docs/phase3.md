@@ -44,8 +44,8 @@ original resources.
 | # | Milestone | Validation | Status |
 |---|---|---|---|
 | 1 | Data layer: `TGameHeader`, `TPlayer`, `TUnit`, load/save `.KSR` | all 30 saves round-trip byte-identically | ✅ |
-| 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical |
-| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 84 of 102 functions (`port/src/rules.pas`); full run 84,000 / 84,000 vectors identical (1,000 per function) |
+| 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint, `Sqrt` | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical (+ 30,000 `Sqrt`) |
+| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | ✅ all 102 functions (`port/src/rules.pas`; `Seg14_UnitInit` is empty, the local `SortUnits`/`UnitLess` are tested through `SortArmy`); 100,000 / 100,000 vectors identical (1,000 per function) |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |
@@ -85,7 +85,7 @@ port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
   the emulation unless the emulator implements them (`KaiserEmu.api`: so far `LoadString`).
 - `port/bin/ruletest SAVEDIR VECTORS` replays each line on the port and compares the return
   value, out parameters, `RandSeed`, the player array and the header. `port/tests/rules.vec`
-  (100 per function) is the checked-in set. Larger sets are generated on demand with another
+  (50 per function) is the checked-in set. Larger sets are generated on demand with another
   seed, e.g. `gen_rule_vectors.py FUNCS 2000 12`.
 - The port transliterates each function from the disassembly in the original order of
   operations: Real48 rounding depends on it, and so does the order of the `Random` calls.

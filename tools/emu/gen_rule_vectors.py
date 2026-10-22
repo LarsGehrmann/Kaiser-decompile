@@ -44,6 +44,7 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   NIL    nil pointer
 #   F:fld  pointer to a field of the test player
 #   B:lo:hi / W:lo:hi / L:lo:hi   random byte / word / longint value
+#   G:e    longint of random sign and magnitude 10^U(0, e) (log-uniform)
 #   R      random Real48 value                  O  out longint (reported in out=)
 #   OP     out far pointer, reported as offset into the player array
 #   OB:n   pointer to an n-byte out record (zeroed), reported as hex
@@ -51,7 +52,8 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
 # Mutations: player fields; 'u.FIELD' = that field of a random unit (both
-# armies); 'U.FIELD' = that field of the unit passed as U; 'h.FIELD' = a
+# armies); 'U.FIELD' = that field of the unit passed as U; 'J.FIELD' = a
+# field of player J; 'h.FIELD' = a
 # header field. An optional 5th SPECS entry {field: (lo, hi)} clamps
 # player fields (or 'U.field') after mutating (e.g. army counts that must
 # not be 0).
@@ -206,6 +208,37 @@ SPECS = {
     'RaiderVictoryReward': ('1068:66af', ['P', 'B:1:2'], 'none',
                             ['title', 'fame', 'army1_count', 'event']),
     'MakeVampire': ('1068:674b', ['OB:61', 'U'], 'none', UNITF),
+    # batch 5
+    'CreateComputerPlayers': ('1068:0002', ['A', 'B:1:2', 'B:0:4', 'B:0:5'],
+                              'none', ['country']),
+    'InitPlayers': ('1068:01c1', ['A', 'N', 'B:0:5'], 'none',
+                    ['cpu_level', 'country', 'h.census_editor_enabled',
+                     'h.goods_trade_enabled']),
+    'InitComputerRuler': ('1068:0788', ['A', 'I'], 'none',
+                          ['country', 'h.goods_trade_enabled']),
+    'SabotageAction': ('1068:36ef', ['A', 'B:0:3', 'I', 'J', 'B:1:14', 'O', 'O'],
+                       'byte', SABOTAGE + ['J.mills', 'J.palace_parts',
+                                           'J.warehouses', 'J.flags_5bd_q',
+                                           'J.title', 'J.taler', 'J.justice',
+                                           'J.army1_count', 'J.army_away',
+                                           'army2_count'],
+                       {'J.army1_count': (0, 8)}),
+    'Distance': ('1068:666b', ['W:-200:200', 'W:-200:200', 'W:-200:200',
+                               'W:-200:200'], 'word', []),
+    'ClearHighScores': ('1068:67c5', ['OB:2750'], 'none', []),
+    'SortHighScoreTable': ('1068:67db', ['F:name'], 'none', []),
+    'ClearMailboxSlot': ('1068:68b0', ['F:diplomacy_671_q'], 'none', []),
+    'AddNews': ('1068:68c5', ['A', 'N', 'B:0:9', 'B:0:9', 'B:0:40'], 'none',
+                ['news_count']),
+    'LogSabotageReport': ('1068:696f', ['A', 'B:0:3', 'I', 'J', 'B:0:14',
+                                        'L:-1000:100000'], 'none',
+                          ['J.sabotage_log_count']),
+    'FormatPercent': ('1068:6aa5', ['OB:40', 'G:5', 'L:-2:2000'], 'none', []),
+    'FormatThousands': ('1068:6b58', ['OB:40', 'G:9'], 'none', []),
+    'BuildingProgressText': ('1068:6c36', ['OB:40', 'B:0:15'], 'none', []),
+    'RealmName': ('1068:6cb4', ['OB:40', 'G:6'], 'none', []),
+    'FameText': ('1068:6d8b', ['OB:40', 'B:0:120'], 'none', []),
+    'MagnitudeText': ('1068:6e30', ['OB:40', 'G:7'], 'none', []),
 }
 
 
@@ -270,6 +303,8 @@ def random_value(rng, name, typ):
         v = rng.randint(0, 5)
     elif name == 'ability':
         v = rng.randint(0, 38)
+    elif name == 'country':
+        v = rng.randint(0, 9)          # indexes 25-byte name tables
     elif name == 'initiative':
         v = rng.randint(-10, 20)
     elif typ == 'u8' and rng.random() < 0.5:
@@ -317,11 +352,14 @@ def diff(a, b):
     return ';'.join(out)
 
 
-def make_mutations(rng, fields, p, uidx):
+def make_mutations(rng, fields, p, uidx, j):
     muts, hmuts = [], []
     for _ in range(rng.randint(0, 4) if fields else 0):
         fname = rng.choice(fields)
-        if fname.startswith('U.'):
+        if fname.startswith('J.'):
+            off, typ = field_info(ks.PLAYER, fname[2:])
+            muts.append((j * PSIZE + off, random_value(rng, fname[2:], typ)))
+        elif fname.startswith('U.'):
             off, typ = field_info(ks.UNIT, fname[2:])
             base = ARMY_BASE[1] + uidx * ks.UNIT_SIZE
             muts.append((p * PSIZE + base + off, random_value(rng, fname[2:], typ)))
@@ -352,34 +390,41 @@ def main():
             header, players, num = load_save(save)
             p = rng.randrange(num)
             uidx = rng.randint(1, 8)
-            muts, hmuts = make_mutations(rng, fields, p, uidx)
+            j = rng.choice([i for i in range(num) if i != p] or [p])
+            muts, hmuts = make_mutations(rng, fields, p, uidx, j)
             for off, val in muts:
                 players[off:off + len(val)] = val
             for fname, (lo, hi) in clamps.items():
+                owner = p
                 if fname.startswith('U.'):
                     off, typ = field_info(ks.UNIT, fname[2:])
                     off += ARMY_BASE[1] + uidx * ks.UNIT_SIZE
+                elif fname.startswith('J.'):
+                    off, typ = field_info(ks.PLAYER, fname[2:])
+                    owner = j
                 else:
                     off, typ = field_info(ks.PLAYER, fname)
-                v = players[p * PSIZE + off]
+                v = players[owner * PSIZE + off]
                 if not lo <= v <= hi:
                     val = bytes([rng.randint(lo, hi)])
-                    muts.append((p * PSIZE + off, val))
-                    players[p * PSIZE + off:p * PSIZE + off + 1] = val
+                    muts.append((owner * PSIZE + off, val))
+                    players[owner * PSIZE + off:owner * PSIZE + off + 1] = val
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
             emu.reset_ds()
             emu.write(emu.ds_para, HDR_DS, bytes(header))
             emu.write(sp, 0, bytes(players))
-            emu.write(sp, OUT_AREA, bytes(0x400))
+            emu.write(sp, OUT_AREA, bytes(0x1000))
             # runtime country adjectives (DS:6696) as a new game sets them
+            # and computer ruler names (DS:64a2): here the country names
             for c in range(10):
                 emu.write(emu.ds_para, 0x6696 + 25 * c,
                           emu.read(emu.ds_para, 0x477e + 25 * (10 + c), 25))
+                emu.write(emu.ds_para, 0x64a2 + 25 * c,
+                          emu.read(emu.ds_para, 0x477e + 25 * c, 25))
             emu.rand_seed(seed)
             call_args, shown, outs = [], [], []
-            j = rng.choice([i for i in range(num) if i != p] or [p])
             byte_refs = OUT_AREA + 0x100
             for a in args:
                 kind, _, rest = a.partition(':')
@@ -421,6 +466,10 @@ def main():
                 elif kind == 'F':
                     off, _ = field_info(ks.PLAYER, rest)
                     call_args.append(('ptr', (sp, p * PSIZE + off)))
+                elif kind == 'G':
+                    v = int(10 ** rng.uniform(0, int(rest))) * rng.choice([1, 1, 1, -1])
+                    call_args.append(('long', v & 0xFFFFFFFF))
+                    shown.append(str(v))
                 elif kind in ('B', 'W', 'L'):
                     lo, hi = (int(x) for x in rest.split(':'))
                     v = rng.randint(lo, hi)

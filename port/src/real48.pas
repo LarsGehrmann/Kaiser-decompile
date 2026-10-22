@@ -38,6 +38,7 @@ function R48Cmp(const A, B: TReal48): Integer;
 function R48FromLong(V: LongInt): TReal48;
 function R48Round(const A: TReal48): LongInt;
 function R48Trunc(const A: TReal48): LongInt;
+function R48Sqrt(const A: TReal48): TReal48;
 
 { Conversions for display and tests only - not used by game rules }
 function R48ToDouble(const A: TReal48): Double;
@@ -155,6 +156,44 @@ begin
   if R.CF then
     raise ERealError.CreateCode(205);
   Result := FromRegs(R);
+end;
+
+function R48Sqrt(const A: TReal48): TReal48;
+var
+  R: TRegs;
+  G, NewG: TReal48;
+  Target: Byte;
+
+  procedure SetCX(const V: TReal48);
+  begin
+    R.CX := V[0] or (Word(V[1]) shl 8);
+    R.SI := V[2] or (Word(V[3]) shl 8);
+    R.DI := V[4] or (Word(V[5]) shl 8);
+  end;
+
+begin
+  { System.Sqrt (10c8:0f5c): Newton steps g := (x / g + g) / 2 from x with
+    the exponent halved, until a step changes less than 2^-20 of g. The
+    cores are called without overflow checks, as there. }
+  if A[0] = 0 then
+    Exit(A);
+  if (A[5] and $80) <> 0 then
+    raise ERealError.CreateCode(207);
+  G := A;
+  G[0] := Byte(SarShortint(ShortInt(Byte(A[0] + $80)), 1) + $80);
+  Target := Byte(G[0] - $14);
+  repeat
+    ToRegs(A, G, R);
+    RunCore(ceDiv, R);
+    SetCX(G);
+    RunCore(ceAdd, R);
+    SetCX(G);
+    R.AX := (R.AX and $FF00) or Byte(Lo(R.AX) - 1);          { / 2 }
+    NewG := FromRegs(R);
+    RunCore(ceSub, R);                                       { NewG - G }
+    G := NewG;
+  until Lo(R.AX) < Target;
+  Result := G;
 end;
 
 function R48Sub(const A, B: TReal48): TReal48;

@@ -164,7 +164,10 @@ type
     Pad5D7: array[0..24] of Byte;
     YearFactorQ: TReal48;  { +0x5f0 RandomReal*1.5+0.5, set every turn }
     ReportFlags: Byte;  { +0x5f6 reports opened at turn start, bit n = menu Berichte entry 701+n: 0 gossip, 1 population, 2 budget, 3 intelligence, 4 goods, 5 grain, 6 land, 7 buildings }
-    Pad5F7: array[0..121] of Byte;
+    NewsCount: Byte;  { +0x5f7 entries in news, at most 10 (AddNews 1068:68c5) }
+    News: array[0..29] of Byte;  { +0x5f8 10 x (actor, target, kind) bytes for the gossip report }
+    SabotageLogCount: Byte;  { +0x616 entries in sabotage_log, at most 15 }
+    SabotageLog: array[0..89] of Byte;  { +0x617 15 x (attacker byte, kind byte, amount longint); kind 0 = agent caught (LogSabotageReport 1068:696f) }
     Diplomacy671Q: array[0..59] of Byte;  { +0x671 6 bytes per player (pending offers?) }
     TradeAgreement: array[0..9] of Byte;  { +0x6ad byte per player: trade agreement with that player }
     PeaceYears: array[0..9] of Byte;  { +0x6b7 byte per player: years left on a peace treaty }
