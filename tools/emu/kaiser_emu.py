@@ -215,7 +215,8 @@ class KaiserEmu:
 
     def call_far(self, addr, args, **regs):
         """Call a far Pascal procedure. args: list of ('word', v) /
-        ('long', v) / ('ptr', (para, off)) in Pascal order (left to right).
+        ('long', v) / ('ptr', (para, off)) / ('real', 6 bytes) in Pascal
+        order (left to right).
         Returns (ax, dx)."""
         seg_index, off = ghidra_seg(addr)
         para = self.para[seg_index]
@@ -227,6 +228,9 @@ class KaiserEmu:
                 words.extend([(v >> 16) & 0xFFFF, v & 0xFFFF])
             elif kind == 'ptr':
                 words.extend([v[0], v[1]])        # segment pushed first
+            elif kind == 'real':              # 6 bytes, lowest word on top
+                w = struct.unpack('<HHH', bytes(v))
+                words.extend([w[2], w[1], w[0]])
             else:
                 raise ValueError(kind)
         # the stack grows down: first pushed = highest address

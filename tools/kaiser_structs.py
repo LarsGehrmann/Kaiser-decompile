@@ -218,6 +218,53 @@ UNIT = [
 ]
 UNIT_SIZE = 0x3d
 
+# Data segment (segment 27): initialised tables up to 0x6028, then zeroed
+# globals up to 0x681c. Extra types: TYPE[lo..hi] arrays (also 2-D
+# TYPE[lo..hi,lo..hi]; cstr25[..] are zero-padded name tables) and
+# 'header' = the global game record (HEADER). Unit tables are indexed by unit type
+# 0..35 (docs/rules/military.md), promotion tables by the next title 1..10.
+DS = [
+    (0x2bec, 'u8[0..35]', 'unit_attack_sound', 'battle sound per unit type'),
+    (0x2c10, 'u8[0..35]', 'unit_move_sound', ''),
+    (0x2c34, 'u8[0..35]', 'unit_death_sound', ''),
+    (0x2c58, 'u8[0..35]', 'unit_charmable', 'can be charmed'),
+    (0x2c7c, 'u8[0..35]', 'unit_christian', '0 = heathen (Heilige Lanze)'),
+    (0x2ca0, 'u8[0..35]', 'unit_melee', '0: Artillerie, Alchimisten'),
+    (0x2cc4, 'u8[0..35]', 'unit_rough_terrain', 'trees, rivers, no winter step loss (Lindwurm)'),
+    (0x4256, 'u8[0..9,0..9]', 'attack_initiative_cost', '[defender country, attacker country] 2..4'),
+    (0x4556, 'cstr25[0..10]', 'title_names', 'Herr .. Kaiser'),
+    (0x466a, 'cstr25[0..10]', 'female_title_names', ''),
+    (0x477e, 'cstr25[0..19]', 'country_names', ''),
+    (0x497c, 'cstr25[0..12]', 'spell_names', 'Nichts .. Terror'),
+    (0x4ac2, 'cstr25[-10..35]', 'unit_names', 'unit type -10..35'),
+    (0x4f40, 'u8[0..35]', 'unit_knight', 'receives the Knappen bonus'),
+    (0x4f64, 'u8[0..35]', 'unit_title_needed', ''),
+    (0x509c, 'u8[0..35]', 'unit_attack', ''),
+    (0x50c0, 'u8[0..35]', 'unit_defence', ''),
+    (0x50e4, 'u8[0..35]', 'unit_hp', ''),
+    (0x5108, 'u8[0..35]', 'unit_steps', ''),
+    (0x512c, 'u8[0..35]', 'unit_range', ''),
+    (0x5150, 'u8[0..35]', 'unit_ammo', ''),
+    (0x5174, 's32[0..35]', 'unit_cost', 'Taler'),
+    (0x5204, 'u8[0..35]', 'unit_weapons', 'weapons needed'),
+    (0x5228, 's16[0..35]', 'unit_pay', 'per year'),
+    (0x5270, 's16[0..35]', 'unit_default_ability', '1-based index into ability_names'),
+    (0x52b8, 'u8[0..35]', 'unit_can_desert', ''),
+    (0x52dc, 'u8[0..35]', 'unit_fearful', 'affected by fear (Terror, winter)'),
+    (0x5300, 'real[0..35]', 'unit_motivation_bonus', ''),
+    (0x53f1, 'cstr25[1..38]', 'ability_names', ''),
+    (0x57f8, 's32[1..10]', 'promotion_land', 'CanBePromoted: needed for title t'),
+    (0x5820, 's32[1..10]', 'promotion_taler', ''),
+    (0x5848, 's32[1..10]', 'promotion_population', ''),
+    (0x5870, 'u8[1..10]', 'promotion_palace_parts', ''),
+    (0x587a, 'u8[1..10]', 'promotion_cathedral_parts', ''),
+    (0x5884, 'real[1..10]', 'promotion_happiness', ''),
+    (0x58c0, 's32[1..10]', 'promotion_army_strength', 'ArmyStrength(player, 1)'),
+    (0x6000, 's32', 'rand_seed', 'System.RandSeed (the port keeps it in Real48.RandSeed)'),
+    (0x6108, 'header', 'game', 'the global game record = savegame header'),
+]
+DS_SIZE = 0x681c
+
 HEADER_SIZE = 0x295
 PLAYER_SIZE = 0x6d5
 EXTRA_SIZE = 0x192

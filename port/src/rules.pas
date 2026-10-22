@@ -13,7 +13,11 @@ unit Rules;
 interface
 
 uses
-  KaiserTypes, Real48;
+  KaiserTypes, KaiserDS, Real48;
+
+type
+  PUnit = ^TUnit;
+  PPlayer = ^TPlayer;
 
 { Real48 constant from the three register words of the original code }
 function RC(W0, W1, W2: Word): TReal48;
@@ -37,7 +41,44 @@ function UpdateHappiness(var P: TPlayer): Word;             { 1068:13a8 }
 procedure UpdateGrainPrice(var P: TPlayer; Quality: Byte);  { 1068:2a08 }
 function UnclaimedLand(const Players: TPlayers; NumPlayers: Byte): LongInt;  { 1068:2f86 }
 
+function WarehouseCapacity(const P: TPlayer): LongInt;      { 1068:08d5 }
+function CanAffordWithCredit(const P: TPlayer; Cost: LongInt): Boolean;  { 1068:0ae8 }
+procedure GrainNeedMinMax(const P: TPlayer; var Low, Need, High: LongInt);  { 1068:0b2c }
+function ComputeScore(const P: TPlayer; Unused1, Unused2: Word): LongInt;  { 1068:12fe }
+function TradeAgreementIncome(const Players: TPlayers; Me, NumPlayers: Byte): LongInt;  { 1068:1b26 }
+procedure Prokurist(var P: TPlayer);                        { 1068:1bf9 }
+function ArmyPay(const P: TPlayer): LongInt;                { 1068:27ac }
+function ManoeuvreCost(const P: TPlayer): LongInt;          { 1068:2850 }
+procedure AddGoodsCapped(var P: TPlayer; Good: Byte; Amount: LongInt);  { 1068:2d4a }
+procedure ReduceByFraction(var V: LongInt; F: TReal48);     { 1068:2dcc }
+function FameDiscount(Fame, Cost: LongInt): LongInt;        { 1068:3003 }
+procedure GainFame(var Fame: SmallInt; N: SmallInt);        { 1068:3040 }
+procedure LoseFame(var Fame: SmallInt; N: SmallInt);        { 1068:305b }
+function IsFirstKing(const Players: TPlayers; Me, NumPlayers: Byte): Boolean;  { 1068:31c7 }
+procedure UpdateInitiative(var P: TPlayer);                 { 1068:3238 }
+function AttackInitiativeCost(Defender, Attacker: Byte): Byte;  { 1068:3282 }
+function FiefSize(const P: TPlayer; const U: TUnit): LongInt;  { 1068:4620 }
+function HasAnyUnits(const P: TPlayer): Boolean;            { 1068:5c15 }
+function ArmyStrength(const P: TPlayer; WithGarde: Byte): LongInt;  { 1068:5c3c }
+function HasHero(const P: TPlayer): Boolean;                { 1068:6290 }
+function FindHero(var P: TPlayer; var U: PUnit; WithArmy2: Byte): Boolean;  { 1068:6323 }
+function Army1HasAbility(const P: TPlayer; Ability: Byte): Boolean;  { 1068:63e4 }
+function ArtilleryClass(const P: TPlayer; WithArmy2: Byte): Byte;  { 1068:64d6 }
+function HasDesertableUnit(const P: TPlayer; WithArmy2: Byte): Boolean;  { 1068:65c2 }
+function MaxLong(A, B: LongInt): LongInt;                   { 1068:69f1 }
+function MinLong(A, B: LongInt): LongInt;                   { 1068:6a2b }
+function Chance(Percent: LongInt): Boolean;                 { 1068:6a65 }
+procedure SetBit(var B: Byte; Bit: Byte);                   { 1068:6eec }
+procedure ClearBit(var B: Byte; Bit: Byte);                 { 1068:6f23 }
+function TestBit(B: Byte; Bit: Byte): Boolean;              { 1068:6f52 }
+
 implementation
+
+{ Integer arithmetic: the original wraps at 32 bits (longint) or 16 bits
+  (integer), FPC computes in 64 bits. Results are truncated with LongInt()/
+  SmallInt() wherever a division or comparison follows a possible overflow.
+  Byte loops "for I := 0 to N - 1" keep the original's byte bound
+  (N = 0 -> 256 iterations). }
 
 function RC(W0, W1, W2: Word): TReal48;
 begin
@@ -46,12 +87,12 @@ begin
   Result[4] := Lo(W2); Result[5] := Hi(W2);
 end;
 
-function MaxLong(A, B: LongInt): LongInt;  { 1068:69f1 }
+function MaxLong(A, B: LongInt): LongInt;
 begin
   if A > B then Result := A else Result := B;
 end;
 
-function MinLong(A, B: LongInt): LongInt;  { 1068:6a2b }
+function MinLong(A, B: LongInt): LongInt;
 begin
   if A < B then Result := A else Result := B;
 end;
@@ -120,7 +161,7 @@ begin
   R := R48Sub(P.Justice, RC($297C, $8F5C, $75C2));
   R := R48Mul(R, FromLong(P.Population));
   R := R48Mul(R, RC($0083, $0000, $6000));
-  Result := MinLong(P.Population * 3 div 2, R48Round(R));
+  Result := MinLong(LongInt(P.Population * 3) div 2, R48Round(R));
 end;
 
 function Interest(const P: TPlayer): LongInt;
@@ -325,13 +366,343 @@ end;
 
 function UnclaimedLand(const Players: TPlayers; NumPlayers: Byte): LongInt;
 var
-  I: Integer;
+  I, Last: Byte;
   Sum: LongInt;
 begin
   Sum := 0;
-  for I := 0 to Integer(NumPlayers) - 1 do
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
     Sum := Sum + Players[I].Land;
-  Result := MaxLong(NumPlayers * LongInt(100000) - Sum, 0);
+  Result := MaxLong(LongInt(NumPlayers * LongInt(100000) - Sum), 0);
+end;
+
+{ ---- batch 2 ---- }
+
+{ Goods 1..4 (salt, beer, wine, weapons) are consecutive longints / words
+  / bytes in the player record; the original indexes them like arrays. }
+function Stock(var P: TPlayer; Good: Byte): PLongInt; inline;
+begin
+  Result := @PLongInt(@P.Salt)[Good - 1];
+end;
+
+function WarehouseCapacity(const P: TPlayer): LongInt;
+begin
+  Result := P.Warehouses * 1000;
+end;
+
+function CanAffordWithCredit(const P: TPlayer; Cost: LongInt): Boolean;
+begin
+  Result := LongInt(P.Taler - Cost) >= LongInt(-CreditLimit(P));
+end;
+
+procedure GrainNeedMinMax(const P: TPlayer; var Low, Need, High: LongInt);
+var
+  N: LongInt;
+begin
+  N := P.Population * 5;
+  Low := R48Round(R48Mul(FromLong(N), RC($7B7D, $AE14, $6147)));    { 0.11 }
+  Need := N;
+  High := R48Round(R48Mul(FromLong(N), RC($E181, $147A, $07AE)));   { 1.06 }
+end;
+
+function ComputeScore(const P: TPlayer; Unused1, Unused2: Word): LongInt;
+begin
+  Result := ArmyStrength(P, 1) div 50 + P.Taler div 100000 + P.Land div 20000 +
+    P.Population div 2000 + P.Title + P.Fame div 20;
+end;
+
+function TradeAgreementIncome(const Players: TPlayers; Me, NumPlayers: Byte): LongInt;
+var
+  I, Last: Byte;
+  Sum: LongInt;
+begin
+  Sum := 0;
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    if (I <> Me) and (Players[Me].TradeAgreement[I] <> 0) then
+      Sum := Sum + Players[I].Mills * 330 + Players[I].Markets * 155;
+  Result := Sum div (NumPlayers + 6);
+end;
+
+procedure Prokurist(var P: TPlayer);
+var
+  I: Byte;
+  V: LongInt;
+begin
+  { sell the whole stock of every good whose price reached the minimum }
+  for I := 1 to 4 do
+    if (PByte(@P.ProkuristSalt)[I - 1] <> 0) and
+       (PLongInt(@P.PriceSalt)[I - 1] >= PSmallInt(@P.ProkuristMinSalt)[I - 1]) then
+    begin
+      V := Stock(P, I)^ * PLongInt(@P.PriceSalt)[I - 1];
+      P.Taler := P.Taler + V;
+      P.TotalGoodsSales := P.TotalGoodsSales + V;
+      Stock(P, I)^ := 0;
+    end;
+end;
+
+function ArmyPay(const P: TPlayer): LongInt;
+var
+  I: Byte;
+begin
+  Result := 0;
+  for I := 1 to P.Army1Count do
+    Result := Result + P.Army1[I].Pay;
+  for I := 1 to P.Army2Count do
+    Result := Result + P.Army2[I].Pay;
+end;
+
+function ManoeuvreCost(const P: TPlayer): LongInt;
+var
+  I, MaxLevel: Byte;
+  Cost: LongInt;
+begin
+  { heroes 2000 each, other units (level + 1) * 500 if they can still rise }
+  Cost := 0;
+  if P.Spell = 9 then                                  { Heldentum }
+    MaxLevel := 3
+  else
+    MaxLevel := 2;
+  for I := 1 to P.Army1Count do
+    if P.Army1[I].UnitType = 9 then
+      Cost := Cost + 2000
+    else if P.Army1[I].Level < MaxLevel then
+      Cost := Cost + SmallInt((P.Army1[I].Level + 1) * 500);
+  Result := FameDiscount(P.Fame, Cost);
+end;
+
+procedure AddGoodsCapped(var P: TPlayer; Good: Byte; Amount: LongInt);
+var
+  Free: LongInt;
+begin
+  if DS.Game.GoodsTradeEnabled = 0 then
+    Exit;
+  Free := WarehouseFreeSpace(P);
+  if Free > Amount then
+    Free := Amount;
+  Stock(P, Good)^ := Stock(P, Good)^ + Free;
+end;
+
+procedure ReduceByFraction(var V: LongInt; F: TReal48);
+var
+  NewV: LongInt;
+begin
+  { V := V - round(V * F), but at least 1 less }
+  NewV := V - R48Round(R48Mul(FromLong(V), F));
+  if NewV = V then
+    V := V - 1
+  else
+    V := NewV;
+end;
+
+function FameDiscount(Fame, Cost: LongInt): LongInt;
+begin
+  Result := Cost - LongInt(Cost * Fame) div 200;
+end;
+
+procedure GainFame(var Fame: SmallInt; N: SmallInt);
+begin
+  Fame := SmallInt(Fame + N);
+  if Fame > 100 then
+    Fame := 100;
+end;
+
+procedure LoseFame(var Fame: SmallInt; N: SmallInt);
+begin
+  Fame := SmallInt(Fame - N);
+  if Fame < 0 then
+    Fame := 0;
+end;
+
+function IsFirstKing(const Players: TPlayers; Me, NumPlayers: Byte): Boolean;
+var
+  I, Last: Byte;
+  Found: Boolean;
+begin
+  { nobody else is Koenig (title 9) or has been first Koenig }
+  Found := False;
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    if (I <> Me) and ((Players[I].Title = 9) or (Players[I].FirstKingBonus <> 0)) then
+      Found := True;
+  Result := not Found;
+end;
+
+procedure UpdateInitiative(var P: TPlayer);
+begin
+  if DS.Game.InitiativeEnabled <> 0 then
+  begin
+    if P.Initiative > 0 then
+      P.Initiative := 0;
+    P.Initiative := ShortInt(Byte(P.Initiative) + Byte(P.Fame div 50 + 2));
+    if P.Spell = 5 then                                { Feldmarschall }
+      P.Initiative := ShortInt(Byte(P.Initiative) + 1);
+  end
+  else
+    P.Initiative := 0;
+end;
+
+function AttackInitiativeCost(Defender, Attacker: Byte): Byte;
+begin
+  if DS.Game.InitiativeEnabled <> 0 then
+    Result := DS.AttackInitiativeCost[Defender, Attacker]
+  else
+    Result := 0;
+end;
+
+function FiefSize(const P: TPlayer; const U: TUnit): LongInt;
+begin
+  Result := SmallInt(U.BasePay div 100 * 100);
+  if P.Spell = 3 then                                  { Chevalerie }
+    Result := Result div 2;
+end;
+
+function HasAnyUnits(const P: TPlayer): Boolean;
+begin
+  Result := (P.Army1Count > 0) or (P.Army2Count > 0);
+end;
+
+function ArmyStrength(const P: TPlayer; WithGarde: Byte): LongInt;
+var
+  I: Byte;
+begin
+  Result := 0;
+  for I := 1 to P.Army1Count do
+    Result := Result + P.Army1[I].Attack + P.Army1[I].Defence;
+  if WithGarde <> 0 then
+    for I := 1 to P.Army2Count do
+      Result := Result + P.Army2[I].Attack + P.Army2[I].Defence;
+end;
+
+function HasHero(const P: TPlayer): Boolean;
+var
+  I, N: Byte;
+begin
+  N := 0;
+  for I := 1 to P.Army1Count do
+    if P.Army1[I].UnitType = 9 then
+      Inc(N);
+  for I := 1 to P.Army2Count do
+    if P.Army2[I].UnitType = 9 then
+      Inc(N);
+  Result := N > 0;
+end;
+
+function FindHero(var P: TPlayer; var U: PUnit; WithArmy2: Byte): Boolean;
+var
+  I: Byte;
+begin
+  { U is only set when a hero is found }
+  Result := False;
+  I := 1;
+  while (I <= P.Army1Count) and not Result do
+  begin
+    if P.Army1[I].UnitType = 9 then
+    begin
+      U := @P.Army1[I];
+      Result := True;
+    end;
+    Inc(I);
+  end;
+  if not Result and (WithArmy2 <> 0) then
+  begin
+    I := 1;
+    while (I <= P.Army2Count) and not Result do
+    begin
+      if P.Army2[I].UnitType = 9 then
+      begin
+        U := @P.Army2[I];
+        Result := True;
+      end;
+      Inc(I);
+    end;
+  end;
+end;
+
+function Army1HasAbility(const P: TPlayer; Ability: Byte): Boolean;
+var
+  I: Byte;
+begin
+  Result := False;
+  if P.Army1Count = 0 then
+    Exit;
+  I := 1;
+  while (I <= P.Army1Count) and (P.Army1[I].Ability <> Ability) do
+    Inc(I);
+  Result := I <= P.Army1Count;
+end;
+
+function ArtilleryClass(const P: TPlayer; WithArmy2: Byte): Byte;
+var
+  I: Byte;
+  Ranged, Blasting: Boolean;
+begin
+  { 0 = no ranged unit, 1 = ranged units, 2 = Sprengpulver (ability 10) }
+  Ranged := False;
+  Blasting := False;
+  for I := 1 to P.Army1Count do
+  begin
+    if P.Army1[I].Range > 1 then
+      Ranged := True;
+    if P.Army1[I].Ability = 10 then
+      Blasting := True;
+  end;
+  if WithArmy2 <> 0 then
+    for I := 1 to P.Army2Count do
+    begin
+      if P.Army2[I].Range > 1 then
+        Ranged := True;
+      if P.Army2[I].Ability = 10 then
+        Blasting := True;
+    end;
+  if not Blasting and not Ranged then
+    Result := 0
+  else if not Blasting then
+    Result := 1
+  else
+    Result := 2;
+end;
+
+function HasDesertableUnit(const P: TPlayer; WithArmy2: Byte): Boolean;
+var
+  I, N: Byte;
+begin
+  N := 0;
+  for I := 1 to P.Army1Count do
+    if DS.UnitCanDesert[ShortInt(P.Army1[I].UnitType)] <> 0 then
+      Inc(N);
+  if WithArmy2 <> 0 then
+    for I := 1 to P.Army2Count do
+      if DS.UnitCanDesert[ShortInt(P.Army2[I].UnitType)] <> 0 then
+        Inc(N);
+  Result := N > 0;
+end;
+
+function Chance(Percent: LongInt): Boolean;
+begin
+  if Percent < 0 then
+    Percent := 0;
+  Result := LongInt(Random(100)) < Percent;
+end;
+
+procedure SetBit(var B: Byte; Bit: Byte);
+var
+  Mask: Byte;
+begin
+  Mask := Byte(1 shl Bit);
+  if (B and Mask) = 0 then
+    B := Byte(B + Mask);
+end;
+
+procedure ClearBit(var B: Byte; Bit: Byte);
+begin
+  if TestBit(B, Bit) then
+    B := Byte(B - Byte(1 shl Bit));
+end;
+
+function TestBit(B: Byte; Bit: Byte): Boolean;
+begin
+  Result := (B and Byte(1 shl Bit)) <> 0;
 end;
 
 end.

@@ -16,8 +16,20 @@ original resources.
   executed directly from `kaiser.exe` in a 16-bit x86 emulator (Unicorn) and their results are
   compared with the port on many inputs (real savegame records plus random variations).
 - **Code layout**: `port/src` engine units (no UI), `port/tools` command-line tools,
-  `port/tests` test programs; `tools/gen_pascal_types.py` generates the record types from
-  `tools/kaiser_structs.py`; the emulator harness lives in `tools/emu/`.
+  `port/tests` test programs; `tools/gen_pascal_types.py` generates the record types
+  (`kaisertypes.pas`) and the data segment (`kaiserds.pas`) from `tools/kaiser_structs.py`;
+  the emulator harness lives in `tools/emu/`.
+- **Globals stay where they were.** `KaiserDS.DS` is a packed record with the layout of the
+  original data segment (0x681c bytes), initialised with its contents from `kaiser.exe`.
+  Known tables and globals are named fields at their original offsets (`DS.Game` = DS:6108,
+  `DS.PromotionLand` = DS:57f8, `DS.UnitCanDesert` = DS:52b8, …). Unknown bytes are padding.
+  So an index that runs past a table reads the same neighbouring bytes as in the original
+  (`CanBePromoted` reads `PromotionLand[11]` for a Kaiser).
+- **Integer width.** The original wraps at 32 bits (longint) or 16 bits (integer), but FPC
+  on 64-bit evaluates in 64 bits. The port truncates with `LongInt()`/`SmallInt()` wherever a
+  division or comparison follows a possible overflow. Byte `for` loops keep the original's byte
+  bound (`for I := 0 to N - 1` with N = 0 runs 256 times). The vectors include extreme values
+  to catch this.
 
 ## Milestones
 
@@ -25,7 +37,7 @@ original resources.
 |---|---|---|---|
 | 1 | Data layer: `TGameHeader`, `TPlayer`, `TUnit`, load/save `.KSR` | all 30 saves round-trip byte-identically | ✅ |
 | 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical |
-| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 17 functions (`port/src/rules.pas`), 51,000 / 51,000 identical |
+| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 48 of 102 functions (`port/src/rules.pas`), 113,000 / 113,000 vectors identical |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |
@@ -60,8 +72,11 @@ port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
   money …), sets `RandSeed`, runs the original function and records the return value, the new
   `RandSeed` and every changed byte of the player array and header. `SPECS` in the script lists
   each function's address, arguments, return type and the fields worth mutating.
-- `port/bin/ruletest SAVEDIR VECTORS` replays each line on the port and compares all three.
-  `port/tests/rules.vec` (300 per function) is the checked-in set; larger sets are generated on
-  demand with another seed.
+  Header flags (`hmut`), pointers to fields, unit pointers, out parameters and Real48
+  arguments are supported (see the comment at the top of the script).
+- `port/bin/ruletest SAVEDIR VECTORS` replays each line on the port and compares the return
+  value, out parameters, `RandSeed`, the player array and the header. `port/tests/rules.vec`
+  (100 per function) is the checked-in set. Larger sets are generated on demand with another
+  seed, e.g. `gen_rule_vectors.py FUNCS 2000 12`.
 - The port transliterates each function from the disassembly in the original order of
   operations: Real48 rounding depends on it, and so does the order of the `Random` calls.

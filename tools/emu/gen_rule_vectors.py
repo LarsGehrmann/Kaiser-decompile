@@ -2,14 +2,15 @@
 
 For each vector: take a real savegame, pick a player, change a few fields at
 random (to reach many branches), set RandSeed, call the ORIGINAL function in
-the emulator and record its return value, the new RandSeed and every byte it
-changed in the player array and the game header.
+the emulator and record its return value, out parameters, the new RandSeed
+and every byte it changed in the player array and the game header.
 
 Line format (space separated key=value):
-  func=NAME save=FILE p=IDX seed=S args=a,b mut=off:hex;... ->
-  ret=V seedout=S2 diff=off:hex;... hdiff=off:hex;...
+  func=NAME save=FILE p=IDX seed=S args=a,b mut=off:hex;... hmut=off:hex;...
+  -> ret=V out=a,b seedout=S2 diff=off:hex;... hdiff=off:hex;...
   (ret=E<code> if the original stopped with a runtime error)
-Offsets in mut/diff are relative to the start of the player array.
+Offsets in mut/diff are relative to the start of the player array, offsets
+in hmut/hdiff to the start of the game header (DS:6108).
 
 Usage: tools/.venv/bin/python -I tools/emu/gen_rule_vectors.py FUNC[,FUNC] N [SEED]
        > port/tests/rules.vec
@@ -31,11 +32,21 @@ SAVES = sorted(glob.glob(os.path.join(ROOT, 'Kaiser', '*.KSR')) +
                glob.glob(os.path.join(ROOT, 'Kaiser', '*.ksr')))
 HDR_DS = 0x6108
 PSIZE = ks.PLAYER_SIZE
+OUT_AREA = 0xF000          # scratch offset of out parameters (after the players)
+ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 
-# name: (address, [args], return kind, fields worth mutating)
-# args: 'P' = far pointer to the test player, 'A' = far pointer to the player
-#       array, 'N' = num_players (byte), 'I' = player index (byte),
-#       'Q' = harvest quality 1..5 (byte)
+# Arguments (Pascal order):
+#   P      far pointer to the test player       A  pointer to the player array
+#   N      num_players (byte)                   I  test player index (byte)
+#   J      another player index 0..num-1        Q  harvest quality 1..5
+#   U      pointer to a random army-1 unit of the test player (shown: 1..8)
+#   F:fld  pointer to a field of the test player
+#   B:lo:hi / W:lo:hi / L:lo:hi   random byte / word / longint value
+#   R      random Real48 value                  O  out longint (reported in out=)
+#   OP     out far pointer, reported as offset into the player array
+# Return kinds: long, word, sword (signed 16), byte, real, none.
+# Mutations: player fields; 'u.FIELD' = that field of a random unit (both
+# armies); 'h.FIELD' = a header field.
 POP = ['population', 'grain_distributed', 'spell', 'event', 'flags_5bd_q',
        'birth_rate', 'death_rate', 'happiness', 'tax_rate', 'justice',
        'asylum_law', 'fame', 'title', 'cpu_level', 'taverns', 'army1_count',
@@ -45,6 +56,13 @@ ECON = ['population', 'markets', 'mills', 'taverns', 'smithies', 'granaries',
         'happiness', 'spell', 'salt', 'beer', 'wine', 'weapons', 'title',
         'harvest_quality', 'grain', 'palace_parts', 'cathedral_parts',
         'university_parts']
+GOODS = ['salt', 'beer', 'wine', 'weapons', 'price_salt', 'price_beer',
+         'price_wine', 'price_weapons', 'prokurist_min_salt',
+         'prokurist_min_beer', 'prokurist_min_wine', 'prokurist_min_weapons',
+         'prokurist_salt', 'prokurist_beer', 'prokurist_wine',
+         'prokurist_weapons', 'taler', 'warehouses', 'h.goods_trade_enabled']
+ARMY = ['army1_count', 'army2_count', 'u.type', 'u.level', 'u.ability',
+        'u.attack', 'u.defence', 'u.pay', 'u.base_pay', 'spell', 'fame']
 SPECS = {
     'GrainCapacity': ('1068:0885', ['P'], 'long', ECON),
     'SmithyOutput': ('1068:0bd3', ['P'], 'long', ECON),
@@ -63,11 +81,56 @@ SPECS = {
     'UpdateHappiness': ('1068:13a8', ['P'], 'word', POP),
     'UpdateGrainPrice': ('1068:2a08', ['P', 'Q'], 'none', ECON),
     'UnclaimedLand': ('1068:2f86', ['A', 'N'], 'long', ['land']),
+    # batch 2
+    'WarehouseCapacity': ('1068:08d5', ['P'], 'long', ECON),
+    'CanAffordWithCredit': ('1068:0ae8', ['P', 'L:-20000:200000'], 'byte',
+                            ['taler', 'title']),
+    'GrainNeedMinMax': ('1068:0b2c', ['P', 'O', 'O', 'O'], 'none',
+                        ['population']),
+    'ComputeScore': ('1068:12fe', ['P', 'W:0:3', 'W:0:3'], 'long',
+                     ECON + ARMY),
+    'TradeAgreementIncome': ('1068:1b26', ['A', 'I', 'N'], 'long',
+                             ['markets', 'mills', 'trade_agreement']),
+    'Prokurist': ('1068:1bf9', ['P'], 'none', GOODS),
+    'ArmyPay': ('1068:27ac', ['P'], 'long', ARMY),
+    'ManoeuvreCost': ('1068:2850', ['P'], 'long', ARMY),
+    'AddGoodsCapped': ('1068:2d4a', ['P', 'B:1:4', 'L:-1000:30000'], 'none',
+                       GOODS),
+    'ReduceByFraction': ('1068:2dcc', ['F:grain', 'R'], 'none', ['grain']),
+    'FameDiscount': ('1068:3003', ['L:-50:150', 'L:-1000:100000'], 'long', []),
+    'GainFame': ('1068:3040', ['F:fame', 'W:-200:200'], 'none', ['fame']),
+    'LoseFame': ('1068:305b', ['F:fame', 'W:-200:200'], 'none', ['fame']),
+    'IsFirstKing': ('1068:31c7', ['A', 'I', 'N'], 'byte',
+                    ['title', 'first_king_bonus']),
+    'UpdateInitiative': ('1068:3238', ['P'], 'none',
+                         ['initiative', 'fame', 'spell',
+                          'h.initiative_enabled']),
+    'AttackInitiativeCost': ('1068:3282', ['B:0:9', 'B:0:9'], 'byte',
+                             ['h.initiative_enabled']),
+    'FiefSize': ('1068:4620', ['P', 'U'], 'long', ARMY),
+    'HasAnyUnits': ('1068:5c15', ['P'], 'byte', ARMY),
+    'ArmyStrength': ('1068:5c3c', ['P', 'B:0:1'], 'long', ARMY),
+    'HasHero': ('1068:6290', ['P'], 'byte', ARMY),
+    'FindHero': ('1068:6323', ['P', 'OP', 'B:0:1'], 'byte', ARMY),
+    'Army1HasAbility': ('1068:63e4', ['P', 'B:0:38'], 'byte', ARMY),
+    'CountUnitsOfType': ('1068:643b', ['P', 'B:0:35'], 'byte', ARMY),
+    'ArtilleryClass': ('1068:64d6', ['P', 'B:0:1'], 'byte', ARMY),
+    'HasDesertableUnit': ('1068:65c2', ['P', 'B:0:1'], 'byte', ARMY),
+    'MaxLong': ('1068:69f1', ['L:-100000:100000', 'L:-100000:100000'],
+                'long', []),
+    'MinLong': ('1068:6a2b', ['L:-100000:100000', 'L:-100000:100000'],
+                'long', []),
+    'Chance': ('1068:6a65', ['L:-20:120'], 'byte', []),
+    'SetBit': ('1068:6eec', ['F:report_flags', 'B:0:15'], 'none',
+               ['report_flags']),
+    'ClearBit': ('1068:6f23', ['F:report_flags', 'B:0:15'], 'none',
+                 ['report_flags']),
+    'TestBit': ('1068:6f52', ['B:0:255', 'B:0:15'], 'byte', []),
 }
 
 
-def field_info(name):
-    for off, typ, fname, _ in ks.PLAYER:
+def field_info(fields, name):
+    for off, typ, fname, _ in fields:
         if fname == name:
             return off, typ
     raise KeyError(name)
@@ -88,11 +151,18 @@ def r48(x):
     return bytes([e + 129]) + m.to_bytes(5, 'little')
 
 
+def random_real(rng):
+    if rng.random() < 0.1:
+        return bytes(6)
+    return r48(rng.choice([rng.random(), rng.random() * 1.2, rng.random() * 0.1]))
+
+
 def random_value(rng, name, typ):
     if typ == 'real':
-        if rng.random() < 0.1:
-            return bytes(6)
-        return r48(rng.choice([rng.random(), rng.random() * 1.2, rng.random() * 0.1]))
+        return random_real(rng)
+    if typ.startswith('raw'):
+        n = int(typ[3:])
+        return bytes(rng.choice([0, 0, 1, rng.randrange(256)]) for _ in range(n))
     if name in ('spell',):
         v = rng.randint(0, 12)
     elif name == 'event':
@@ -107,11 +177,24 @@ def random_value(rng, name, typ):
         v = rng.randint(0, 8)
     elif name in ('palace_parts', 'cathedral_parts', 'university_parts'):
         v = rng.randint(0, 12)
+    elif name == 'type':
+        v = rng.choice([rng.randint(0, 35), 9, 6, 0])
+    elif name == 'level':
+        v = rng.randint(0, 5)
+    elif name == 'ability':
+        v = rng.randint(0, 38)
+    elif name == 'initiative':
+        v = rng.randint(-10, 20)
+    elif typ == 'u8' and rng.random() < 0.5:
+        v = rng.randint(0, 1)          # flags
     elif typ == 's32':
         v = rng.choice([rng.randint(0, 200), rng.randint(0, 200000),
-                        rng.randint(-50000, 2000000), 0])
+                        rng.randint(-50000, 2000000), 0,
+                        rng.randint(-2 ** 31, 2 ** 31 - 1)])  # 32-bit wrap-around
     elif typ in ('s16', 'u16'):
         v = rng.randint(0, 100) if name == 'fame' else rng.randint(0, 30000)
+        if rng.random() < 0.1:
+            v = rng.randint(-32768, 65535)  # 16-bit wrap-around
     else:
         v = rng.randint(0, 255)
     fmt = {'u8': '<B', 's8': '<b', 's16': '<h', 'u16': '<H', 's32': '<i'}[typ]
@@ -120,14 +203,17 @@ def random_value(rng, name, typ):
     if typ == 'u8':
         v &= 0xFF
     if typ == 's16':
-        v = max(-32768, min(32767, v))
+        v = ((v + 0x8000) & 0xFFFF) - 0x8000
+    if typ == 'u16':
+        v &= 0xFFFF
     return struct.pack(fmt, v)
 
 
 def load_save(path):
     raw = open(path, 'rb').read()
     n = raw[1]
-    return raw[:ks.HEADER_SIZE], bytearray(raw[ks.HEADER_SIZE:ks.HEADER_SIZE + n * PSIZE]), n
+    return (bytearray(raw[:ks.HEADER_SIZE]),
+            bytearray(raw[ks.HEADER_SIZE:ks.HEADER_SIZE + n * PSIZE]), n)
 
 
 def diff(a, b):
@@ -144,6 +230,23 @@ def diff(a, b):
     return ';'.join(out)
 
 
+def make_mutations(rng, fields, p):
+    muts, hmuts = [], []
+    for _ in range(rng.randint(0, 4) if fields else 0):
+        fname = rng.choice(fields)
+        if fname.startswith('h.'):
+            off, typ = field_info(ks.HEADER, fname[2:])
+            hmuts.append((off, random_value(rng, fname[2:], typ)))
+        elif fname.startswith('u.'):
+            off, typ = field_info(ks.UNIT, fname[2:])
+            base = ARMY_BASE[rng.randint(1, 2)] + rng.randint(1, 8) * ks.UNIT_SIZE
+            muts.append((p * PSIZE + base + off, random_value(rng, fname[2:], typ)))
+        else:
+            off, typ = field_info(ks.PLAYER, fname)
+            muts.append((p * PSIZE + off, random_value(rng, fname, typ)))
+    return muts, hmuts
+
+
 def main():
     funcs = sys.argv[1].split(',')
     n = int(sys.argv[2])
@@ -156,35 +259,60 @@ def main():
             save = rng.choice(SAVES)
             header, players, num = load_save(save)
             p = rng.randrange(num)
-            muts = []
-            for _ in range(rng.randint(0, 4)):
-                fname = rng.choice(fields)
-                off, typ = field_info(fname)
-                val = random_value(rng, fname, typ)
-                muts.append((p * PSIZE + off, val))
+            muts, hmuts = make_mutations(rng, fields, p)
             for off, val in muts:
                 players[off:off + len(val)] = val
+            for off, val in hmuts:
+                header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
             emu.reset_ds()
-            emu.write(emu.ds_para, HDR_DS, header)
-            emu.write(sp, 0, players)
+            emu.write(emu.ds_para, HDR_DS, bytes(header))
+            emu.write(sp, 0, bytes(players))
+            emu.write(sp, OUT_AREA, bytes(64))
             emu.rand_seed(seed)
-            call_args, shown = [], []
+            call_args, shown, outs = [], [], []
             for a in args:
-                if a == 'P':
+                kind, _, rest = a.partition(':')
+                if kind == 'P':
                     call_args.append(('ptr', (sp, p * PSIZE)))
-                elif a == 'A':
+                elif kind == 'A':
                     call_args.append(('ptr', (sp, 0)))
-                elif a == 'N':
+                elif kind == 'N':
                     call_args.append(('word', num))
                     shown.append(str(num))
-                elif a == 'I':
+                elif kind == 'I':
                     call_args.append(('word', p))
                     shown.append(str(p))
-                elif a == 'Q':
+                elif kind == 'J':
+                    j = rng.randrange(num)
+                    call_args.append(('word', j))
+                    shown.append(str(j))
+                elif kind == 'Q':
                     q = rng.randint(1, 5)
                     call_args.append(('word', q))
                     shown.append(str(q))
+                elif kind == 'U':
+                    i = rng.randint(1, 8)
+                    call_args.append(('ptr', (sp, p * PSIZE + ARMY_BASE[1] + i * ks.UNIT_SIZE)))
+                    shown.append(str(i))
+                elif kind == 'F':
+                    off, _ = field_info(ks.PLAYER, rest)
+                    call_args.append(('ptr', (sp, p * PSIZE + off)))
+                elif kind in ('B', 'W', 'L'):
+                    lo, hi = (int(x) for x in rest.split(':'))
+                    v = rng.randint(lo, hi)
+                    call_args.append(('long' if kind == 'L' else 'word', v & 0xFFFFFFFF))
+                    shown.append(str(v))
+                elif kind == 'R':
+                    v = random_real(rng)
+                    call_args.append(('real', v))
+                    shown.append(v.hex())
+                elif kind in ('O', 'OP'):
+                    off = OUT_AREA + 4 * len(outs)
+                    outs.append((kind, off))
+                    call_args.append(('ptr', (sp, off)))
+                else:
+                    raise ValueError(a)
             try:
                 ax, dx = emu.call_far(addr, call_args)
                 r = emu.last_regs
@@ -192,6 +320,8 @@ def main():
                     rv = str(struct.unpack('<i', struct.pack('<HH', ax, dx))[0])
                 elif ret == 'word':
                     rv = str(ax)
+                elif ret == 'sword':
+                    rv = str(struct.unpack('<h', struct.pack('<H', ax))[0])
                 elif ret == 'byte':
                     rv = str(ax & 0xFF)
                 elif ret == 'real':
@@ -202,11 +332,21 @@ def main():
                 if emu.last_runerror is None:
                     raise
                 rv = f'E{emu.last_runerror}'
+            out_vals = []
+            for kind, off in outs:
+                v = emu.read(sp, off, 4)
+                if kind == 'O':
+                    out_vals.append(str(struct.unpack('<i', v)[0]))
+                else:
+                    o, s = struct.unpack('<HH', v)
+                    out_vals.append(str(o) if s == sp else ('nil' if s == 0 and o == 0 else 'bad'))
             after = emu.read(sp, 0, len(players))
             hafter = emu.read(emu.ds_para, HDR_DS, ks.HEADER_SIZE)
             mut = ';'.join(f'{o}:{v.hex()}' for o, v in muts)
+            hmut = ';'.join(f'{o}:{v.hex()}' for o, v in hmuts)
             print(f'func={func} save={os.path.basename(save)} p={p} seed={seed} '
-                  f'args={",".join(shown) or "-"} mut={mut or "-"} -> ret={rv} '
+                  f'args={",".join(shown) or "-"} mut={mut or "-"} hmut={hmut or "-"} -> '
+                  f'ret={rv} out={",".join(out_vals) or "-"} '
                   f'seedout={emu.rand_seed()} diff={diff(players, after) or "-"} '
                   f'hdiff={diff(header, hafter) or "-"}')
 
