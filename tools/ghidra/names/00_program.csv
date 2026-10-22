@@ -1,0 +1,11 @@
+address,name,kind,comment
+1000:3a3c,entry,func,"Program main: InitTask, unit init chain (segs 26,18,17,14,13,12,11,10,9,8,7,4,3,2), App.Init/Run/Done, Halt"
+10c8:005d,System::RunError,noreturn,"Sets ExitCode/ErrorAddr, runs ExitProc chain, shows 'Runtime error' MessageBox, terminates via int 21h"
+10c8:0061,System::Halt,noreturn,"Same exit path as RunError with ErrorAddr = nil"
+10c8:03ef,System::_Construct,func,"Object constructor prologue: allocate Self if nil, store VMT pointer at Self+DI"
+10c8:0439,System::_Destruct,func,"Object destructor epilogue: FreeMem(Self) when called with the dispose flag"
+10c8:1944,System::FillChar,func,"FillChar(var X; Count; Value): byte fill loop"
+10c8:06e2,System::_LongMul,func,"32-bit multiply DX:AX * BX:CX (uses 386 path when Test8086 >= 2)"
+10c8:071f,System::_LongDiv,func,"32-bit signed divide DX:AX / BX:CX, RunError on zero"
+10c8:1342,System::Random,func,"Random(Range): next RandSeed (via 10c8:139f) scaled to Range"
+1090:1f08,OWL::TApplication_Init,func,"Called from main with the global App object (DS:6028), its VMT at DS:0010 and the name PChar Kaiser at DS:04fe"

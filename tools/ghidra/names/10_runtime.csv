@@ -1,0 +1,117 @@
+address,name,kind,comment
+10c8:0002,System::__SystemInit,func,"Called from main right after KERNEL.InitTask: stores ES/SI/DI/DX/BX:ES into PrefixSeg/HPrevInst/HInstance/CmdShow/CmdLine (DS:5ffc/5fdc/5fde/5fe0/5fe2), WaitEvent, InitApp, Test8086 from GetWinFlags, SelectorInc=__AHINCR"
+10c8:00d2,System::_RunExitProcs,func,"Near helper of Halt/RunError: while ExitProc (DS:5ff2) <> nil: clear it and InOutRes, far-jump to it with return to itself"
+10c8:00f0,System::_ErrNumToStr,func,Near helper: converts AX to digits (radix CX) backwards at DS:BX; fills the Runtime error 000 at 0000:0000 text at DS:6008
+10c8:012d,System::GetMem,func,"Pascal GetMem/New: far, Size param; calls heap core 10c8:01ca and RunError(203 heap overflow) on CF"
+10c8:0147,System::FreeMem,func,"Pascal FreeMem/Dispose: far (P, Size); calls heap core 10c8:02d7 and RunError(204 invalid pointer) on CF"
+10c8:0167,System::MemAvail,func,GetFreeSpace(0) plus free bytes (word at +8) of every sub-heap segment in HeapList (DS:5fe6); returns longint
+10c8:0195,System::MaxAvail,func,GlobalCompact(0) maxed with the largest sub-heap free counter in HeapList
+10c8:01ca,System::_HeapAlloc,func,"Overrides 00_program GetMem: near heap core, AX=size -> DX:AX/CF; HeapLimit/HeapBlock sub-allocation or GlobalAlloc+GlobalLock; retries via HeapError (DS:5fee). Far Pascal GetMem is 10c8:012d"
+10c8:0222,System::_HeapGlobalAlloc,func,"Near: GlobalAlloc(HeapAllocFlags DS:5fec, AX) + GlobalLock -> DX:AX"
+10c8:023c,System::_HeapSubAlloc,func,"Near: rounds size to 4, walks HeapList segments for a free block, else creates a new heap segment (10c8:026a)"
+10c8:026a,System::_HeapNewSegment,func,"Near: allocates HeapBlock bytes and writes sub-heap header 'TP' (0x5054) + free list, links into HeapList"
+10c8:02a6,System::_HeapFindFree,func,"Near: first-fit search of a sub-heap free list (ES), splits the block, decrements free counter at ES:8"
+10c8:02d7,System::_HeapFree,func,"Overrides 00_program FreeMem: near heap core (AX=size, BX:CX=ptr); validates 'TP' header, inserts/merges free block or GlobalFree for large blocks. Far Pascal FreeMem is 10c8:0147"
+10c8:0327,System::_HeapMergeFree,func,Near: merges a free block with the following adjacent free block
+10c8:0388,System::IOResult,func,"xchg InOutRes (DS:5ffe) with 0, returns old value"
+10c8:038f,System::_IOCheck,func,{$I+} check emitted after I/O calls: if InOutRes <> 0 then RunError(InOutRes); called 19x from seg 11 only
+10c8:039d,System::_RangeCheckLong,func,"{$R+} longint range check: compares DX:AX with low/high bounds at ES:DI, RunError(201)"
+10c8:03c5,System::_OverflowError,noreturn,{$Q+} overflow target: RunError(215 arithmetic overflow)
+10c8:03cb,System::_StackCheck,func,"{$S+} stack check: compares requested frame (AX) against SP and stack bottom SS:[0Ah], RunError(202 stack overflow)"
+10c8:046c,System::_ObjCopy,func,GUESS: object assignment helper: copies VMT.InstanceSize bytes Src->Dst but preserves Dst VMT field (offset param); no callers
+10c8:048f,System::_ObjVMTCheck,func,"{$R+} virtual call check: VMT size word + negsize word must sum to 0, else RunError(210 object not initialized)"
+10c8:049f,System::AssignPChar,func,"Assign(var F; Name: PChar) entry (DX<>0): FileRec Handle=0, Mode=fmClosed 0D7B0h, copies NUL-terminated name (<=79) to F+30h, AnsiToOem"
+10c8:04a0,System::Assign,label,"Assign(var F; Name: String) entry (DX=0, length-prefixed) sharing the body of 10c8:049f"
+10c8:04e4,System::ResetFile,func,Reset(var F: File; RecSize): int21 AH=3Dh with AL=FileMode (DS:6007); closes if open; InOutRes 102 if not assigned
+10c8:04ed,System::RewriteFile,func,"Rewrite(var F: File; RecSize): int21 AX=3C00h, shares body with Reset; sets Mode=fmInOut 0D7B3h"
+10c8:0549,System::Truncate,func,Truncate(var F): int21 AH=40h with CX=0 at current position
+10c8:0565,System::CloseFile,func,"Close(var F: File): int21 AH=3Eh (skips handles <=4), Mode:=fmClosed"
+10c8:058a,System::_CheckFileOpen,func,Near: Mode <> fmInOut (0D7B3h) -> InOutRes:=103 (file not open)
+10c8:0599,System::_ReadRec,func,"Typed-file Read of one record: int21 AH=3Fh, CX=RecSize, InOutRes 100 on short read"
+10c8:05a0,System::_WriteRec,func,"Typed-file Write of one record: int21 AH=40h, CX=RecSize, InOutRes 101 on short write"
+10c8:05cf,System::BlockRead,func,"BlockRead(var F; var Buf; Count; Result): int21 AH=3Fh with Count*RecSize, error 100"
+10c8:05d6,System::BlockWrite,func,"BlockWrite(var F; var Buf; Count; Result): int21 AH=40h, error 101"
+10c8:0637,System::Seek,func,"Seek(var F; N: Longint): N*RecSize, int21 AX=4200h"
+10c8:0667,System::ParamStr,func,ParamStr(Index): scans CmdLine (DS:5fe2); Index 0 -> GetModuleFileName(HInstance)
+10c8:069f,System::ParamCount,func,Counts CmdLine parameters via 10c8:06aa
+10c8:06aa,System::_GetParam,func,Near: skips blanks / finds next parameter in CmdLine
+10c8:06ca,System::_BlockCopy,func,"Overrides 00_program Move: forward-only rep movsb (Src, Dst, Count), no overlap check; 124 call sites copying records (sizes 0x6d5, 0x3d, 8...) = compiler structured-copy helper. Real Move is 10c8:1920"
+10c8:07c5,System::_LongShr,func,DX:AX shr CL (386 shrd path when Test8086>=2)
+10c8:07de,System::_LongShl,func,DX:AX shl CL (386 shld path when Test8086>=2)
+10c8:07f7,System::_StrLoad,func,Copies a ShortString (full length) into a temp string
+10c8:0811,System::_StrStore,func,"String assignment: copy ShortString to Dest truncated to MaxLen (Src, Dest, MaxLen)"
+10c8:0835,System::Copy,func,"Copy(S, Index, Count) into temp; clamps Index>=1 and Count to length; used by Insert/Delete"
+10c8:0876,System::_StrConcat,func,"Concatenation: appends string to temp, length capped at 255"
+10c8:08a2,System::Pos,func,"Pos(Substr, S): repne scasb for first char then repe cmpsb"
+10c8:08e8,System::_StrCmp,func,"ShortString compare, result in flags (min-length repe cmpsb then length compare)"
+10c8:0913,System::_StrChar,func,Char -> String temp (length 1)
+10c8:0925,System::_StrPacked,func,"Packed array of Char -> String temp (stores length, copies N bytes)"
+10c8:0940,System::Insert,func,"Insert(Source, var S, Index) via Copy/Concat/StrStore"
+10c8:099f,System::Delete,func,"Delete(var S, Index, Count) via Copy/Concat/StrStore"
+10c8:0a0e,System::_SetLoad,func,"Expand packed set (offset/size in BX) into 32-byte set temp, zero-filling"
+10c8:0a38,System::_SetInit,func,GUESS: writes one word then 15 zero words = initialise a 32-byte set temp
+10c8:0a4e,System::_SetAddElem,func,Set constructor: include element (bit = elem and 7 in byte elem shr 3)
+10c8:0a6f,System::_SetAddRange,func,Set constructor: include range Lo..Hi
+10c8:0aa3,System::_SetStore,func,"Store set temp into packed set variable (skip BH bytes, copy BL bytes)"
+10c8:0ac3,System::_SetBitPos,func,"GUESS: computes byte index (DX) and rotated bit mask (AL) of element AL within a packed set (offset DH, size DL); 1 caller in seg 10"
+10c8:0ae3,System::_SetUnion,func,32-byte set: or 16 words
+10c8:0aff,System::_SetDiff,func,"32-byte set: and not, 16 words"
+10c8:0b1d,System::_SetIntersect,func,32-byte set: and 16 words
+10c8:0b39,System::_SetEqual,func,32-byte set compare: repe cmpsw 16 words
+10c8:0b50,System::_SetSubset,func,Set <= test: (A or B) = B word by word
+10c8:0b6e,System::_RealSubCore,func,Real48 near core: flip sign of DI (operand 2) then fall into add core
+10c8:0b72,System::_RealAddCore,func,"Real48 near core: DX:BX:AX + DI:SI:CX, CF on overflow"
+10c8:0c35,System::_RealMulCore,func,"Real48 near core: DX:BX:AX * DI:SI:CX (partial products), CF on overflow"
+10c8:0d38,System::_RealDivCore,func,Real48 near core: DX:BX:AX / DI:SI:CX (shift-subtract)
+10c8:0daf,System::_RealCmpCore,func,"Real48 near core: compare DX:BX:AX with DI:SI:CX, result in flags"
+10c8:0dd9,System::_LongToRealCore,func,"Near core: Longint DX:AX -> Real48 (normalise, exponent 0A0h)"
+10c8:0e15,System::_RealToLongCore,func,"Near core: Real48 -> Longint; CH=0 truncate, CH=1 round; CF on overflow"
+10c8:0e83,System::_RealAdd,func,"Far Real48 add: calls 10c8:0b72, RunError(205 floating point overflow) on CF"
+10c8:0e89,System::_RealSub,func,"Far Real48 subtract: calls 10c8:0b6e, RunError(205)"
+10c8:0e95,System::_RealMul,func,"Far Real48 multiply: calls 10c8:0c35, RunError(205); 157 call sites"
+10c8:0e9b,System::_RealDiv,func,"Far Real48 divide: divisor exponent 0 -> RunError(200 division by zero), overflow -> 205"
+10c8:0ea5,System::_RealCmp,func,Far Real48 compare (flags)
+10c8:0ea9,System::_RealFromLong,func,Far Longint (DX:AX) -> Real48; 134 call sites
+10c8:0ead,System::Trunc,func,"Trunc(Real): CH=0 then 10c8:0e15, RunError(207 invalid floating point op) on overflow"
+10c8:0eb5,System::Round,func,"Round(Real): CH=1 then 10c8:0e15, RunError(207); 117 call sites"
+10c8:0ecf,System::_RealAddKeep,func,Near: Real add preserving DI:SI:CX operand
+10c8:0eed,System::_RealDivKeep,func,Near: Real divide preserving DI:SI:CX operand
+10c8:0ef7,System::Int,func,Int(Real): masks off fraction bits according to exponent (0 if |x|<1)
+10c8:0f48,System::Frac,func,Frac(Real) = x - Int(x) (calls 10c8:0ef7 then sub core)
+10c8:0f5c,System::Sqrt,func,Sqrt(Real): halves exponent for first guess then Newton iterations (div/add/dec exponent); negative -> RunError(207)
+10c8:0fbb,System::Cos,func,"GUESS: adds -pi/2 constant (81 21A2 DAA2 490F), negates, falls into sine series at 10c8:0fce (Sin entry); no callers"
+10c8:1059,System::Ln,func,Ln(Real): x<=0 -> RunError(207); uses ln2 constant (mantissa 3172 17F7 D2) and polynomial table at CS:10DE; no callers
+10c8:11a5,System::ArcTan,func,"ArcTan(Real): inverts |x|>1 and subtracts from pi/2, polynomial tables at CS:1286; no callers"
+10c8:135f,System::RandomReal,func,"Random (no arg, Real result): next RandSeed normalised to 0<=x<1 Real48"
+10c8:139f,System::_NextRandSeed,func,Near: RandSeed (DS:6000) := RandSeed*134775813 + 1
+10c8:13d7,System::Randomize,func,int21 AH=2Ch (get time): RandSeed := CX:DX
+10c8:13e4,System::_LongToStr,func,"Near: signed Longint -> decimal digits at ES:DI (backwards), adds -"
+10c8:1400,System::_ULongToStr,func,Near: unsigned DX:AX -> digits in radix SI
+10c8:1420,System::_StrToLong,func,"Near: parses [+|-]digits or $hex at ES:DI (len CX) into DX:AX, CF on error"
+10c8:14c7,System::_RealToStr,func,"Near: formats Real48 (width/decimals in CX, max 11 digits), fixed or scientific with E+nn"
+10c8:15bf,System::_RealToDigits,func,Near: Real48 -> 12 ASCII digits + decimal exponent
+10c8:164a,System::_StrToReal,func,Near: parses [sign]digits[.digits][E[sign]digits] into Real48
+10c8:16f6,System::_ParseRealDigits,func,Near: accumulates decimal digits into Real (x*10+d)
+10c8:1734,System::_RealScale10,func,Near: multiplies/divides Real by 10^CL using power table at CS:1784
+10c8:17c0,System::_RealMul10,func,Near: Real48 * 10 via shifts and add
+10c8:180e,System::_StrLong,func,"Str(L: Longint:Width, var S; MaxLen): space-pads; 26 call sites"
+10c8:1859,System::_ValLong,func,"Val(S, var L: Longint, var Code): skips blanks, Code = error position"
+10c8:188a,System::_StrReal,func,"Str(R: Real:Width:Decimals, var S; MaxLen)"
+10c8:18ed,System::_ValReal,func,"Val(S, var R: Real, var Code)"
+10c8:1920,System::Move,func,"Move(var Source, Dest; Count): overlap-safe (std when Src<Dst); called by Objects TCollection.SetLimit (10a8:0453) like BP7 source"
+10c8:1958,System::_DMTFind,func,"Dynamic method lookup (calls 10c8:1961), returns entry in DI"
+10c8:195c,System::_DMTCall,func,Dynamic method call: lookup via DMT chain (VMT+4) then jmp far [DI]; RunError(210) if index not found. Used for OWL message-response methods
+10c8:1961,System::_DMTLookup,func,"Near: searches DMT index tables up the parent chain, updates the 1-entry cache in the DMT"
+10c0:0002,Strings::StrLen,func,"repne scasb for NUL, returns length"
+10c0:0019,Strings::StrEnd,func,returns pointer to the terminating NUL
+10c0:0030,Strings::StrMove,func,"StrMove(Dest, Source, Count): overlap-safe copy, returns Dest"
+10c0:0055,Strings::StrCopy,func,"StrCopy(Dest, Source) incl. NUL, returns Dest; 244 call sites"
+10c0:0077,Strings::StrPCopy,func,StrPCopy(Dest; Source: String): ShortString -> PChar
+10c0:0095,Strings::StrCat,func,"StrCat(Dest, Source) = StrCopy(StrEnd(Dest), Source); 116 call sites"
+10c0:00b8,Strings::StrComp,func,"StrComp(Str1, Str2): byte difference of first mismatch"
+10c0:00e1,Strings::StrIComp,func,"StrIComp(Str1, Str2): case-insensitive (a..z upcased)"
+10c0:0125,Strings::StrPas,func,StrPas(Str): PChar -> ShortString result
+10c0:0147,Strings::StrNew,func,"StrNew(Str): nil/empty -> nil, else GetMem(StrLen+1) + StrMove"
+10c0:01b4,Strings::StrDispose,func,"StrDispose(Str): FreeMem(Str, StrLen+1)"
+10b8:0002,WinDos::GetDate,func,"GetDate(var Year, Month, Day, DayOfWeek): int21 AH=2Ah"
+10b8:0024,WinDos::GetCurDir,func,"GetCurDir(Dir: PChar; Drive: Byte): PChar: int21 AH=19h/47h, OemToAnsi, DosError at DS:6818"

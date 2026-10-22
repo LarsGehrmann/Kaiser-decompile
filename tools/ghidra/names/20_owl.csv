@@ -1,0 +1,221 @@
+address,name,kind,comment
+10a8:0002,Objects::Abstract,noreturn,RunError(211 call to abstract method); called by TWindowsObject.GetWindowClass
+10a8:0014,Objects::TObject_Init,func,Empty constructor (only _Construct); called by TWindowsObject.Init and TApplication.Init as inherited Init
+10a8:002e,Objects::TObject_Free,func,"Dispose(@Self, Done): calls VMT+8 (Done) with dispose flag 1"
+10a8:0048,Objects::TObject_Done,func,Empty destructor (_Destruct only); VMT slot +8 of TObject-derived DS:4484
+10a8:005b,Objects::_StreamError,func,GUESS: near helper calling TStream.Error (VMT+0Ch) with code in DX (-5 stGetError / -6 stPutError)
+10a8:006a,Objects::TStream_Get,func,"Reads ObjType word via VMT+1Ch, searches StreamTypes list (DS:5fd2), calls registered Load; stGetError (-5) if unknown"
+10a8:00be,Objects::TStream_Put,func,"Looks up VMT in StreamTypes, writes ObjType (VMT+28h Write) and calls Store; stPutError (-6)"
+10a8:011c,Objects::TStream_StrWrite,func,Writes StrLen word then the characters via Write (VMT+28h)
+10a8:0175,Objects::_CollectionError,func,"Near: calls TCollection.Error (VMT+0Ch) with AX=code, BX=info"
+10a8:0180,Objects::TCollection_Init,func,"TCollection.Init(ALimit, ADelta): Items=nil, Count=0, Limit=0, Delta, SetLimit(ALimit) via VMT+24h"
+10a8:01d2,Objects::TCollection_Done,func,FreeAll then SetLimit(0); VMT DS:5faa slot +8
+10a8:01fc,Objects::TCollection_At,func,"At(Index): bounds check vs Count (+6), Items^[Index]; coIndexError (-1)"
+10a8:0233,Objects::TCollection_AtInsert,func,"AtInsert(Index, Item): grows by Delta via SetLimit, shifts items; coOverflow (-2)"
+10a8:02a9,Objects::TCollection_Error,noreturn,RunError(212 - Code); VMT DS:5faa slot +0Ch
+10a8:02c0,Objects::TCollection_FirstThat,func,"FirstThat(Test): calls local far Test with caller frame, returns first item where True"
+10a8:0305,Objects::TCollection_ForEach,func,ForEach(Action): calls local far Action for each item
+10a8:0339,Objects::TCollection_FreeAll,func,"FreeItem(At(I)) for all items, Count := 0"
+10a8:038d,Objects::TCollection_FreeItem,func,"Dispose(PObject(Item), Done); VMT slot +10h"
+10a8:03af,Objects::TCollection_GetItem,func,GetItem(S) := S.Get; VMT slot +14h
+10a8:03d4,Objects::TCollection_IndexOf,func,"IndexOf(Item): repne scasw over far pointers, -1 if absent; VMT slot +18h"
+10a8:0417,Objects::TCollection_Insert,func,"Insert(Item) = AtInsert(Count, Item); VMT slot +1Ch"
+10a8:0437,Objects::TCollection_PutItem,func,"PutItem(S, Item) = S.Put(Item); VMT slot +20h"
+10a8:0453,Objects::TCollection_SetLimit,func,"SetLimit(ALimit): clamps to Count..MaxCollectionSize (3FFCh), GetMem/Move/FreeMem; VMT slot +24h"
+10a0:0002,Validate::TValidator_Valid,func,Valid(S) := IsValid(S) (VMT+14h) else Error (VMT+0Ch); called from TEdit.IsValid(True)
+10b0:0002,OMemory::LowMemory,func,Returns SafetyPool (DS:5fd6) = nil
+10b0:0021,OMemory::RestoreMemory,func,"If LowMemory then GetMem(SafetyPool, SafetyPoolSize DS:5fd4)"
+10b0:0044,OMemory::HeapFunc,func,HeapError handler: 0 size -> 1; frees the safety pool and returns 2 (retry) unless already low
+10b0:0098,OMemory::InitMemory,func,RestoreMemory then HeapError (DS:5fee) := @HeapFunc; called from TApplication.Init
+1090:0002,OWL::_DMTLookup,func,"Near: same DMT search as System 10c8:1961, used by the OWL message dispatchers"
+1090:0045,OWL::_SetObjectProps,func,"SetProp(HWindow, 'OW1'/'OW2' at DS:5c0a/5c0e) = Self offset/segment"
+1090:0071,OWL::_RemoveObjectProps,func,RemoveProp 'OW1' and 'OW2'
+1090:0097,OWL::GetObjectPtr,func,"GetObjectPtr(HWindow): decodes the object-instance thunk from GWL_WNDPROC (E8 call, CS check 2E5Bh) or reads the 'OW1'/'OW2' props"
+1090:0133,OWL::StdWndProc,func,Common window procedure reached from instance thunks: DMT lookup for Msg (or DefWndProc VMT+0Ch); MakeProcInstance(@StdWndProc) in TApplication.Init
+1090:018b,OWL::InitWndProc,func,"lpfnWndProc of OWL classes: subclasses the new window to CreationWindow (DS:5c06) Instance, sets props, forwards message"
+1090:01dc,OWL::MakeObjectInstance,func,Builds a call thunk (E8 + object ptr) in a GlobalAlloc block via AllocCSToDSAlias/PrestoChangoSelector
+1090:02fa,OWL::FreeObjectInstance,func,Returns a thunk to the free list (AllocCSToDSAlias/FreeSelector)
+1090:0b23,OWL::_DispatchDynamic,func,Calls dynamic method for index (cm_/id_/nf_First + id) or the default VMT slot passed (DefCommandProc/DefChildProc/DefNotificationProc)
+1090:0341,OWL::TWindowsObject_Init,func,"TObject.Init, Parent^.AddChild, Instance := MakeObjectInstance, EnableAutoCreate"
+1090:03e9,OWL::TWindowsObject_Done_FreeChild,func,Local ForEach callback of Done: child^.Free
+1090:03ff,OWL::TWindowsObject_Done,func,"Destroy (VMT+24h), free children, Parent^.RemoveChild, FreeObjectInstance, TObject.Done"
+1090:0466,OWL::TWindowsObject_Store,func,Writes Status/HWindow/... via TStream.Write (VMT+28h) then PutChildren
+1090:04db,OWL::TWindowsObject_PutChildren_SetOrder,func,GUESS: local of PutChildren: numbers child windows (GetWindow order) into CreateOrder (+17h)
+1090:057e,OWL::TWindowsObject_PutChildren_PutChild,func,Local ForEach callback: S.Put(Child)
+1090:059e,OWL::TWindowsObject_PutChildren,func,Writes child count and S.Put for each child
+1090:05ec,OWL::TWindowsObject_CreateChildren_IsNext,func,Local FirstThat callback: child CreateOrder = wanted index
+1090:0624,OWL::TWindowsObject_CreateChildren_DoCreate,func,Local: if wb_AutoCreate then child^.Create (VMT+20h); fixes iconic caption
+1090:06aa,OWL::TWindowsObject_CreateChildren_CreateUnordered,func,Local FirstThat callback: create children with CreateOrder = 0
+1090:06e2,OWL::TWindowsObject_CreateChildren,func,Creates children in CreateOrder then the rest; False on failure
+1090:0762,OWL::TWindowsObject_Transfer,func,Returns 0; VMT slot +40h in dialog VMTs
+1090:0779,OWL::TWindowsObject_Enable,func,"EnableWindow(HWindow, True) if HWindow <> 0"
+1090:07af,OWL::TWindowsObject_Disable,func,"EnableWindow(HWindow, False) if HWindow <> 0"
+1090:07e5,OWL::TWindowsObject_EnableKBHandler,func,"SetFlags(wb_KBHandler=1, True)"
+1090:07ff,OWL::TWindowsObject_EnableAutoCreate,func,"SetFlags(wb_AutoCreate=4, True)"
+1090:0819,OWL::TWindowsObject_EnableTransfer,func,"SetFlags(wb_Transfer=10h, True)"
+1090:0833,OWL::TWindowsObject_DisableAutoCreate,func,"SetFlags(wb_AutoCreate, False)"
+1090:084d,OWL::TWindowsObject_DisableTransfer,func,"SetFlags(wb_Transfer, False)"
+1090:0867,OWL::TWindowsObject_SetFlags,func,"SetFlags(Mask, OnOff) on Flags byte (+16h)"
+1090:0899,OWL::TWindowsObject_IsFlagSet,func,IsFlagSet(Mask): (Flags and Mask) = Mask
+1090:08c0,OWL::TWindowsObject_AddChild,func,"Inserts into circular sibling list (ChildList +0Ah, SiblingList +19h)"
+1090:0942,OWL::TWindowsObject_RemoveChild,func,Unlinks child from circular sibling list
+1090:0a33,OWL::TWindowsObject_FirstThat,func,FirstThat(Test) over children
+1090:0a80,OWL::TWindowsObject_ForEach,func,ForEach(Action) over children
+1090:0ad2,OWL::TWindowsObject_GetId,func,Returns -1; VMT slot +28h in dialog VMTs
+1090:0ae9,OWL::TWindowsObject_IndexOf,func,1-based position of a child in the sibling list
+1090:0b50,OWL::TWindowsObject_WMCommand,func,"DMT idx 0111h: routes commands (cm_First) to focused object, notifications to child (nf_First) or id_First"
+1090:0ce5,OWL::TWindowsObject_DispatchScroll,func,VMT +48h: scroll messages from controls -> child nf_ handler or DefChildProc
+1090:0d85,OWL::TWindowsObject_WMVScroll,func,DMT idx 0115h: ws_VScroll style -> DefWndProc else DispatchScroll
+1090:0dcc,OWL::TWindowsObject_WMHScroll,func,DMT idx 0114h: ws_HScroll style -> DefWndProc else DispatchScroll
+1090:0e13,OWL::TWindowsObject_DefCommandProc,func,VMT +10h: forwards cm_ message to parent/target object
+1090:0e9d,OWL::TWindowsObject_DefChildProc,func,VMT +14h: DefWndProc
+1090:0eb9,OWL::TWindowsObject_DefNotificationProc,func,VMT +18h: forwards to Parent id_First + Id
+1090:0f27,OWL::TWindowsObject_Destroy_ResetChild,func,Local ForEach callback of Destroy: EnableAutoCreate on children with a window
+1090:0f47,OWL::TWindowsObject_Destroy,func,VMT +24h: DestroyWindow or WM_MDIDESTROY (221h) for wb_MDIChild
+1090:0fca,OWL::TWindowsObject_GetClassName,func,VMT +2Ch: returns 'TurboWindow'
+1090:0fea,OWL::TWindowsObject_GetWindowClass,func,VMT +34h in dialog VMTs: calls Abstract
+1090:0ffb,OWL::TWindowsObject_SetupWindow,func,"CreateChildren, Status := em_InvalidChild (-4) on failure, else TransferData(tf_SetData)"
+1090:102d,OWL::TWindowsObject_TransferData_Child,func,Local ForEach callback: child^.Transfer if wb_Transfer
+1090:106a,OWL::TWindowsObject_TransferData,func,VMT +44h: ForEach Transfer when TransferBuffer (+0Eh) <> nil
+1090:10a6,OWL::TWindowsObject_Register,func,VMT +1Ch: GetClassInfo else GetWindowClass + RegisterClass
+1090:10fe,OWL::TWindowsObject_Show,func,Show(ShowCmd): ShowWindow if HWindow <> 0
+1090:1120,OWL::TWindowsObject_CanClose_Child,func,Local FirstThat callback: child window that refuses CanClose
+1090:1154,OWL::TWindowsObject_CanClose,func,VMT +3Ch: True when no child refuses
+1090:1182,OWL::TWindowsObject_WMClose,func,DMT idx 0010h: CloseWindow
+1090:1198,OWL::TWindowsObject_CloseWindow,func,"Application^.CanClose for main window else CanClose, then Free"
+1090:11ed,OWL::TWindowsObject_WMDestroy,func,"DMT idx 0002h: PostQuitMessage for Application^.MainWindow, DefWndProc"
+1090:122c,OWL::TWindowsObject_WMNCDestroy,func,"DMT idx 0082h: remove props, DefWndProc, HWindow := 0"
+1090:125d,OWL::TWindowsObject_WMActivate,func,DMT idx 0006h: Application^.SetKBHandler(Self or nil)
+1090:12b4,OWL::TWindowsObject_WMQueryEndSession,func,DMT idx 0011h: Result := CanClose (Application^.CanClose for main window)
+1090:130a,OWL::TWindowsObject_CMExit,func,DMT idx FF14h (cm_First+cm_Exit): CloseWindow for main window else DefCommandProc
+1090:1349,OWL::TWindowsObject_GetClient,func,VMT +30h: returns nil
+1090:1366,OWL::TWindow_Init,func,"TWindow.Init(AParent, ATitle): Attr.Title := StrNew, DefaultProc := DefWindowProc/DefMDIChildProc, ws_OverlappedWindow or child style, cw_UseDefault"
+1090:147b,OWL::TWindow_Done,func,"StrDispose(Attr.Title), dispose Scroller (+3Bh), TWindowsObject.Done; VMT +8 of OWL control VMTs"
+1090:14d4,OWL::TWindow_InitResource,func,"InitResource(AParent, ResourceID): wb_FromResource, FillChar(Attr, 1Ah, 0), Attr.Id"
+1090:1545,OWL::TWindow_Store,func,TWindowsObject.Store + StrWrite(Title) + Attr fields + S.Put(Scroller)
+1090:16bc,OWL::TWindow_SetCaption,func,"SetCaption(ATitle): replaces Attr.Title (StrDispose/StrNew), SetWindowText"
+1090:170f,OWL::TWindow_GetWindowClass,func,"VMT +34h: cs_HRedraw|cs_VRedraw, lpfnWndProc=InitWndProc, idi_Application, idc_Arrow, color_Window+1"
+1090:1790,OWL::TWindow_GetId,func,VMT +28h: returns Attr.Id (+35h)
+1090:17ac,OWL::TWindow_DefWndProc,func,"VMT +0Ch: CallWindowProc(DefaultProc (+37h), ...)"
+1090:17ea,OWL::TWindow_Create,func,"VMT +20h: Register, CreateWindowEx or WM_MDICREATE (220h) / GetDlgItem for resource windows, then SetupWindow"
+1090:19e2,OWL::TWindow_RestoreFocusChild,func,GUESS: SetFocus(FocusChildHandle +3Fh) unless iconic; used on activate/SC_RESTORE
+1090:1a21,OWL::TWindow_SaveFocusChild,func,GUESS: FocusChildHandle := GetFocus if it is a child; used on deactivate/SC_MINIMIZE
+1090:1a5b,OWL::TWindow_UpdateWindowRect,func,GUESS: copies GetWindowRect into Attr.X/Y/W/H (client coords for MDI/child) unless iconic/zoomed; used by SetupWindow and WMMove
+1090:1b38,OWL::TWindow_WMActivate,func,DMT idx 0006h: inherited WMActivate + save/restore focus child
+1090:1b86,OWL::TWindow_WMMDIActivate,func,DMT idx 0222h: calls WMActivate through System _DMTCall
+1090:1ba7,OWL::TWindow_SetupWindow,func,"VMT +38h: TWindowsObject.SetupWindow, SetFocus for MDI child, Scroller (+3Bh) VMT+10h call, UpdateWindowRect"
+1090:1bfc,OWL::TWindow_WMCreate,func,DMT idx 0001h: SetupWindow then DefWndProc
+1090:1c23,OWL::TWindow_WMHScroll,func,DMT idx 0114h: Scroller^.HScroll (scroller VMT+20h) when ws_HScroll
+1090:1c93,OWL::TWindow_WMVScroll,func,DMT idx 0115h: Scroller^.VScroll (scroller VMT+1Ch) when ws_VScroll
+1090:1d03,OWL::TWindow_WMPaint,func,"DMT idx 000Fh: BeginPaint, Scroller BeginView, Paint (VMT+4Ch), EndView, EndPaint"
+1090:1d84,OWL::TWindow_Paint,func,VMT +4Ch: empty
+1090:1d90,OWL::TWindow_WMSize,func,"DMT idx 0005h: Scroller VMT+0Ch call, stores W/H for size_Normal"
+1090:1e07,OWL::TWindow_WMMove,func,DMT idx 0003h: UpdateWindowRect then DefWndProc
+1090:1e2d,OWL::TWindow_WMLButtonDown,func,DMT idx 0201h: Scroller AutoMode capture loop until WM_LBUTTONUP
+1090:1eb5,OWL::TWindow_WMSysCommand,func,DMT idx 0112h: SC_MINIMIZE saves / SC_RESTORE restores focus child
+1090:1faf,OWL::TApplication_Done,func,"FreeProcInstance(StdWndProc instance), TObject.Done; App VMT DS:0010 slot +8"
+1090:1fdc,OWL::TApplication_IdleAction,func,Returns False; VMT +0Ch
+1090:1ff2,OWL::TApplication_InitApplication,func,Empty; VMT +10h (called when HPrevInst = 0)
+1090:1ffe,OWL::TApplication_InitInstance,func,"VMT +14h: InitMainWindow (VMT+18h), MainWindow := MakeWindow, em_InvalidMainWindow (-5) or Show(CmdShow)"
+1090:2057,OWL::TApplication_Run,func,VMT +1Ch: MessageLoop if Status = 0 else Error(Status)
+1090:2086,OWL::TApplication_SetKBHandler,func,KBHandlerWnd (+0Eh) := AWindowsObject
+1090:20a3,OWL::TApplication_MessageLoop,func,"VMT +20h: PeekMessage / IdleAction / WaitMessage until WM_QUIT, ProcessAppMsg, Translate/DispatchMessage"
+1090:2126,OWL::TApplication_ProcessAppMsg,func,VMT +24h: ProcessDlgMsg or ProcessMDIAccels or ProcessAccels
+1090:217d,OWL::TApplication_ProcessDlgMsg,func,VMT +28h: IsDialogMessage(KBHandlerWnd^.HWindow)
+1090:21c9,OWL::TApplication_ProcessAccels,func,VMT +2Ch: TranslateAccelerator(HAccTable +0Ch)
+1090:220b,OWL::TApplication_ProcessMDIAccels,func,VMT +30h: TranslateMDISysAccel when MainWindow^.GetClient <> nil
+1090:2258,OWL::TApplication_ValidWindow,func,"VMT +3Ch: LowMemory -> Error(em_OutOfMemory -2) and dispose, Status <> 0 -> Error and dispose"
+1090:22e0,OWL::TApplication_MakeWindow,func,VMT +34h: ValidWindow then Create (VMT+20h)
+1090:2357,OWL::TApplication_ExecDialog,func,"VMT +38h: ValidWindow, Execute (dialog VMT+4Ch), dispose"
+1090:23bb,OWL::TApplication_Error,func,"VMT +40h: wvsprintf 'Error code = %d. Continue?' MessageBox 'Application Error', Halt on IDNO"
+1090:23fd,OWL::TApplication_CanClose,func,VMT +44h: MainWindow^.CanClose
+1098:0002,OWL::TDialog_Init,func,"TDialog.Init(AParent, AName): TWindowsObject.Init, DisableAutoCreate, Attr.Name (StrNew or int resource), IsModal := False"
+1098:007a,OWL::TDialog_Done,func,"StrDispose(Attr.Name) unless int resource, TWindowsObject.Done"
+1098:00b1,OWL::TDialog_Create,func,VMT +20h: modeless CreateDialogParam (proc var DS:5be2) with Instance thunk
+1098:014f,OWL::TDialog_Execute,func,"VMT +4Ch: modal DialogBoxParam (proc var DS:5be6), preserves KBHandlerWnd"
+1098:021d,OWL::TDialog_EndDlg_ResetChild,func,Local ForEach callback: EnableAutoCreate on children with a window
+1098:023d,OWL::TDialog_EndDlg,func,"VMT +50h: EndDialog(HWindow, ARetValue) when modal"
+1098:0274,OWL::TDialog_WMInitDialog,func,DMT idx 0110h: SetupWindow
+1098:028b,OWL::TDialog_WMQueryEndSession,func,DMT idx 0011h: Result := not CanClose
+1098:02ef,OWL::TDialog_WMPostInvalid,func,"DMT idx 0590h (wm_User+400): SetFocus to control, Validator^.Error"
+1098:0345,OWL::TDialog_GetItemHandle,func,"GetDlgItem(HWindow, DlgItemID)"
+1098:0369,OWL::TDialog_DefWndProc,func,VMT +0Ch of all 59 dialog VMTs: Msg.Result := 0
+1098:0382,OWL::TDialog_Ok,func,"DMT idx 8001h (id_First+id_Ok): CanClose, TransferData(tf_GetData), EndDlg(id_Ok); CloseWindow when modeless"
+1098:03ca,OWL::TDialog_Cancel,func,DMT idx 8002h: EndDlg(id_Cancel) / CloseWindow
+1098:03f6,OWL::TDialog_WMClose,func,DMT idx 0010h: dynamic call via System _DMTCall
+1098:0417,OWL::TControl_Init,func,"TControl.Init(AParent, AnId, ATitle, X, Y, W, H): TWindow.Init, Style = ws_Child|ws_Visible|ws_Group|ws_TabStop"
+1098:047c,OWL::TControl_InitResource,func,TWindow.InitResource + EnableTransfer
+1098:04b6,OWL::TControl_Register,func,VMT +1Ch: returns True (no class registration)
+1098:04cc,OWL::TControl_WMPaint,func,DMT idx 000Fh (DMT DS:5c82): DefWndProc
+1098:04e8,OWL::TButton_Init,func,"TButton.Init(..., IsDefault): bs_DefPushButton when IsDefault"
+1098:0566,OWL::TButton_InitResource,func,TControl.InitResource + DisableTransfer
+1098:05a0,OWL::TButton_GetClassName,func,'Button' or 'BorBtn' when BWCCClassNames (DS:5bfa); VMT DS:5c90 = TButton
+1098:05d4,OWL::TCheckBox_InitResource,func,"TButton.InitResource + EnableTransfer, Group := nil"
+1098:061b,OWL::TCheckBox_Transfer,func,"VMT +40h: tf_GetData GetCheck / tf_SetData SetCheck, returns 2"
+1098:066e,OWL::TCheckBox_GetCheck,func,SendMessage BM_GETCHECK (400h)
+1098:0698,OWL::TCheckBox_GetClassName,func,'BorCheck' under BWCC else TButton name; VMT DS:5cee = TCheckBox
+1098:06d1,OWL::TCheckBox_SetCheck,func,"BM_SETCHECK (401h), notifies Group^.SelectionChanged (VMT+50h)"
+1098:0710,OWL::TCheckBox_BNClicked,func,"DMT idx 9000h (nf_First+bn_Clicked): DefWndProc, Group notify, DefNotificationProc"
+1098:0759,OWL::TRadioButton_GetClassName,func,'BorRadio' under BWCC; VMT DS:5d3e = TRadioButton
+1098:0792,OWL::TStatic_InitResource,func,TControl.InitResource + TextLen (+41h); VMT DS:5d8e = TStatic
+1098:07cc,OWL::TStatic_GetClassName,func,'Static'
+1098:07ec,OWL::TStatic_Transfer,func,VMT +40h: GetText/SetText with TextLen bytes
+1098:083a,OWL::TStatic_GetText,func,"GetWindowText(HWindow, ATextString, MaxChars)"
+1098:0864,OWL::TStatic_SetText,func,"SetWindowText(HWindow, ATextString); 302 call sites from game"
+1098:0882,OWL::TStatic_Clear,func,SetText('')
+1098:089d,OWL::TEdit_InitResource,func,TStatic.InitResource + Validator (+43h) := nil; VMT DS:5e22 = TEdit
+1098:08dd,OWL::TEdit_Done,func,"SetValidator(nil), TWindow.Done"
+1098:090b,OWL::TEdit_GetClassName,func,'Edit'
+1098:092b,OWL::TEdit_CanClose,func,"VMT +3Ch: inherited CanClose and IsValid(True), else SetFocus"
+1098:0986,OWL::TEdit_Undo,func,WM_UNDO (304h)
+1098:09a7,OWL::TEdit_Paste,func,WM_PASTE (302h)
+1098:09c8,OWL::TEdit_Copy,func,WM_COPY (301h)
+1098:09e9,OWL::TEdit_Cut,func,WM_CUT (300h)
+1098:0a0a,OWL::TEdit_CMEditCut,func,DMT idx FF00h (cm_First+cm_EditCut)
+1098:0a20,OWL::TEdit_CMEditCopy,func,DMT idx FF01h
+1098:0a36,OWL::TEdit_CMEditPaste,func,DMT idx FF02h
+1098:0a4c,OWL::TEdit_CMEditDelete,func,DMT idx FF03h: DeleteSelection
+1098:0a62,OWL::TEdit_CMEditClear,func,DMT idx FF04h: Clear
+1098:0a78,OWL::TEdit_CMEditUndo,func,DMT idx FF05h: Undo
+1098:0a8e,OWL::TEdit_GetNumLines,func,EM_GETLINECOUNT (40Ah)
+1098:0ab8,OWL::TEdit_SetSelection,func,"EM_SETSEL (401h) with MAKELONG(StartPos, EndPos)"
+1098:0af7,OWL::TEdit_GetSelection,func,EM_GETSEL (400h) -> StartPos/EndPos
+1098:0b33,OWL::TEdit_IsValid,func,"IsValid(ReportError): StrPas text, Validator^.Valid (Validate 10a0:0002) or IsValid (VMT+14h)"
+1098:0bcd,OWL::TEdit_DeleteSelection,func,WM_CLEAR (303h) when a selection exists
+1098:0c1a,OWL::TEdit_SetValidator,func,"Frees old Validator, stores new one (+43h)"
+1098:0c4f,OWL::TEdit_IsOWLWindow,func,GUESS: walks GetParent chain until GetObjectPtr finds an OWL object; used by WMKillFocus
+1098:0c8c,OWL::TEdit_WMKillFocus,func,"DMT idx 0008h: validates on focus loss, posts wm_PostInvalid (590h)"
+1098:0d32,OWL::TEdit_WMChar,func,DMT idx 0102h: Validator^.IsValidInput (VMT+10h) filtering
+1098:0fac,OWL::TEdit_WMGetDlgCode,func,DMT idx 0087h: adds dlgc_WantTab (2) when invalid
+1098:0ff2,OWL::TEdit_WMKeyDown,func,DMT idx 0100h: Tab validation and IsValidInput on edits
+1098:1158,OWL::TEdit_Transfer,func,VMT +40h: Validator^.Transfer (VMT+18h) else TStatic.Transfer
+1098:12bc,OWL::TEdit_SetupWindow,func,VMT +38h: TWindow.SetupWindow + EM_LIMITTEXT (415h) TextLen-1
+1098:12f2,OWL::TListBox_AddString,func,SendMessage(GetMsgID(mn_AddString=0))
+1098:1326,OWL::TListBox_SetSelString,func,"SendMessage(GetMsgID(mn_SelectString=7), AIndex, AString)"
+1098:135b,OWL::TListBox_GetSelIndex,func,SendMessage(GetMsgID(mn_GetCurSel=9))
+1098:138d,OWL::TListBox_SetSelIndex,func,"SendMessage(GetMsgID(mn_SetCurSel=8), Index)"
+1098:13c0,OWL::TComboBox_InitResource,func,TControl.InitResource + TextLen (+41h); VMT DS:5e72 = TComboBox
+1098:13fa,OWL::TComboBox_GetClassName,func,'Combobox'
+1098:141a,OWL::TComboBox_Transfer_AddStr,func,Local ForEach callback: AddString
+1098:143a,OWL::TComboBox_Transfer,func,"VMT +40h: tf_GetData GetWindowText / tf_SetData CB_RESETCONTENT, ForEach AddString, SetSelString, SetWindowText"
+1098:14e9,OWL::TComboBox_GetMsgID,func,VMT +50h: CB_ message table at DS:5f8c indexed by TMsgName
+1098:150a,OWL::TComboBox_SetupWindow,func,VMT +38h: TWindow.SetupWindow + CB_LIMITTEXT (401h)
+1098:1540,OWL::TComboBox_SetText,func,"SetSelString(-1) else SetWindowText + SetEditSel(0, StrLen)"
+1098:158c,OWL::TComboBox_SetEditSel,func,CB_SETEDITSEL (402h)
+1098:15bc,OWL::TScrollBar_InitResource,func,"TControl.InitResource, LineMagnitude := 1, PageMagnitude := 10; VMT DS:5efe = TScrollBar"
+1098:15fb,OWL::TScrollBar_GetClassName,func,'Scrollbar'
+1098:161b,OWL::TScrollBar_Transfer,func,"VMT +40h: TScrollBarData (LowValue, HighValue, Position), returns 6"
+1098:16f8,OWL::TScrollBar_SetupWindow,func,"VMT +38h: TWindow.SetupWindow + SetRange(0, 100)"
+1098:171c,OWL::TScrollBar_GetRange,func,"GetScrollRange(HWindow, sb_Ctl)"
+1098:1740,OWL::TScrollBar_GetPosition,func,"GetScrollPos(HWindow, sb_Ctl)"
+1098:1763,OWL::TScrollBar_SetRange,func,"SetScrollRange(HWindow, sb_Ctl, Lo, Hi, False)"
+1098:1785,OWL::TScrollBar_SetPosition,func,"Clamps to range, SetScrollPos if changed"
+1098:17e8,OWL::TScrollBar_DeltaPos,func,"SetPosition(GetPosition + Delta), returns position"
+1098:1825,OWL::TScrollBar_SBLineUp,func,DMT idx 9000h (nf_First+sb_LineUp)
+1098:1852,OWL::TScrollBar_SBLineDown,func,DMT idx 9001h
+1098:187c,OWL::TScrollBar_SBPageUp,func,DMT idx 9002h
+1098:18a9,OWL::TScrollBar_SBPageDown,func,DMT idx 9003h
+1098:18d3,OWL::TScrollBar_SBThumbPosition,func,DMT idx 9004h
+1098:1900,OWL::TScrollBar_SBThumbTrack,func,DMT idx 9005h
+1098:192d,OWL::TScrollBar_SBTop,func,DMT idx 9006h
+1098:196d,OWL::TScrollBar_SBBottom,func,DMT idx 9007h

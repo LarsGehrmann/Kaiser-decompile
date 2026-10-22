@@ -1,4 +1,4 @@
-ghidra/
+/ghidra/
 tools/.venv/
 tools/bin/
 extracted/res/**/*.bmp

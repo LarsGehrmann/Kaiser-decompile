@@ -1,0 +1,8 @@
+address,name,kind,comment
+1000:0002,KaiserApp::InitMainWindow,func,"Creates the main window (1000:0045) and loads accelerators MENUKEYS"
+1000:0045,KaiserWindow::Init,func,"Main window constructor: menu MAINMENU, bitmaps PALAST/KATHEDRALE, toolbar KAISERTOOLS_640/800, default file name autosave.ksr. Player array at Self+0x41 (stride 0x6d5), game header copy at Self+0x4493, file name at Self+0x4625"
+1000:0e3c,KaiserWindow::CmFileOpen,func,"Menu 102 Oeffnen: GetOpenFileName, then LoadGame"
+1000:1427,KaiserWindow::CmFileSaveAs,func,"Menu 104 Speichern unter: GetSaveFileName, then SaveGame"
+1050:058b,SaveGame,func,"Writes header DS:6108 (0x295), N player records (0x6d5) with anti-cheat checksums, optional 0x192 extra block. See docs/ksr-format.md"
+1050:07ed,LoadGame,func,"Reads and validates a .KSR (magic 0x7B, checksums); copies header to DS:6108. See docs/ksr-format.md"
+1050:12f8,ShowFileError,func,"Error message for load/save: 1 open, 2 write, 3 bad magic, 5 short read or checksum"
