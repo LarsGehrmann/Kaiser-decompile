@@ -1,0 +1,13 @@
+address,name,kind,comment
+1040:704f,InvestDlg_Update,func,"INVESTDLG: prices (list, x3/4 Ferengicharme; sell mode 1/4), enables buy buttons (1 per 1000 ha farmland, one palace/cathedral/university part per turn, cathedral only for Koenig, max 30 warehouses)"
+1040:797b,InvestDlg_ToggleSell,func,"Button 501 Verkauf: switches between buy and sell mode"
+1040:79be,InvestDlg_BuyMarket,func,"Button 201"
+1040:7a38,InvestDlg_BuyMill,func,"Button 202"
+1040:7ab2,InvestDlg_BuyPalacePart,func,"Button 203; sets palace_built_this_turn"
+1040:7b33,InvestDlg_BuyCathedralPart,func,"Button 204; sets cathedral_built_this_turn"
+1040:7bb4,InvestDlg_BuyGranary,func,"Button 205"
+1040:7c45,InvestDlg_BuyWarehouse,func,"Button 206"
+1040:7cd6,InvestDlg_BuyUniversityPart,func,"Button 207; sets university_built_this_turn"
+1040:7d57,InvestDlg_BuyTavern,func,"Button 208"
+1040:7dd1,InvestDlg_BuySmithy,func,"Button 209"
+1060:0868,DrawPlayerBuildings,func,"Main window: draws the building icons of the current player on the map"
