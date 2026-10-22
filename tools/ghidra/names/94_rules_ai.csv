@@ -1,0 +1,113 @@
+address,name,kind,comment
+1008:17a5,Ai_SellGoods,func,"Ai_YearlySimulation: if stock > 0 and price_salt >= 10 / price_beer >= 45 / price_wine >= 100: taler += stock*price, stock := 0"
+1008:296c,Ai_HoldManoeuvre,func,"Ai_EndTurn: if ai_aggression <= title and Heer at home: Ai_ArrangeArmies(1), every Heer unit UnitGainExperience(Random(5)+1), initiative-1; no Taler cost (humans pay ManoeuvreCost)"
+1008:2e1a,Ai_FirstKingReward,func,"Ai_EndTurn when IsFirstKing: no hero -> CreateHero + 10/12/14 XP (3 level-ups); else Random(3): hero +1 attack/defence/max HP, all Heer pay halved, or mercenary DS:052a[Random(5)] (types 18,34,26,28,29) with bonus DS:0530 (0,1,2,0,1) via InitUnit/AddUnitToArmy"
+1008:33ad,Ai_ReceiveAid,func,"Ai_Diplomacy for mailbox type 1: sub 0 Taler attitude[sender] += n/1000, 1 land += n/500, 2 unit += 5, 3 people immigrants += n and attitude += n/100 (via GainFame on +0x6c1); ClearMailboxSlot"
+1008:42d6,Seg2_UnitInit,func,Empty far cdecl proc called once from entry 1000:3a3c: unit initialisation stub of segment 2
+1010:2924,MarriageDowry,func,"Nested proc of PlayerTurnStart (year 0): n = Random(9)+1, Do_Info dialog 200+n (250+n female, Hochzeitsgeschenke); 1: 1200 Hf + Wachen, 2: mill + 5000 grain, 3: 2 markets + Bogenschuetzen, 4: 1000 Hf + 3000 grain, 5: 1000 grain + 2 Kaempfer, 6: 1500 Hf + 2000 T, 7: 2 mills + 1000 T, 8: 3000 T + Wachen, 9: granary + 500 T; dowry units get pay 0"
+1010:58d3,PromotionDlg::Init,func,Constructor (VMT DS:05f0) from PromotionCheck with BEFDLG/FEMBEFDLG: Do_Info base + 3 statics 101..103 at +0x83
+1010:5949,PromotionDlg::SetupWindow,func,"VMT DS:05f0 slot +0x38: year (+0x7f)+1400, player title/name (+0x2e), new title from DS:58e8 (male) / DS:59fc (female) by +0x81/+0x82"
+1010:59ef,StartFinanzDlg::Init,func,"Constructor (VMT DS:0916, help 0x72) from Report_Budget with STARTFINANZDLG: 10 statics 101..110 at +0x5c"
+1010:5a65,StartFinanzDlg::SetupWindow,func,VMT DS:0916 slot +0x38: IntToStr of the longints +0x34..+0x58 into statics 101..110 (+0x40 and +0x58 negated: expenses)
+1010:5c1a,StartPopDlg::Init,func,Constructor (VMT DS:0536) from Report_Population with STARTPOPDLG: 5 statics 101..105 at +0x44
+1010:5c8e,StartPopDlg::SetupWindow,func,"VMT DS:0536 slot +0x38: four longints +0x2e..+0x3a with captions DS:0a4c/0a80/0aa8/0adb and one Real*100 (2 decimals, caption DS:0b0e)"
+1010:5e43,HexenDlg::Init,func,"Constructor (VMT DS:0598, help 0x96) from WitchChoosesSpell with HEXENDLG: combobox 101 at +0x34"
+1010:5e96,HexenDlg::SetupWindow,func,"VMT DS:0598 slot +0x38: adds SpellNames DS:497c[0..12] to the combobox, selects 0 (Nichts)"
+1010:5f1a,HexenDlg::CanClose,func,"VMT DS:0598 slot +0x3c: +0x38 := combobox selection index, returns True"
+1010:5f3e,Seg3_UnitInit,func,Empty far cdecl proc called once from entry 1000:3a3c: unit initialisation stub of segment 3
+1018:11a5,Seg4_UnitInit,func,Empty far cdecl proc called once from entry 1000:3a3c: unit initialisation stub of segment 4
+1020:0002,Email_EnterPlayerData,func,"EmailGameStep: FillChar player record, EmailPlayerDlg (1040:288d, EMAILNAMEDLG): name, is_female, cpu_level 0, country, password -> +0x5d7"
+1020:00e9,Email_VerifyPlayer,func,"EmailGameStep (7 calls): FormatPlayerTitle + year+1400, Email_AskPassword; failure -> ShowPasswordFail; returns True when verified"
+1020:014e,Email_AskPassword,func,"STARTEMAILTURNDLG / STARTEMAILTURNFEMD (EmailTurnDlg) shown up to 3 times until StrComp(edit, player+0x5d7) = 0; also used by ShowStartTurnDialog"
+1020:0216,ShowPasswordFail,func,Do_Info PASSWORDFAILDLG (Authentifizierung fehlgeschlagen); from Email_VerifyPlayer and BeginHumanTurn
+1020:0255,EmailTurnDlg::Init,func,Constructor (VMT DS:0be8): MessageDlg-style base 1058:0364 + TEdit id 201 (0x50 chars) at +0xd8
+1020:02b3,EmailTurnDlg::CanClose,func,"VMT DS:0be8 slot +0x3c: TWindowsObject.CanClose, then GetText of edit 201 (16 chars) into +0xdc"
+1020:02ee,ShowEmailHandOver,func,"MessageDlg 1058:0364 with EMAILUNTERBRECHENDLG (save file name, next player); 20 call sites in EmailGameStep, CmKriegFuehren, Victory, CpuTurn"
+1028:0002,AskBattlefield,func,BattleSetup: KRIEGSERNADLG/LADLG/HADLG by ArtilleryClass(attacker) 0/1/2 (no/light/heavy artillery text); button 2 Auf den Feldern disabled if the defender has no units or army_away; returns True for the field battle
+1028:011c,RetreatLosses,func,"BattleAftermath code 12 (human attacker) and FightRaiders: each Heer unit lost with Random(5)=0 unless Held, ability Fortune (9) or spell Karma (10); own_units_killed += n; FLUCHTDLG (n or keine). Loop index is not adjusted after RemoveArmy1Unit"
+1028:020a,Massacre,func,"Nested proc of PlunderDialog/Ai_PlunderChoice: killed (results+4) = pop*(10+Random(15))% after a city battle, (1+Random(5))% otherwise; deported (results+0) = pop*(5+Random(5))% / (1+Random(5))%; each capped so the loser keeps 50; loser pop -= both, winner pop += deported"
+1028:038e,ShowMassacre,func,"If a human is involved: MassacreDlg (MASSAKERDLG) with killed, deported and Schlaechter(in) von <loser country DS:63a8>"
+1028:0461,MassacreDlg::Init,func,Constructor (VMT DS:0cec): Do_Info base + statics 101..103 (0x50 chars) at +0x36
+1028:04d5,MassacreDlg::SetupWindow,func,"VMT DS:0cec slot +0x38: longint +0x2e (killed), +0x32 (deported), string +0x42 (epithet)"
+1028:057e,BurnBuildings,func,"Nested proc: results += (stock - already lost) * p%: city battle markets 20-49, mills 10-29, palace/cathedral/university 20-49, granaries 20-59, warehouses 20-49, taverns 10-29, smithies 20-49, civilians 1-5% of pop; field: markets 10-19, mills 10-29, granaries 10-29, warehouses 10-19, civilians 1-3%; loser keeps 50 people"
+1028:0996,ShowBurnResult,func,"If a human is involved: ShowBuildingLossDlg(1, results, BRANDDLG)"
+1028:09c8,PlunderTalerAndLand,func,"Nested proc: Taler (results+0x30) = loser taler*(5+Random(20))% only after a city battle (0 if taler <= 0); land (results+0x2c) only if AttackInitiativeCost <= 2 (neighbours, or initiative off): land*(5+Random(13))% city / (3+Random(6))% field, loser keeps >= 12000 Hf; Taler moved and booked in +0xbb of both"
+1028:0b6b,ShowPlunderResult,func,"If a human is involved: PlunderResultDlg (PLUENDERNDLG) with Taler results+0x30, land +0x2c, civilians +4"
+1028:0c00,PlunderResultDlg::Init,func,Constructor (VMT DS:0c98): Do_Info base + statics 101..103 at +0x3a
+1028:0c74,PlunderResultDlg::SetupWindow,func,"VMT DS:0c98 slot +0x38: +0x36 Taler -> 101, +0x32 land -> 102, +0x2e civilians -> 103"
+1028:1290,LootDlg::Init,func,"Constructor (VMT DS:0d60, help 0x7d) from PlunderDialog: statics 101/102 at +0x9a, buttons 201..203 at +0xa2 (handlers 201..204 end the dialog with 10..13)"
+1028:134c,LootDlg::SetupWindow,func,VMT DS:0d60 slot +0x38: strings +0x34 and +0x67 into statics 101/102
+1030:00c7,Ai_LandPriceMargin,func,"Ai_LandPolicy: u = UnclaimedLand/num_players/100000; v = clamp(round(1/(u^3+0.01)) + 15 - FreeBuildingLand/2000, 17, 60); returns byte(v + 15 - land_price)"
+1030:01de,Ai_SurplusLand,func,"max(0, land - land_used - 1000*max(2, markets, mills, palace_parts, cathedral_parts)); LandPolicy, BuildingPolicy, MilitaryPolicy (fief only if > 3000)"
+1030:0301,Ai_LandToSellForPromotion,func,"Ai_EndTurn (title 9): if land, pop, palace, cathedral, ArmyStrength and happiness of title+1 are met: n = (PromotionTaler[t] - taler + 1000) / (land_price/10), returned only if farmland - n >= PromotionLand[t]"
+1030:04ab,Ai_IsMuchRicher,func,"wealth(p) = taler + 5*max(0, land - 100000 (DS:581c = PromotionLand[10])); returns wealth(b)*3/2 < wealth(a); Ai_ChooseWarTarget calls it as (target, self), also Ai_MilitaryPolicy"
+1030:059b,Ai_RevolutionRoll,func,"Ai_EndTurn: happiness < 0.25 -> Random(round(happiness*10)) = 0 ? 2 : 1, else 0; caller: 1 = fame-10, lifetime-1, news 12; 2 = title-1, fame-50, lifetime-1, skip_turn"
+1030:060f,Ai_SetSabotageBudgets,func,Ai_Turn: for every other player j with attitude[j] < 50: budget +0x598[j] := (title+1)*(6-ai_aggression) div 2 (x100 Taler per year)
+1030:06d9,Ai_CanRecruitType,func,"Ai_MilitaryPolicy: (title < 6 or >= 2 Artillerie or the type has Sprengpulver) and CountUnitsOfType < cap DS:0e60[type] (Kaempfer 8, Bogen 8, Inf 2, Musk 4, Kav 4, Art 4, Ritter 12, Kreuzr 12, Held 1) and weapons >= UnitWeapons[type]"
+1030:075a,Ai_KnightSquires,func,"Every Knappe (type 34) in Heer or Garde: Chance(50 with spell 3 Chevalerie, else 5) -> KnightSquire"
+1030:0844,Ai_DropWeakestHeerUnit,func,"SortArmy(1); the last Heer unit is copied to the Garde if army2_count < 8, then RemoveArmy1Unit; used when the Heer has more than 8 units"
+1030:09f2,Ai_AutoBattleRating,func,"(sum attack+defence + 2*sum level of the Heer + home ? 2*(8-army1_count)*(pop div 4000 + 1) : 0) * 1.0/1.05/1.15 by ArtilleryClass * 1.25 at home * 1.2 with a Vampire * 1.15 with Knochenflicker, rounded"
+1030:0bda,Ai_AutoBattleLosses,func,"Each Heer unit dies if Random(k + d + level) = 0, d = (attack+defence) div 10 (Held 10), k = 2 loser / 3 winner (caller); ClearUnit, SortArmy, army1_count -= dead"
+1030:0cc0,Ai_UnitValue,func,"Near helper of Ai_ArrangeArmies: attack + defence + range, +10 with ability 10 (Sprengpulver)"
+1030:0d02,Ai_ArrangeArmies,func,"(mode, player): pools Heer and Garde, insertion sort by Ai_UnitValue, best 8 -> Heer, rest -> Garde, SortArmy; mode 2 then SwapArmies (best units defend the city); BattleSetup, ResolveWar, auto battles, Ai_MilitaryPolicy"
+1030:1062,Ai_AutoBattle,func,"Ai_ChooseWarTarget for a computer target: Ai_ArrangeArmies(1) both; attacker wins if AutoBattleRating(defender, home) < rating(attacker); losses k=3 winner / 2 loser; Reisiger Raecher DS:611d gains Random(3)+2 XP; returns True if the attacker won"
+1030:1116,Seg7_UnitInit,func,Empty far cdecl proc called once from entry 1000:3a3c: unit initialisation stub of segment 7
+1068:0002,CreateComputerPlayers,func,"(players, first, count, difficulty header+9): FillChar each record, cpu_level by difficulty 1: 5-6, 2: 3-4, 3: 1-2, 4: 1; countries = shuffled list of countries not used by players 0..first-1"
+1068:0788,InitComputerRuler,func,"CmDemissionieren, CmBeenden, Ai_Turn (death): name = DS:64a2[country] (ruler names, KAISER.INI), ai_aggression 1-6, spell 1-12, cpu_level Random(6)+1, title 0, fame 0, male, brew_beer = goods trade, lifetime 50+Random(30)"
+1068:08d5,WarehouseCapacity,func,Returns warehouses (+0xe7) * 1000; RemoveWarehouses
+1068:0ae8,CanAffordWithCredit,func,Returns taler - amount >= -CreditLimit(player) (1068:1df2); TradeCaravan and CaravanDlg::SetupWindow
+1068:12fe,ComputeScore,func,"ArmyStrength(1)/50 + taler/100000 + land/20000 + pop/2000 + title + fame/20 (two unused word params); AddHighScore 1040:3fc4, RankingDlg 1040:60e8, AvengerJoinsWeaker"
+1068:2dcc,ReduceByFraction,func,(var x: longint; f: Real): x -= Round(x*f); if unchanged x -= 1; SkipTurnLosses
+1068:3003,FameDiscount,func,"Returns value - value*fame div 200 (half at fame 100): unit price (Ai_MilitaryPolicy, RecruitDialog), pay (RecruitUnit, InitUnit, RecruitDlg), ManoeuvreCost"
+1068:32b2,SabotageYearlyCost,func,"(num_players, idx, players): sum of budget byte +0x598[j]*100 over the other players, only with >= 1 tavern; Report_Budget, Do_Finanzhaushalt"
+1068:3386,SabotageFunding,func,"SabotageEnd: +0x586[j] += +0x58f[j] (returning agents); with >= 1 tavern: budget +0x598[j] capped at (title+1)*5, savings +0x5a1[j] += budget*100, taler and +0xab -= budget*100; savings >= (title_j+1)*1000 (700 with Ambassador) -> +0x586[j] += 1, savings -= cost"
+1068:35c1,SabotageYearsToNextOp,func,"(players, saboteur*, target*): 0 without budget, else max(1, round(((title_target+1)*1000 (700 Ambassador) - savings +0x5a1) / (budget*100))); Do_Sabotage dialog 1038:3c4a/3e13"
+1068:41d5,TransferLand,func,"(withUsed, amount, lost*, receiver, giver): giver land -= n, receiver += n; withUsed: giver land_used -= round(land_used*n/old land); BuildingsLostForLand(giver); receiver gets lost markets/mills/granaries/warehouses minus 1 each (warehouses <= 30); tribute, aid, plunder"
+1068:438c,SkipTurnLosses,func,"(mode, player): land, taler (also event money total +0xc3), population, markets, mills each -= round(x*f), f = t*(1+RandomReal), t = DS:42ca[mode] = 0.1 (mode 0) / 0.3 (mode 1); land >= 2000, pop >= 50; SkipTurnCheck (mode 0 with sabotage flag 0x200), Ai_EndTurn (mode 0 with flag 0x80)"
+1068:50c5,ClearUnit,func,"FillChar(unit, 0x3d, 0); type := 0xff; RemoveArmy1Unit, RemoveArmy2Unit, Ai_AutoBattleLosses"
+1068:515e,RemoveArmy2Unit,func,"Like RemoveArmy1Unit for army2 (+0x321): ClearUnit, shift the rest down, army2_count-1; troop dialog, aid, AvengerLeaves"
+1068:53a4,MakeUnitName,func,"(country, bonus, type, dest): Ritter -> country adjective DS:6696 + space + Ritter, else type name DS:4bbc+25*type; bonus > 0 appends +n"
+1068:5439,RecruitUnit,func,"(bonus, type, army, player): table stats, pay = FameDiscount(UnitPay)*(bonus+1) (Schwarze Ritter /3 with Terror), Lindwurm level 6, Kreuzritter random ability 7/4/9 (Regeneration/Drachenschild/Fortune), unconscious 1, Heldentum +10 XP, appended to Heer (1) or Garde; bonus loop levels the last Heer unit (bug, all callers pass 0)"
+1068:5638,InitAvenger,func,"Unit record (header DS:611d) := type 13, table stats DS:50a9.., pay 0, level/xp/kills 0, ability DS:528a; CmNeuesSpiel and AvengerLeaves (when he died)"
+1068:598d,InitUnit,func,"(bonus, type, unit*, player): name, table stats, pay as RecruitUnit; bonus level-ups (10 XP each, then level/xp reset to 0); OfferUnitsAtTurnStart, KnightSquire, PromotionCheck and Ai first-king bonus"
+1068:5b06,AddUnitToArmy,func,"(unit*, army, player): +10 XP with Heldentum, appended to Heer (1) or Garde (2)"
+1068:5c15,HasAnyUnits,func,True if the player has any unit; AskBattlefield
+1068:5d18,UnitLess,func,"Nested comparator of SortUnits: key 1 attack+defence, 2 level, 3 max HP, 4 kills; True if the earlier unit is smaller"
+1068:5db8,SortUnits,func,"Nested insertion sort of n units (0x3d bytes) by UnitLess(key), largest first"
+1068:5e85,SortArmy,func,"(army, player): SortUnits key 3 then key 1 (stable, so attack+defence primary); only if army1_count >= 1 and army2_count >= 1"
+1068:5f0c,CreateHero,func,"(name or nil, unit*): type 9, portrait Random(18)+1, name or string resource 101+Random(220); Held stats 7/7/7 HP, 2 steps; ability by portrait (1 Glanz und Gloria, 2 Drachentoeter +2 att, 3 Vergiftete Klinge -2 att, 4 Mithrilharnisch +1 def, ...)"
+1068:6122,HeroRankName,func,"level < 7: DS:4fec+25*level (Lehrling..Halbgott), else Halbgott+(level-6); HeroLevelUpDlg, 1040:48c6"
+1068:6199,RandomMercenaryType,func,Random(22)+14 until UnitTitle[type] <= title; OfferUnitsAtTurnStart
+1068:61db,UnitRankName,func,"Held, Lindwurm, Reisiger Raecher: hero ranks (Lehrling..Halbgott+n), others RankNames DS:4f88 (Fuchs..Elite); unit info dialogs"
+1068:6290,HasHero,func,"True if Heer or Garde contains type 9; PlayerTurnStart (GrantFirstHero), PromotionCheck, Ai_FirstKingReward"
+1068:64d6,ArtilleryClass,func,"(withGarde, player): 2 if a unit has ability 10 (Sprengpulver), else 1 if a unit has range > 1, else 0; AskBattlefield (KRIEGSER NA/LA/HA), GeheimDlg, Ai_AutoBattleRating"
+1068:65c2,HasDesertableUnit,func,"(withGarde, player): True if a unit type has UnitCanDesert DS:52b8; SabotageAction 5/6, Do_Entwicklungshilfe"
+1068:66af,RaiderVictoryReward,func,"mode 1: event_money += title*(1000+Random(1500)); mode 2: event_money += 100000, fame +20, every Heer unit defence +3 (LINDWURMDLG_II: bath in the beasts blood); event := 0"
+1068:67c5,ClearHighScores,func,"FillChar(0xabe) = 5 tables x 11 entries x 50 bytes; CmAnnalen, AddHighScore"
+1068:67db,SortHighScoreTable,func,Selection sort of 11 records (0x32 bytes) by longint +0x2a descending; AddHighScore
+1068:68b0,ClearMailboxSlot,func,"FillChar(slot, 6, 0); 30 call sites in the message handlers"
+1068:696f,LogSabotageReport,func,"(amount, type, target, saboteur, ..., players): if count +0x616 < 15: entry +0x611+6*n = saboteur, type (0 = agent spotted), amount; read and cleared by SabotageEnd"
+1068:6aa5,FormatPercent,func,"(part, total, dest): 0% if total = 0, else IntToStr(Round(part/total*100)) + %"
+1068:6b29,IntToStr,func,Str(n) + StrPCopy; 68 callers
+1068:6b58,FormatThousands,func,"IntToStr of abs(n), inserts , every 3 digits, - prefix for negatives"
+1068:6c36,BuildingProgressText,func,"0 -, 1-3 Grundstein, 4-8 in Bau, 9-11 bald fertig, 12 vollendet; GeheimDlg::ShowPage"
+1068:6cb4,RealmName,func,"land >= 100000 Kaiserreich, >= 50000 Koenigreich, >= 20000 Fuerstentum, >= 15000 Herzogtum, >= 10000 Grafschaft, else Landstrich (PromotionLand thresholds); GeheimDlg"
+1068:6d8b,FameText,func,"fame < 20 inexistent, 20-39 windig, 40-59 bekannt, 60-79 angesehen, 80-94 ehrwuerdig, 95-100 legendaer; GeheimDlg"
+1068:6e30,MagnitudeText,func,">= 1000000 Millionen, >= 100000 Hunderttausende, >= 10000 Zehntausende, >= 1000 Tausende, >= 100 Hunderte, else -; GeheimDlg (estimates)"
+1068:6eec,SetBit,func,Sets bit n of a byte if clear; report_flags in the CmBericht* handlers
+1068:6f23,ClearBit,func,Clears bit n if set (TestBit); report_flags in the CmBericht* handlers
+1068:6f82,Seg14_UnitInit,func,Empty far cdecl proc called once from entry 1000:3a3c: unit initialisation stub of segment 14
+1068:1df2,CreditLimit,func,"Was GrainCost_q: returns (title+7)*1000; Bankruptcy triggers at taler <= -CreditLimit, CanAffordWithCredit, grain dialog credit (manual: debt limit depends on the title)"
+1030:0002,Ai_FarmlandPerCapita,func,"Was Ai_GrainRating_q: Round(clamp((land - land_used) / population, 0, 100)); Ai_GrainPolicy bands <6 / 6-10 / >10, Ai_LandPolicy"
+1030:08ba,Ai_StrengthRatio,func,"Was Ai_StrengthComparison_q: (target, self): ArmyStrength(1, self) / (sum attack+defence of target Heer (if at home) + Garde); 10.0 if the target has nothing; ChooseWarTarget, Diplomacy, AnswerPeace/Tribute"
+1028:0eaf,PlunderDialog,func,"Was PlunderDialog_q: LOOT2DLG (field) / LOOTDLG (city); 10 PlunderTalerAndLand + TransferLand, 11 BurnBuildings, 12 Massacre (fame -30), 13 mercy (fame +2); then pop = max(pop - results+4, pop/2), buildings -= results, RemoveGranaries/Warehouses; results+0x34 = choice"
+1028:0d46,Ai_PlunderChoice,func,"Was PlunderAuto_q: Random(100) 0-50 plunder (51 %), 51-80 burn (30 %), 81-89 mercy +2 fame, 90 nothing, 91-99 massacre -30 fame; burn results are only shown, not subtracted (no apply step as in PlunderDialog)"
+1068:56bc,AvengerJoinsWeaker,func,"Was AvengerJoinsWeaker_q: (avenger DS:611d, defender, attacker): joins the attacker (Heer, if < 8) if its ComputeScore and ArmyStrength(1) are both < 2/3 of the defender's, or the defender (Heer, else Garde) in the reverse case; every battle except e-mail field battles"
+1010:22d4,OfferUnitsAtTurnStart,func,"Was ArmyTurnStart_q: spell offers Chevalerie Knappen, Heilende Haende Knochenflicker, Gaias Segen Waldlaeufer 1/(30-fame/5), Pietaet Paladine 1/((n+1)*15-fame/10), Terror Vampire (sure, first) / Schwarze Ritter; else SOELDNERDLG 1/(14-fame/10) (12 with Karma) with RandomMercenaryType; bonus +1 (20 %) / +2 (10 %)"
+1010:288d,HarvestReport,func,"Was YearSummary_q: MessageDlg 100+harvest_quality (rec+0x12d, dialogs 101..105 KORNERNTE) with Round(rot fraction*100)%"
+1068:31c7,IsFirstKing,func,"Was IsFirstKing_q: True if no other player has title 9 or first_king_bonus (+0x21); PromotionCheck, Ai_EndTurn"
+1068:2850,ManoeuvreCost,func,"FameDiscount(sum over Heer units: Held 2000, unit below max level (2, 3 with Heldentum) (level+1)*500, units at max level 0, fame)"
+1028:138d,LootDlg::IdPlunder,func,Was T0d60::IdCtl201: EndDlg(10) = Pluendern und Annektieren
+1028:13a1,LootDlg::IdBurn,func,Was T0d60::IdCtl202: EndDlg(11) = Brandschatzen
+1028:13b5,LootDlg::IdMassacre,func,Was T0d60::IdCtl203: EndDlg(12) = Massaker anrichten
+1028:13c9,LootDlg::IdMercy,func,Was T0d60::IdCtl204: EndDlg(13) = Gnade walten lassen

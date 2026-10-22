@@ -1,0 +1,26 @@
+address,name,kind,comment
+1040:2997,EconomyStatsDlg::Init,func,Constructor of the economy statistics dialog (VMT DS:1b64); was Do_Wirtschaft
+1040:2e64,MilitaryStatsDlg::Init,func,Constructor of MILSTATDLG (VMT DS:1b10); was Do_Militaer
+1058:0002,KaiserDlg::Init,func,"Base constructor of every game dialog (TDialog.Init + attr 0x40), 61 callers; also plain message dialogs with VMT DS:3364; was Do_Info"
+1058:00fb,KaiserDlg::WMSetFont,func,WM_SETFONT in the shared base DMT DS:3350
+1058:0111,KaiserDlg::WMCtlColor,func,"WM_CTLCOLOR, returns brush DS:63a6"
+1058:0221,HelpDlg::IdHelp,func,Button 999 (?) in the shared DMT DS:33b8: WinHelp
+1080:067d,Toolbar::WMLayoutInParent,func,wm 0478h from the parent Paint: docks the toolbar and shrinks the client rect
+1058:0aba,UnitInfoDlg::WMPaint,func,renamed from T35e6::WMPaint (VMT DS:35e6)
+1058:0ca1,UnitInfoDlg::WMTimer,func,renamed from T35e6::WMTimer (VMT DS:35e6)
+1058:0d7f,Button2Dlg::IdButton101,func,renamed from T3652::IdCtl101 (VMT DS:3652)
+1058:0d93,Button2Dlg::IdButton102,func,renamed from T3652::IdCtl102 (VMT DS:3652)
+1058:0ec9,ChoiceDlg::IdButton101,func,renamed from T36ea::IdCtl101 (VMT DS:36ea)
+1058:0edd,ChoiceDlg::IdButton102,func,renamed from T36ea::IdCtl102 (VMT DS:36ea)
+1058:0ef1,ChoiceDlg::IdButton103,func,renamed from T36ea::IdCtl103 (VMT DS:36ea)
+1058:0f05,ChoiceDlg::IdButton104,func,renamed from T36ea::IdCtl104 (VMT DS:36ea)
+1058:0f19,ChoiceDlg::IdButton105,func,renamed from T36ea::IdCtl105 (VMT DS:36ea)
+1058:0f2d,ChoiceDlg::IdButton106,func,renamed from T36ea::IdCtl106 (VMT DS:36ea)
+1058:0f41,ChoiceDlg::IdButton107,func,renamed from T36ea::IdCtl107 (VMT DS:36ea)
+1058:0f55,ChoiceDlg::IdButton108,func,renamed from T36ea::IdCtl108 (VMT DS:36ea)
+1058:0f69,ChoiceDlg::IdButton109,func,renamed from T36ea::IdCtl109 (VMT DS:36ea)
+1058:0f7d,ChoiceDlg::IdButton110,func,renamed from T36ea::IdCtl110 (VMT DS:36ea)
+1080:091d,Toolbar::WMLButtonDown,func,renamed from T4418::WMLButtonDown (VMT DS:4418)
+1080:0991,Toolbar::WMRButtonDown,func,renamed from T4418::WMRButtonDown (VMT DS:4418)
+1080:09e5,Toolbar::WMMouseMove,func,renamed from T4418::WMMouseMove (VMT DS:4418)
+1080:0a13,Toolbar::WMLButtonUp,func,renamed from T4418::WMLButtonUp (VMT DS:4418)

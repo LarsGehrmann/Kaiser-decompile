@@ -39,7 +39,7 @@ Each building type can have one building per 1000 ha of farmland. Trading in `LA
 
 ```
 land  −= amount        (negative amount = buy)
-taler += amount × land_price / 10;   land_trade_money += the same
+taler += amount × land_price / 10;   total_land_trade += the same
 ```
 
 Afterwards `BuildingsLostForLand` (1068:22c0) removes buildings that no longer fit

@@ -9,7 +9,7 @@ address,name,kind,comment
 1068:0bd3,SmithyOutput,func,"min(population/2000, land/20000)"
 1068:2ce7,WarehouseFreeSpace,func,"warehouses*1000 - (salt + beer + wine + weapons)"
 1068:22c0,BuildingsLostForLand,func,"After selling land: buildings that no longer fit (dialog VERLUSTDLG)"
-1040:83c5,LandDlg_Trade,func,"land -= amount; taler += amount * land_price / 10; land_trade_money += same"
+1040:83c5,LandDlg_Trade,func,"land -= amount; taler += amount * land_price / 10; total_land_trade += same"
 1040:08a2,TradeCaravan,func,"Random caravan offering goods (SALZ/BIER/WEIN/WAFFENKARAWANEDLG); chance 1/(20 - fame/10) per turn when goods trade is enabled"
 1040:081e,AskWarehousesFull,func,"LAGERVOLLDLG: warehouses full, choose what to do"
 1070:0002,PlaySound,func,"Sound effect (segment 15, sndPlaySound of WAVEDATA); args (mode, sound id)"
