@@ -69,13 +69,38 @@ python3 -I tools/ksr.py --check Kaiser/*.KSR Kaiser/*.ksr
 Always run Python with `-I`: the project folder `ghidra/` would otherwise shadow
 the `ghidra` Java package inside PyGhidra.
 
+Reading code: `python3 -I tools/fn.py <address|name> --brief` prints a decompiled function;
+`tools/.venv/bin/python -I tools/ghidra/disasm.py <address>` prints annotated disassembly
+with decoded Real48 constants (the decompiler drops them). Text dumps of all game segments
+are in `ghidra_out/disasm_seg*.txt`.
+
+## Game rules (docs/rules/)
+
+| Document | Contents |
+|---|---|
+| [turn-loop.md](docs/rules/turn-loop.md) | year structure, human/computer turns, victory, game states |
+| [population-grain.md](docs/rules/population-grain.md) | births, deaths, migration, happiness, harvest, grain |
+| [events.md](docs/rules/events.md) | the 23 yearly events |
+| [land-market.md](docs/rules/land-market.md) | land price, goods, Prokurist, caravans, game start |
+| [buildings.md](docs/rules/buildings.md) | building types, costs, limits |
+| [finances.md](docs/rules/finances.md) | taxes, justice, trade, army pay, interest |
+| [titles.md](docs/rules/titles.md) | promotion requirements, first king, revolution |
+| [military.md](docs/rules/military.md) | unit tables, armies, recruiting, fiefs, war, initiative |
+| [battle.md](docs/rules/battle.md) | tactical battle |
+| [diplomacy.md](docs/rules/diplomacy.md) | message protocol, treaties, sabotage |
+| [ai.md](docs/rules/ai.md) | computer players |
+| [hidden-features.md](docs/rules/hidden-features.md) | boss key, Census Editor, Debug mode |
+
+Data layouts: `tools/kaiser_structs.py` (TGameHeader, TPlayer, TUnit) and
+[docs/ksr-format.md](docs/ksr-format.md); data tables in [docs/data-tables.md](docs/data-tables.md);
+roadmap in [docs/roadmap.md](docs/roadmap.md).
+
 ## Status
 
-- Resources, help file and NE layout fully extracted.
-- Ghidra: 1440 functions, all decompile; entry point and main program identified.
-- Library code named (353 names: System, Strings, WinDos, Objects, OWindows, ODialogs,
-  OMemory, Validate). Segments 19–26 are library; the ~850 unnamed functions in
-  segments 1–18 are the game itself. Segment → unit map in `docs/segments.md`.
-- Savegame container + anti-cheat checksums decoded and verified on all 30 saves.
-- Not yet: running the game (needs Windows 3.11 in DOSBox-X), field-level savegame map,
-  game logic.
+- Resources, help file and NE layout fully extracted; library code named.
+- Game logic: all ten subsystems mapped (see the table above); ~800 names applied.
+- Savegame: ~100 player fields identified; all formulas that can be checked against the
+  30 saves were (most match exactly).
+- Running: Windows 3.11 + Kaiser in DOSBox-X (`win311/run.sh`).
+- Open: remaining unnamed helpers, a few formulas marked "unconfirmed" in the rules,
+  reimplementation (phase 3).
