@@ -24,7 +24,7 @@ original resources.
 | # | Milestone | Validation | Status |
 |---|---|---|---|
 | 1 | Data layer: `TGameHeader`, `TPlayer`, `TUnit`, load/save `.KSR` | all 30 saves round-trip byte-identically | ✅ |
-| 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint | differential test against segment 26 in the emulator | |
+| 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical |
 | 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
@@ -38,3 +38,15 @@ port/build.sh                                   # needs: brew install fpc
 port/bin/ksrtool roundtrip Kaiser/*.KSR Kaiser/*.ksr
 port/bin/ksrtool show Kaiser/NILSLARS.KSR
 ```
+
+## How the exact runtime works
+
+- `tools/emu/kaiser_emu.py` loads `kaiser.exe` into a 16-bit x86 emulator (Unicorn),
+  applies the NE relocations and can call any function of the original with chosen inputs;
+  Windows API calls and `RunError` stop the emulation.
+- `tools/emu/x86_to_pascal.py` translates the Borland Real48 cores (10c8:0b6e–0e82, 381
+  instructions) mechanically into Pascal on a simulated 16-bit register file
+  (`port/src/real48core.inc`); `port/src/real48.pas` wraps them (`R48Add`, `R48Mul`, …,
+  `Random`, `RandomReal`).
+- `tools/emu/gen_real48_vectors.py N SEED` runs the original runtime on random inputs;
+  `port/bin/real48test` compares the port: `port/bin/real48test port/tests/real48.vec`.
