@@ -47,13 +47,15 @@ PLAYER = [
     (0x01c, 'u8', 'spell',
      'chosen spell, table DS:497c: 0 Nichts .. 7 Gaias Segen (harvest '
      'quality 3-5), 9 Heldentum (troop ranks at start), 12 Terror'),
-    (0x01d, 'u8', 'flag_1d_q', 'selects one of two messages on elimination'),
+    (0x01d, 'u8', 'is_female',
+     'selects female titles (DS:466a) and the FEM dialog variants'),
     (0x01e, 'u8', 'cpu_level',
      '0 = human; 3-6 in saves for computer players (difficulty?). '
      'NextPlayer runs CpuTurn when != 0; only humans get high scores'),
     (0x01f, 'u8', 'v1f_q', 'Random(6)+1 at game start'),
     (0x020, 'u8', 'skip_turn',
      'NextPlayer skips the player once and clears it (AUSSETZDLG)'),
+    (0x021, 'u8', 'first_king_bonus', 'set when the player became the first Koenig'),
     (0x022, 's16', 'lifetime',
      "ruler's remaining years: -1 every PlayerTurnStart, < 1 -> player "
      'eliminated; the fortune teller (events 21/22) reads it; checksum salt'),

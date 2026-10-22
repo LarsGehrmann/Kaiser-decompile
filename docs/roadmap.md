@@ -34,7 +34,7 @@ the turn simulation understood well enough to write it down as rules.
 | 3 | Land, market, goods | `UpdateMarketPrices`, `ProduceGoods`, `Prokurist`, `InitPlayers` — `docs/rules/land-market.md` | ✅ formulas, prices validated |
 | 4 | Buildings | `Do_Gebaeude`, `InvestDlg_Update` — `docs/rules/buildings.md` | ✅ (university has no effect) |
 | 5 | Taxes & finances | `TaxIncome`, `JusticeIncome`, `TradeAgreementIncome`, `ArmyPay`, `Interest`, `MaximizeTaxes` — `docs/rules/finances.md` | ✅ validated |
-| 6 | Titles / promotion / revolution | `Do_Karriereberatung` 1040:3a9d, victory 1000:3459 | |
+| 6 | Titles, promotion, revolution | `CanBePromoted`, `PromotionCheck`, `RevolutionCheck` — `docs/rules/titles.md` | ✅ requirement tables |
 | 7 | Military & battles | `Do_TruppenAufstellen` 1038:6a30, `Do_ManoeverAbhalten` 1040:4ede, `CmKriegFuehren` 1000:193f, MAPDATA | |
 | 8 | Diplomacy & sabotage | `Do_Entwicklungshilfe`, `Do_Abkommen`, `Do_TributFordern`, `Do_Sabotage` (seg 8) | |
 | 9 | Computer players (AI) | turn loop, segments 2–7 and 14 (no API imports) | |
