@@ -30,8 +30,11 @@ and shows the courier dialog (`KURIERDLG`). The recipient's turn start
 | 9 | peace offer with a duration in years (`ABFRAGEZEITDLG`) | `Do_Abkommen` |
 | 10 / 11 | answer to a peace offer | 1010:06f6, AI 1008:37a5 |
 
-Computer players use the same mailbox (offers from `1008:0843`). Aid arrives at the start
-of the recipient's next turn and cannot be refused (manual).
+Computer players use the same mailbox (offers from `1008:0843`). **Aid is transferred
+immediately** (Taler, land, units); only the message waits for the recipient's turn. Given
+people are added to the recipient's immigrants when the message is read. A tribute demand
+costs the demander 1 fame (not with Ambassador). Running totals: `total_aid` (0x9f),
+`total_tribute` (0xa7).
 
 ## Treaties
 
@@ -43,9 +46,22 @@ of the recipient's next turn and cannot be refused (manual).
 
 ## Sabotage – Do_Sabotage (1038:3564), SabotageAction (1068:36ef), SabotageEnd (1010:192f)
 
-Sabotage is bought from the "Gilde der Randaleure" with a yearly budget per target country
-(`SABOTAGEBUDGETDLG`: agents, years, budget); during the turn each operation is triggered
-with "Zuschlagen!". `SabotageAction(type, target, saboteur)`:
+Sabotage is bought from the "Gilde der Randaleure" and needs at least one tavern. Per target
+the player sets a yearly budget (`sabotage_budget`, × 100 Taler, at most (title + 1) × 500) and
+has agents (`sabotage_agents`); the budget is paid every year (`total_sabotage` 0xab). During
+the turn the player picks a **category** with "Zuschlagen!" and the concrete type is random:
+
+| Category | Types |
+|---|---|
+| Zündeln und Kokeln | 2 (if the target has ≥ 2 palace parts), else 1 / 3 / 4 |
+| Diffamieren | 7 / 8 / 9 |
+| Kampfkraft zersetzen | 4 / 5 / 6 / 11 |
+| Ruinieren | 13 (1 in 5), else 14 |
+| Anschlag auf Leib und Leben | 10 / 11 / 12 |
+
+Each operation costs `(target title + 1) × 1000` Taler (700 per title step with Ambassador).
+On failure the agent either escapes (`SABOTAGEVERSAGT1DLG`) or is caught (`…2DLG`).
+`SabotageAction(type, target, saboteur)`:
 
 ```
 success chance = max(1, DS:42ba[type] − round(<Real48 term, likely the target's justice> × k)) %
@@ -63,7 +79,7 @@ success chance = max(1, DS:42ba[type] − round(<Real48 term, likely the target'
 | 7 | 40 | – | flag 0x40: happiness − 0.18 this turn |
 | 8 | 60 | – | flag 0x80: happiness − 0.09 |
 | 9 | 35 | title > 0 | flag 0x100: happiness − 0.07, fame − (3…7) (rumours) |
-| 10 | 20 | – | flag 0x200 (effect not yet found) |
+| 10 | 20 | – | flag 0x200: the victim **skips a turn** (see turn-loop.md) |
 | 11 | 30 | hero with HP > 5 | the hero is wounded (attack, defence, steps or HP reduced) |
 | 12 | 35 | – | flag 0x800: granaries poisoned (grain loss, death rate + 0.03…0.05) |
 | 13 | 25 | taler > 5000 | flag 0x1000, Taler stolen |

@@ -32,12 +32,12 @@ own decisions:
 | end | – | sabotage flags cleared |
 
 Computer players also get +0.15 happiness for free (population-grain.md) and may start
-stronger in game mode 4 (land-market.md).
+stronger on difficulty 4, Absolutist (land-market.md).
 
 ## Grain policy – 1008:13b9
 
 ```
-r = rating(player)                    ; 1030:0002 (compares two record values)
+r = farmland per capita               ; Ai_FarmlandPerCapita 1030:0002, clamped 0..100
 r < 6:   distribute Random between minimum and needed
 6..10:   distribute Random between needed and maximum
 r > 10:  distribute the maximum
@@ -60,17 +60,19 @@ Reasons:
 
 - b is hated (`attitude[b] < 10`) and beatable (strength comparison `1030:08ba`):
   chance `(7 − ai_aggression) × 3` %;
-- b is König or higher (about to become Kaiser) and the AI judges it can win (`1030:04ab`):
-  same chance;
+- b is König or higher (about to become Kaiser) and richer than the AI (`1030:04ab`, a wealth
+  comparison): same chance;
 - no unclaimed land is left and the AI is König but lacks land/Taler for the Kaiser title:
   attack for land.
 
-Then `Chance(w)` and – if b is a trade partner – an extra 50 % roll. The chosen target is
-attacked via `ResolveWar` (turn-loop.md); in e-mail games a human target receives the
-battle as a hand-over.
+Then `Chance(w)` and – if b is a trade partner – an extra 50 % roll. A **computer target**
+is fought immediately with the automatic battle `Ai_AutoBattle` (battle.md); a **human
+target** is returned and fought tactically via `ResolveWar` (in e-mail games as a hand-over).
 
 ## Fields
 
-`cpu_level` 0x1e (0 human, 3–6 computer): also changes how often surplus grain is sold.
+`cpu_level` 0x1e (0 human, 1–6 computer): also changes how often surplus grain is sold.
 `ai_aggression_q` 0x1f: aggression trait, Random(6) + 1.
 `attitude_q` 0x6c1: per-player word, 100 at start; < 10 makes war likely.
+
+All functions of the AI segments are listed in `docs/functions/rules-ai.md`.

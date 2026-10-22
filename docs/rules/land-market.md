@@ -8,12 +8,12 @@ rest changed stocks or land during the turn).
 
 | | Humans | Computer players |
 |---|---|---|
-| title | 0 (Herr) | 0, or 7 in mode 4 |
-| taler | 1000 | 1000 (10000 in mode 4) |
-| land | 10000 ha | 10000 (30000 in mode 4) |
-| population | 1000 | 1000 (3000 in mode 4) |
+| title | 0 (Herr) | 0, or 7 on difficulty 4 (Absolutist) |
+| taler | 1000 | 1000 (10000 on Absolutist) |
+| land | 10000 ha | 10000 (30000 on Absolutist) |
+| population | 1000 | 1000 (3000 on Absolutist) |
 | spell | chosen (witch dialog) | Random(12) + 1 |
-| other | report_flags = 0x27 | mode 4: 25 markets, 25 mills, fame 70 |
+| other | report_flags = 0x27 | Absolutist: 25 markets, 25 mills, fame 70 |
 
 For everyone: happiness 1.0, tax 10 %, birth/death 0.01, grain 5000, 1 granary,
 1 warehouse if goods trade is enabled, 2 weapons, `land_price` 17 + Random(15),
@@ -38,8 +38,11 @@ Each building type can have one building per 1000 ha of farmland. Trading in `LA
 (`LandDlg_Trade` 1040:83c5), price per 10 Hufe:
 
 ```
-land  −= amount        (negative amount = buy)
-taler += amount × land_price / 10;   total_land_trade += the same
+sell n Hufen:  land −= n; taler += n × (land_price − 1) / 10
+               (only if at least 2000 Hufen of free land remain)
+buy  n Hufen:  land += n; taler −= n × land_price / 10 + 1
+               (allowed into debt down to −CreditLimit = −(title + 7) × 1000)
+total_land_trade (0x8f, running total) += the money
 ```
 
 Afterwards `BuildingsLostForLand` (1068:22c0) removes buildings that no longer fit
@@ -53,8 +56,10 @@ Afterwards `BuildingsLostForLand` (1068:22c0) removes buildings that no longer f
 grain_price = round((RandomReal × 20 + 20) × (6 − harvest_quality) / 3 + 30)
 ```
 
-Quality 5 → 37–43, quality 1 → 63–97. Grain is bought and sold in `KORNDLG` at this price
-("Preis a gros").
+Quality 5 → 37–43, quality 1 → 63–97. Grain is bought and sold in `KORNDLG`; the price is
+per gross ("Preis a gros" = 144 units): trading n grain costs/earns `n × grain_price / 144`,
+buying adds 1 Taler, every trade is at least 1 Taler; purchases may go into debt down to
+−CreditLimit. Running total: `total_grain_trade` (0x8b).
 
 ## Goods (needs `goods_trade_enabled`, header 0x13)
 
@@ -93,7 +98,8 @@ For each good with `prokurist_<good>` set and `price ≥ prokurist_min_<good>`:
 ### Caravans – TradeCaravan (1040:08a2)
 
 With goods trade enabled, a caravan (salt, beer, wine or weapons) visits with probability
-`1 / (20 − fame / 10)` per turn and offers goods at a random price.
+`1 / (20 − fame / 10)` per turn and offers goods at a random price; the second and third
+offer are 1 and 2 Taler cheaper per Last. Exact price formulas: `docs/functions/seg09.md`.
 
 ## Building prices (DS:5b10, longint)
 

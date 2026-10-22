@@ -51,6 +51,13 @@ the resulting happiness, and keeps the best combination whose happiness is at le
 
 At the end of a turn with too much debt, buildings are seized one type after another and
 sold at list price (`BuildingPrices`) until the debt is covered; fame − 7, dialog
-`BANKPFANDDLG`. The exact seizure order and the debt threshold are not yet confirmed.
+`BANKPFANDDLG`. It is triggered when `taler ≤ −CreditLimit` (below); the exact seizure order
+is not yet confirmed.
 A milder variant (`BANKGNADENDLG`, "die Gläubiger … gewähren Euch noch …") gives a
 grace period.
+
+## Credit limit – CreditLimit (1068:1df2)
+
+`CreditLimit = (title + 7) × 1000`. Grain, land and caravan purchases may push the treasury
+down to −CreditLimit; bankruptcy (above) is triggered at the end of a turn when
+`taler ≤ −CreditLimit`. This is the manual's "a higher title allows higher debts".

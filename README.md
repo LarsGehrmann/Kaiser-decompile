@@ -41,7 +41,7 @@ win311/run.sh --win    # Windows only
 ```
 
 - Saves written by the game appear directly in `win311/C/KAISER/`, ready for `tools/ksr.py`.
-- The game reads `KAISER.INI` from `C:\WINDOWS` (GetPrivateProfileString without a path).
+- The game reads `KAISER.INI` from the current directory (`run.sh` starts it in `C:\KAISER`).
 - Display: Super VGA 800×600×16. Sound: Sound Blaster 1.5 (wave) + Ad Lib FM (MIDI), set up in `SYSTEM.INI`.
 - Reinstall from scratch: delete `win311/C/WINDOWS`, then `win311/install.sh` (unattended `SETUP /H:KAISER.SHH`).
 - Click into the window to capture the mouse; Ctrl+F10 releases it.

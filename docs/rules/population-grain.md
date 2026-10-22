@@ -31,7 +31,8 @@ bankruptcy (`Bankruptcy` 1010:4f9f) and clears the temporary effect flags `flags
 ```
 needed  = population × 5
 minimum = round(needed × 0.11)
-maximum = round(needed × 1.06)        (all three rounded down to multiples of 100)
+maximum = round(needed × 1.06)        (rounded to multiples of 100: minimum and needed down,
+                                       maximum up)
 ```
 
 The slider sets `grain_distributed`, which is taken from the stock at the start of the next turn.

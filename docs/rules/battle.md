@@ -590,3 +590,16 @@ Battle window (VMT DS:2d2c):
 | +0xf91 | blink state |
 | +0xf92 | city battle |
 | +0xf93 | winter |
+
+## Corrections from the full function pass
+
+- **Computer against computer is resolved automatically**, without the battle window:
+  `Ai_ChooseWarTarget` calls `Ai_AutoBattle` (1030:1062) for a computer target. The attacker
+  wins if `Ai_AutoBattleRating(attacker) > Ai_AutoBattleRating(defender, at home)`
+  (1030:09f2: Σ attack+defence + 2·Σ level, home bonus, ×1.25 at home, artillery, Vampire and
+  Knochenflicker factors); each Heer unit then dies with chance 1/(k + d + level)
+  (`Ai_AutoBattleLosses` 1030:0bda, k = 3 winner / 2 loser). No fame change, no plunder.
+  The tactical battle above is used whenever a human is involved.
+- The Reisiger Rächer check (`AvengerJoinsWeaker` 1068:56bc) runs in all battles: he joins a
+  side whose score and army strength are both below 2/3 of the opponent's.
+- Plunder, burning, massacre and retreat losses after the battle: see military.md.

@@ -64,3 +64,7 @@ if happiness < 0.3:
 2. Birth/death rates and happiness recomputed; fame − 2 if a Real comparison fails (not yet identified).
 3. `LandLossCheck`, `PromotionCheck`, `Bankruptcy`, `RevolutionCheck`, `SkipTurnCheck`.
 4. `flags_5bd` cleared.
+
+Note on the tables: they are indexed by the next title 1..10 from a base address one element
+earlier, so e.g. the label `PromotionTaler` (DS:581c) itself coincides with `PromotionLand[10]`
+(100000). The values in the table above are read correctly per title.

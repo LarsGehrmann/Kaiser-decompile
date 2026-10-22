@@ -59,8 +59,12 @@ news item 8 (war won), anything else item 9 (war lost).
 ## End of the game
 
 - **Victory** (1000:3459) when a player's `title` reaches 10 (Kaiser): coronation dialog
-  (`KROENUNGSDLG` / `KROENCOMPDLG`). Humans also get a high-score / records entry,
-  but only if `census_editor_enabled` is 0.
+  (`KROENUNGSDLG` / `KROENCOMPDLG`). A human winner also gets a high-score and records entry,
+  but only if `census_editor_enabled` is 0, `immortality` is off and `initiative_enabled` is on.
+  Score (`ComputeScore` 1068:12fe) = ArmyStrength/50 + taler/100000 + land/20000 +
+  population/2000 + title + fame/20; KAISER.SCO keeps 5 tables (one per computer difficulty,
+  header 0x09), one entry per game (header 0x0c game id); KAISER.REC holds the records
+  (fastest coronation, most land/people/Taler, best hero).
 - **Elimination** when `v22 < 1` at the end of the player's turn.
 - `game_state = 0` after `PlayerTurnStart` returns false.
 
@@ -82,3 +86,10 @@ news item 8 (war won), anything else item 9 (war lost).
 Hidden command 802 (Ctrl+P) asks for a password (`PASSWORDDLG`); if it matches and
 `census_editor_enabled` (header 0x04) is set, the **Census Editor** (`CENSUSDLG`) edits all
 ten player records directly.
+
+## Skipped turns
+
+A skipped year (`skip_turn`: exile after a revolution, sabotage type 10, `SkipTurnCheck`)
+is not free: while away the player loses 30–60 % of land, Taler, people, markets and mills
+("Was werdet Ihr wohl bei Eurer Rückkehr vorfinden?", `AUSSETZDLG`). The computer-player
+code checks the wrong sabotage flag for this (0x80 instead of 0x200).

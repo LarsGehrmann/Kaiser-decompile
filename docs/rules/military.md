@@ -146,5 +146,30 @@ for computer players; segment 6) – see the plunder section in battle.md / open
 
 ## Open
 
-Mercenary offers (`SOELDNERDLG`; manual: chance depends on fame and Karma), the exact
-manoeuvre cost, the unknown unit-type flags (DS:52b8 / DS:52dc) and Real48 factor (DS:5300).
+The unit-type tables DS:52b8 / DS:52dc / DS:5300 are now known from the battle code as
+`UnitCanDesert`, `UnitFearSusceptible` and `UnitMoraleBonus` (battle.md).
+
+## After the battle (segment 6)
+
+- **Plündern** (`PlunderTalerAndLand` 1028:09c8): Taler = loser.taler × (5 + Random(20)) % —
+  only after a **city** battle; land only from neighbouring countries (attack cost ≤ 2):
+  (5 + Random(13)) % (city) / (3 + Random(6)) % (field); the loser keeps ≥ 12000 Hufen,
+  the winner also receives buildings that no longer fit the loser's land.
+- **Brandschatzen** (`BurnBuildings` 1028:057e): a random share of each building type and
+  1–5 % of the civilians are destroyed (table in `docs/functions/rules-ai.md`).
+- **Massaker** (`Massacre` 1028:020a): (10 + Random(15)) % of the people killed in the city
+  (1–5 % in the field) plus some deported to the winner; winner − 30 fame.
+- **Gnade**: winner + 2 fame.
+- A computer winner chooses randomly: plunder 51 %, burn 30 %, mercy 9 %, massacre 9 %,
+  nothing 1 %. (From the code: a computer's burning is only displayed, nothing is destroyed.)
+- **Retreat** (`RetreatLosses` 1028:011c): each fleeing Heer unit is lost with chance 1/5,
+  except the Held, units with Fortune, and all units with the spell Karma.
+
+## Mercenaries and other details (full function pass)
+
+- **Mercenary offers** (`OfferUnitsAtTurnStart` 1010:22d4, `SOELDNERDLG` …): chance per turn
+  `1 / (14 − fame / 10)`, with Karma `1 / (12 − fame / 10)` – matches the manual's figures.
+- **Manoeuvre cost** (`ManoeuvreCost` 1068:2850): 2000 Taler per Held plus (level + 1) × 500 per
+  unit below its maximum level, reduced by fame; computer players train for free.
+- Kreuzritter get a random special ability; with Heldentum every new unit starts with +10 XP.
+- `units_given_or_dismissed` (0x5d3) counts units given away or dismissed.
