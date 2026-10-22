@@ -48,8 +48,18 @@ costs the demander 1 fame (not with Ambassador). Running totals: `total_aid` (0x
 
 Sabotage is bought from the "Gilde der Randaleure" and needs at least one tavern. Per target
 the player sets a yearly budget (`sabotage_budget`, × 100 Taler, at most (title + 1) × 500) and
-has agents (`sabotage_agents`); the budget is paid every year (`total_sabotage` 0xab). During
-the turn the player picks a **category** with "Zuschlagen!" and the concrete type is random:
+has agents (`sabotage_agents`); the budget is paid every year (`total_sabotage` 0xab).
+
+**Buying agents** (`SabotageFunding` 1068:3386, every year): returning agents
+(`sabotage_agents_returning_q`) rejoin; with at least one tavern the budget is capped at
+(title + 1) × 5, paid from the treasury and added to `sabotage_funds` (+0x5a1, word per
+target). Each time the funds reach (target title + 1) × 1000 Taler (700 with the spell
+Ambassador) one agent is bought and that amount is deducted (at most one per year).
+`SabotageYearsToNextOp` (1068:35c1) shows max(1, round((cost − funds) / budget)) years until
+the next agent. `SabotageYearlyCost` (1068:32b2) is the sum of all budgets × 100 (0 without a
+tavern). All per-target arrays are indexed by the target's player index.
+
+During the turn the player picks a **category** with "Zuschlagen!" and the concrete type is random:
 
 | Category | Types |
 |---|---|
