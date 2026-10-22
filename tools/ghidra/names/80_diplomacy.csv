@@ -1,0 +1,11 @@
+address,name,kind,comment
+1010:00e5,DiplomacyTurnStart,func,"Turn start: peace_years countdown (PEACEENDDLG), then handles the mailbox player+0x671+sender*6, types 1..11"
+1010:0467,Msg_ReceiveAid,func,"Mailbox type 1: aid arrives"
+1010:0ead,Msg_TributeDemand,func,"Mailbox type 2: tribute demand; answers with type 3/4"
+1010:17c6,Msg_TributeAnswer,func,"Mailbox type 3/4 (mode 0/1): answer to a tribute demand"
+1010:06f6,Msg_Negotiation,func,"Mailbox types 5..11: trade/peace offers and their answers (sends 7/8, 10/11)"
+1008:0843,Ai_Diplomacy,func,"Computer player sends offers (types 2, 5, 6, 9)"
+1008:34f4,Ai_AnswerTrade,func,"Computer answer to a trade offer (7/8)"
+1008:37a5,Ai_AnswerPeace,func,"Computer answer to a peace offer (10/11)"
+1008:3abb,Ai_AnswerTribute,func,"Computer answer to a tribute demand (3/4)"
+10d0:42ba,SabotageBaseChance,label,"byte[15] base success % per sabotage type 1..14"
