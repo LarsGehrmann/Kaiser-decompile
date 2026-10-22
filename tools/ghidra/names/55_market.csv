@@ -6,7 +6,7 @@ address,name,kind,comment
 1068:2e4c,FreeBuildingLand,func,"(land - land_used) - 1000 * max(count of any building type)"
 1068:1bf9,Prokurist,func,"Auto-sell: for each good with prokurist_on and price >= minimum, sell the whole stock"
 1068:0c22,ProduceGoods,func,"Yearly salt (north) or wine (south) by country, beer from grain if brew_beer, weapons from smithies; capped by warehouse space; returns warehouses full"
-1068:0bd3,SmithyOutput,func,"min(population/2000, land/20000)"
+1068:0bd3,SmithyOutput,func,"min(population div 2000, land div 20000) + 1"
 1068:2ce7,WarehouseFreeSpace,func,"warehouses*1000 - (salt + beer + wine + weapons)"
 1068:22c0,BuildingsLostForLand,func,"After selling land: buildings that no longer fit (dialog VERLUSTDLG)"
 1040:83c5,LandDlg_Trade,func,"land -= amount; taler += amount * land_price / 10; total_land_trade += same"

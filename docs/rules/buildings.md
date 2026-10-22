@@ -14,7 +14,7 @@ Status: from the building dialog code (`INVESTDLG`, type DS:2986) and the rule f
 | Lagerhalle | `warehouses` 0xe7 | 4000 | 1000 units of goods; only with goods trade; max 30 |
 | Universitätsteil | `university_parts` 0xeb | 4000 | **no effect found in v1.23** (only drawn on the map, lost in disasters) |
 | Wirtshaus | `taverns` 0xed | 2000 | income 100 + Random(200), × happiness; happiness + 0.00025 each; sabotage budget (diplomacy) |
-| Schmiede | `smithies` 0xf1 | 2500 | weapons + min(smithies, pop/2000, land/20000) per year |
+| Schmiede | `smithies` 0xf1 | 2500 | weapons + min(smithies, min(pop div 2000, land div 20000) + 1) per year |
 
 Prices: table `BuildingPrices` (DS:5b10). Grain storage: `GrainCapacity = mills × 500 + granaries × 10000 + 1000`.
 

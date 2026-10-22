@@ -237,6 +237,7 @@ class KaiserEmu:
         self.uc.reg_write(UC_X86_REG_CS, para)
         self.uc.reg_write(UC_X86_REG_IP, off)
         self._run(para, off)
+        self.last_regs = {k: self.uc.reg_read(r) for k, r in REGS.items()}
         return (self.uc.reg_read(UC_X86_REG_AX), self.uc.reg_read(UC_X86_REG_DX))
 
     # -- globals --------------------------------------------------------------

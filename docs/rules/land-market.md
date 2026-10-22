@@ -73,7 +73,7 @@ north (CountryProducesWine[country] = 1): salt += min(round(population / 25 × k
 south (= 3):                              wine += min(round(population / (320 − 20 × harvest_quality) × k), free space)
 brew_beer: beer = round(grain / 100 × k), limited via population (see code), ≤ free space;
            grain −= 100 × beer
-weapons  += min(smithies, population / 2000, land / 20000), ≤ free space
+weapons  += min(smithies, min(population div 2000, land div 20000) + 1), ≤ free space
 ```
 
 North (salt): Sachsen, Holstein, Preußen, Thüringen, Westfalen, Böhmen.

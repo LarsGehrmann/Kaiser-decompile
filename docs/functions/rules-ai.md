@@ -365,7 +365,7 @@ happiness < 0.25 (humans 0.3); exile costs only 1 year of lifetime (humans 2).
 |---|---|---|
 | 1068:08d5 | `WarehouseCapacity` * | warehouses * 1000 |
 | 1068:0ae8 | `CanAffordWithCredit` * | taler - amount >= -CreditLimit |
-| 1068:0bd3 | `SmithyOutput`  | min(population/2000, land/20000) |
+| 1068:0bd3 | `SmithyOutput`  | min(population div 2000, land div 20000) + 1 |
 | 1068:0c22 | `ProduceGoods`  | Yearly salt (north) or wine (south) by country, beer from grain if brew_beer, weapons from smithies |
 | 1068:19bd | `IncomeFromBuildings`  | markets*(77+R155) + mills*(165+R330) + taverns*(100+R200), * happiness, *1.25 with Bienenfleiss |
 | 1068:1b26 | `TradeAgreementIncome`  | Sum over partners with a trade agreement (flag player+0x6ad+partner): (partner.mills*330 + partner.markets*155) / (num_players + 6) |
