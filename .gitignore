@@ -5,3 +5,4 @@ extracted/res/**/*.bmp
 .DS_Store
 __pycache__/
 ghidra_out/import.log
+win311/

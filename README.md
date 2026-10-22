@@ -30,6 +30,22 @@ tools/.venv/bin/pip install --no-index -f /opt/homebrew/opt/ghidra/libexec/Ghidr
 Open the project in the GUI with `ghidraRun` → File → Open Project → `ghidra/Kaiser.gpr`.
 **Close the GUI before running any PyGhidra script** (Ghidra locks the project).
 
+## Running the game (DOSBox-X + Windows 3.11)
+
+`win311/` (not in git) is the emulated PC: `win311/C/` is drive C: with `WINDOWS\`, `KAISER\`
+(a writable copy of the game) and `INSTALL\` (setup files).
+
+```sh
+win311/run.sh          # Windows 3.11 + Kaiser
+win311/run.sh --win    # Windows only
+```
+
+- Saves written by the game appear directly in `win311/C/KAISER/`, ready for `tools/ksr.py`.
+- The game reads `KAISER.INI` from `C:\WINDOWS` (GetPrivateProfileString without a path).
+- Display: Super VGA 800×600×16. Sound: Sound Blaster 1.5 (wave) + Ad Lib FM (MIDI), set up in `SYSTEM.INI`.
+- Reinstall from scratch: delete `win311/C/WINDOWS`, then `win311/install.sh` (unattended `SETUP /H:KAISER.SHH`).
+- Click into the window to capture the mouse; Ctrl+F10 releases it.
+
 ## Regenerating everything
 
 ```sh
