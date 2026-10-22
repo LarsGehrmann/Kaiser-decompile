@@ -1,0 +1,8 @@
+address,name,kind,comment
+1068:1b26,TradeAgreementIncome,func,"Sum over partners with a trade agreement (flag player+0x6ad+partner): (partner.mills*330 + partner.markets*155) / (num_players + 6)"
+1068:1cd8,TaxIncome,func,"min(round(pop * (tax_rate - 0.09) * 11), pop * 2); negative below 9 %"
+1068:1d60,JusticeIncome,func,"min(round(pop * (justice - 0.06) * 7), pop * 3/2); negative below 6 %"
+1068:27ac,ArmyPay,func,"Sum of unit pay (TUnit+0x2b) over both armies"
+1068:2da4,WarehouseRent,func,"WarehouseFreeSpace / 10"
+1068:290e,Interest,func,"taler > 0: +2.5 %; debt: 7.8 % of the (negative) balance"
+1068:1df2,GrainCost_q,func,"Used by the grain dialog setup"
