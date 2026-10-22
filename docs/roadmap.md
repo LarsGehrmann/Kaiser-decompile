@@ -29,7 +29,7 @@ the turn simulation understood well enough to write it down as rules.
 
 | # | Subsystem | Entry points | Status |
 |---|---|---|---|
-| 1 | Turn loop / game state machine | `CmBeenden` 1000:2476, `FUN_1000_2637` (writes `game_state` 32×), `1000:33c0`, `1000:35ad`, `1000:3459` (victory) | started |
+| 1 | Turn loop / game state machine | `CmBeenden`, `NextPlayer`, `CpuTurn`, `Victory`, `EmailGameStep` — see `docs/rules/turn-loop.md` | ✅ structure; yearly processing → #2 |
 | 2 | Grain & population | `Do_KornVerteilen` 1040:8551, `Do_DemographischeDaten` 1040:62f8 | |
 | 3 | Land & market | `Do_LandHandeln` 1040:7e4b, `Do_HandelMitGuetern` 1040:1439 | |
 | 4 | Buildings | `Do_Gebaeude` 1040:6cff | |
