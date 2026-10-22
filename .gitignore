@@ -1,0 +1,7 @@
+ghidra/
+tools/.venv/
+tools/bin/
+extracted/res/**/*.bmp
+.DS_Store
+__pycache__/
+ghidra_out/import.log
