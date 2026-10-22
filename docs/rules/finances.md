@@ -49,7 +49,8 @@ the resulting happiness, and keeps the best combination whose happiness is at le
 
 ## Bankruptcy – Bankruptcy (1010:4f9f)
 
-At the end of a turn with too much debt, buildings are seized and sold at list price
-(markets first, then mills, palace parts, cathedral parts, granaries, warehouses,
-university parts, taverns, smithies) until the debt is covered; fame − 7, dialog
-`BANKPFANDDLG`. A milder variant (`BANKGNADENDLG`) grants a grace period.
+At the end of a turn with too much debt, buildings are seized one type after another and
+sold at list price (`BuildingPrices`) until the debt is covered; fame − 7, dialog
+`BANKPFANDDLG`. The exact seizure order and the debt threshold are not yet confirmed.
+A milder variant (`BANKGNADENDLG`, "die Gläubiger … gewähren Euch noch …") gives a
+grace period.
