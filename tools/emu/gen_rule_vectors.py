@@ -39,7 +39,9 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   P      far pointer to the test player       A  pointer to the player array
 #   N      num_players (byte)                   I  test player index (byte)
 #   J      another player index 0..num-1        Q  harvest quality 1..5
-#   U      pointer to a random army-1 unit of the test player (shown: 1..8)
+#   U      pointer to army-1 unit K (1..8, shown) of the test player
+#   UJ     pointer to army-1 unit K of player J (shown: J, K)
+#   NIL    nil pointer
 #   F:fld  pointer to a field of the test player
 #   B:lo:hi / W:lo:hi / L:lo:hi   random byte / word / longint value
 #   R      random Real48 value                  O  out longint (reported in out=)
@@ -49,7 +51,10 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
 # Mutations: player fields; 'u.FIELD' = that field of a random unit (both
-# armies); 'h.FIELD' = a header field.
+# armies); 'U.FIELD' = that field of the unit passed as U; 'h.FIELD' = a
+# header field. An optional 5th SPECS entry {field: (lo, hi)} clamps
+# player fields (or 'U.field') after mutating (e.g. army counts that must
+# not be 0).
 POP = ['population', 'grain_distributed', 'spell', 'event', 'flags_5bd_q',
        'birth_rate', 'death_rate', 'happiness', 'tax_rate', 'justice',
        'asylum_law', 'fame', 'title', 'cpu_level', 'taverns', 'army1_count',
@@ -72,6 +77,9 @@ BUILD = ['land', 'land_used', 'markets', 'mills', 'palace_parts',
          'weapons']
 SABOTAGE = ['taverns', 'spell', 'title', 'taler', 'sabotage_agents',
             'sabotage_agents_returning_q', 'sabotage_budget', 'sabotage_funds']
+UNITF = ['U.type', 'U.level', 'U.experience', 'U.ability', 'U.range',
+         'U.max_steps', 'U.attack', 'U.defence', 'U.max_hp', 'U.pay',
+         'U.hero_portrait', 'spell', 'fame']
 SPECS = {
     'GrainCapacity': ('1068:0885', ['P'], 'long', ECON),
     'SmithyOutput': ('1068:0bd3', ['P'], 'long', ECON),
@@ -156,6 +164,48 @@ SPECS = {
     'SabotageFunding': ('1068:3386', ['A', 'I', 'N'], 'none', SABOTAGE),
     'SabotageYearsToNextOp': ('1068:35c1', ['A', 'RI', 'RJ'], 'sword',
                               SABOTAGE),
+    # batch 4
+    'UnitGainExperience': ('1068:4671', ['U', 'OB:32', 'B:0:30', 'B:0:12'],
+                           'byte', UNITF),
+    'FillWithMilitia': ('1068:4b22', ['P'], 'none',
+                        ['army1_count', 'population']),
+    'GenerateMarauders': ('1068:4d7c', ['P', 'W:0:100'], 'none', []),
+    'GenerateLindwurm': ('1068:506a', ['P'], 'none', ['spell', 'country']),
+    'ClearUnit': ('1068:50c5', ['U'], 'none', []),
+    'RemoveArmy1Unit': ('1068:50e2', ['P', 'B:1:8'], 'none', ARMY,
+                        {'army1_count': (1, 8)}),
+    'RemoveArmy2Unit': ('1068:515e', ['P', 'B:1:8'], 'none', ARMY,
+                        {'army2_count': (1, 8)}),
+    'RemoveMilitia': ('1068:51da', ['P'], 'none', ARMY + ['u.type'] * 4),
+    'SwapArmies': ('1068:5222', ['P'], 'none', ARMY),
+    'MakeUnitName': ('1068:53a4', ['OB:40', 'B:0:35', 'B:0:12', 'B:0:9'],
+                     'none', []),
+    'RecruitUnit': ('1068:5439', ['P', 'B:1:2', 'B:0:35', 'B:0:2'], 'none',
+                    ARMY + ['country'], {'army1_count': (0, 7),
+                                         'army2_count': (0, 7)}),
+    'InitAvenger': ('1068:5638', ['U'], 'none', []),
+    'AvengerJoinsWeaker': ('1068:56bc', ['P', 'PJ', 'UJ'], 'word',
+                           ARMY + ECON, {'army1_count': (0, 8),
+                                         'army2_count': (0, 8)}),
+    'AvengerLeaves': ('1068:5835', ['P', 'PJ', 'OB:61'], 'none',
+                      ARMY + ['u.type'] * 3),
+    'InitUnit': ('1068:598d', ['P', 'U', 'B:0:35', 'B:0:2'], 'none',
+                 ['spell', 'fame', 'country']),
+    'AddUnitToArmy': ('1068:5b06', ['P', 'B:1:2', 'UJ'], 'none',
+                      ARMY + UNITF, {'army1_count': (0, 7),
+                                     'army2_count': (0, 7)}),
+    'KnightSquire': ('1068:5b8b', ['P', 'U'], 'none', ARMY + UNITF),
+    'SortArmy': ('1068:5e85', ['P', 'B:1:2'], 'none', ARMY + ['u.kills'] * 2),
+    'CreateHero': ('1068:5f0c', ['U', 'NIL'], 'none', []),
+    'HeroRankName': ('1068:6122', ['B:0:20', 'OB:40'], 'none', []),
+    'RandomMercenaryType': ('1068:6199', ['P'], 'byte', ['title']),
+    # troop levels past the name table read relocated far pointers in DS,
+    # which the port's raw data segment image cannot reproduce
+    'UnitRankName': ('1068:61db', ['U', 'OB:40'], 'none', UNITF,
+                     {'U.level': (0, 40)}),
+    'RaiderVictoryReward': ('1068:66af', ['P', 'B:1:2'], 'none',
+                            ['title', 'fame', 'army1_count', 'event']),
+    'MakeVampire': ('1068:674b', ['OB:61', 'U'], 'none', UNITF),
 }
 
 
@@ -208,8 +258,15 @@ def random_value(rng, name, typ):
     elif name in ('palace_parts', 'cathedral_parts', 'university_parts'):
         v = rng.randint(0, 12)
     elif name == 'type':
-        v = rng.choice([rng.randint(0, 35), 9, 6, 0])
+        v = rng.choice([rng.randint(0, 35), 9, 6, 0, 13, 12])
     elif name == 'level':
+        v = rng.choice([rng.randint(0, 5), rng.randint(0, 12),
+                        rng.randint(0, 255)]) if typ == 'u8' else 0
+    elif name == 'experience':
+        v = rng.randint(0, 40)
+    elif name == 'range':
+        v = rng.randint(0, 7)
+    elif name == 'max_steps':
         v = rng.randint(0, 5)
     elif name == 'ability':
         v = rng.randint(0, 38)
@@ -260,11 +317,15 @@ def diff(a, b):
     return ';'.join(out)
 
 
-def make_mutations(rng, fields, p):
+def make_mutations(rng, fields, p, uidx):
     muts, hmuts = [], []
     for _ in range(rng.randint(0, 4) if fields else 0):
         fname = rng.choice(fields)
-        if fname.startswith('h.'):
+        if fname.startswith('U.'):
+            off, typ = field_info(ks.UNIT, fname[2:])
+            base = ARMY_BASE[1] + uidx * ks.UNIT_SIZE
+            muts.append((p * PSIZE + base + off, random_value(rng, fname[2:], typ)))
+        elif fname.startswith('h.'):
             off, typ = field_info(ks.HEADER, fname[2:])
             hmuts.append((off, random_value(rng, fname[2:], typ)))
         elif fname.startswith('u.'):
@@ -284,14 +345,27 @@ def main():
     emu = KaiserEmu()
     sp = emu.scratch_para
     for func in funcs:
-        addr, args, ret, fields = SPECS[func]
+        addr, args, ret, fields = SPECS[func][:4]
+        clamps = SPECS[func][4] if len(SPECS[func]) > 4 else {}
         for _ in range(n):
             save = rng.choice(SAVES)
             header, players, num = load_save(save)
             p = rng.randrange(num)
-            muts, hmuts = make_mutations(rng, fields, p)
+            uidx = rng.randint(1, 8)
+            muts, hmuts = make_mutations(rng, fields, p, uidx)
             for off, val in muts:
                 players[off:off + len(val)] = val
+            for fname, (lo, hi) in clamps.items():
+                if fname.startswith('U.'):
+                    off, typ = field_info(ks.UNIT, fname[2:])
+                    off += ARMY_BASE[1] + uidx * ks.UNIT_SIZE
+                else:
+                    off, typ = field_info(ks.PLAYER, fname)
+                v = players[p * PSIZE + off]
+                if not lo <= v <= hi:
+                    val = bytes([rng.randint(lo, hi)])
+                    muts.append((p * PSIZE + off, val))
+                    players[p * PSIZE + off:p * PSIZE + off + 1] = val
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
@@ -299,6 +373,10 @@ def main():
             emu.write(emu.ds_para, HDR_DS, bytes(header))
             emu.write(sp, 0, bytes(players))
             emu.write(sp, OUT_AREA, bytes(0x400))
+            # runtime country adjectives (DS:6696) as a new game sets them
+            for c in range(10):
+                emu.write(emu.ds_para, 0x6696 + 25 * c,
+                          emu.read(emu.ds_para, 0x477e + 25 * (10 + c), 25))
             emu.rand_seed(seed)
             call_args, shown, outs = [], [], []
             j = rng.choice([i for i in range(num) if i != p] or [p])
@@ -332,10 +410,14 @@ def main():
                     q = rng.randint(1, 5)
                     call_args.append(('word', q))
                     shown.append(str(q))
-                elif kind == 'U':
-                    i = rng.randint(1, 8)
-                    call_args.append(('ptr', (sp, p * PSIZE + ARMY_BASE[1] + i * ks.UNIT_SIZE)))
-                    shown.append(str(i))
+                elif kind in ('U', 'UJ'):
+                    owner = p if kind == 'U' else j
+                    call_args.append(('ptr', (sp, owner * PSIZE + ARMY_BASE[1] + uidx * ks.UNIT_SIZE)))
+                    if kind == 'UJ':
+                        shown.append(str(j))
+                    shown.append(str(uidx))
+                elif kind == 'NIL':
+                    call_args.append(('ptr', (0, 0)))
                 elif kind == 'F':
                     off, _ = field_info(ks.PLAYER, rest)
                     call_args.append(('ptr', (sp, p * PSIZE + off)))

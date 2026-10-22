@@ -69,8 +69,23 @@ class KaiserEmu:
         if self.scratch_size < 0x10000:
             raise EmuError('not enough emulated memory')
         self.ds_para = self.para[self.ne.autodata_seg]
+        self._stub_keys = {}
         self._load_segments()
         self._apply_relocations()
+        # string table resources (id -> raw cp1252 bytes) for LoadString
+        self.strings = {}
+        for r in self.ne.resources:
+            if r.type_id == 6:
+                p = 0
+                for i in range(16):
+                    if p >= len(r.data):
+                        break
+                    n = r.data[p]
+                    if n:
+                        self.strings[(r.res_id - 1) * 16 + i] = r.data[p + 1:p + 1 + n]
+                    p += 1 + n
+        # Windows API functions the emulator implements: (module, ordinal)
+        self.api = {('USER', 176): self._load_string}
         self.pristine_ds = bytes(self.read(self.ds_para, 0, 0x10000))
         # far return target: a HLT instruction in the stub segment
         self.return_ip = 0xFF00
@@ -114,6 +129,7 @@ class KaiserEmu:
             if key not in self._imports:
                 off = len(self._imports) * 2
                 self._imports[key] = off
+                self._stub_keys[off] = key
                 self.write(self.stub_para, off, b'\xcc\xcc')
             return self.stub_para, self._imports[key]
         return None
@@ -146,8 +162,17 @@ class KaiserEmu:
     def _run(self, para, off, max_insns=5_000_000):
         def hook(uc, address, size, user):
             if self.stub_para * 16 <= address < self.stub_para * 16 + 0xFF00:
+                off = address - self.stub_para * 16
+                key = self._stub_keys.get(off)
+                name = None
+                if key is not None:
+                    mod = key[0] if isinstance(key[0], str) else self.ne.modules[key[0] - 1]
+                    name = (mod, key[1])
+                if name in self.api:
+                    self.api[name]()
+                    return
                 uc.emu_stop()
-                raise_box.append(f'Windows API call (stub offset {address - self.stub_para * 16:#x})')
+                raise_box.append(f'Windows API call {name} (stub offset {off:#x})')
 
         def runerror(uc, address, size, user):
             uc.emu_stop()
@@ -175,8 +200,39 @@ class KaiserEmu:
         if (cs, ip) != (self.stub_para, self.return_ip):
             raise EmuError(f'did not return (stopped at {cs:04x}:{ip:04x})')
 
+    # -- emulated Windows API -------------------------------------------------
+    def _api_args(self, nbytes):
+        """Raw argument words of a PASCAL API call (last argument first)."""
+        ss = self.uc.reg_read(UC_X86_REG_SS)
+        sp = self.uc.reg_read(UC_X86_REG_SP)
+        return struct.unpack(f'<{nbytes // 2}H', self.read(ss, sp + 4, nbytes))
+
+    def _api_return(self, nbytes, ax=0, dx=0):
+        """Return from the API call like RETF nbytes."""
+        ss = self.uc.reg_read(UC_X86_REG_SS)
+        sp = self.uc.reg_read(UC_X86_REG_SP)
+        ip, cs = struct.unpack('<HH', self.read(ss, sp, 4))
+        self.uc.reg_write(UC_X86_REG_SP, sp + 4 + nbytes)
+        self.uc.reg_write(UC_X86_REG_AX, ax & 0xFFFF)
+        self.uc.reg_write(UC_X86_REG_DX, dx & 0xFFFF)
+        self.uc.reg_write(UC_X86_REG_CS, cs)
+        self.uc.reg_write(UC_X86_REG_IP, ip)
+
+    def _load_string(self):
+        # LoadString(hInstance, uID, lpBuffer, cchBufferMax): Integer
+        cch, buf_off, buf_seg, uid, _hinst = self._api_args(10)
+        text = self.strings.get(uid)
+        n = 0
+        if text is not None and cch > 0:
+            n = min(len(text), cch - 1)
+            self.write(buf_seg, buf_off, text[:n] + b'\0')
+        self._api_return(10, n)
+
     def _setup(self, stack_words):
         uc = self.uc
+        # a zeroed stack makes uninitialised locals read as 0 (the port
+        # zero-initialises them), so results are reproducible
+        self.write(self.stack_para, 0, bytes(STACK_SIZE))
         sp = STACK_SIZE - 2
         for w in reversed(stack_words):
             sp -= 2

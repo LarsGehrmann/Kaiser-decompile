@@ -13,7 +13,7 @@ unit Rules;
 interface
 
 uses
-  KaiserTypes, KaiserDS, Real48;
+  Strings, KaiserTypes, KaiserDS, KaiserRes, Real48;
 
 type
   PUnit = ^TUnit;
@@ -26,6 +26,12 @@ type
     Unused4: LongInt;
     Markets, Mills, PalaceParts, CathedralParts, Granaries, Warehouses,
     UniversityParts, Taverns, Smithies: LongInt;
+  end;
+
+  { what a hero gained at a level-up (UnitGainExperience), for the dialog }
+  THeroGains = packed record
+    Name: array[0..24] of Char;
+    Level, Attack, Defence, MaxHp, Range, Steps, Ammo: Byte;
   end;
 
 { Real48 constant from the three register words of the original code }
@@ -95,6 +101,32 @@ procedure SkipTurnLosses(var P: TPlayer; Mode: ShortInt);   { 1068:438c }
 function SabotageYearlyCost(const Players: TPlayers; Me, NumPlayers: Byte): LongInt;  { 1068:32b2 }
 procedure SabotageFunding(var Players: TPlayers; Me, NumPlayers: Byte);  { 1068:3386 }
 function SabotageYearsToNextOp(const Players: TPlayers; var Me, Target: Byte): SmallInt;  { 1068:35c1 }
+
+procedure IntToPChar(Dest: PChar; V: LongInt);              { 1068:6b29 }
+function UnitGainExperience(var U: TUnit; var Gains: THeroGains; XP, Spell: Byte): Boolean;  { 1068:4671 }
+procedure FillWithMilitia(var P: TPlayer);                  { 1068:4b22 }
+procedure GenerateMarauders(var P: TPlayer; Strength: SmallInt);  { 1068:4d7c }
+procedure GenerateLindwurm(var P: TPlayer);                 { 1068:506a }
+procedure ClearUnit(var U: TUnit);                          { 1068:50c5 }
+procedure RemoveArmy1Unit(var P: TPlayer; Index: Byte);     { 1068:50e2 }
+procedure RemoveArmy2Unit(var P: TPlayer; Index: Byte);     { 1068:515e }
+procedure RemoveMilitia(var P: TPlayer);                    { 1068:51da }
+procedure SwapArmies(var P: TPlayer);                       { 1068:5222 }
+procedure MakeUnitName(Dest: PChar; UnitType, Number, Country: Byte);  { 1068:53a4 }
+procedure RecruitUnit(var P: TPlayer; Army, UnitType, Bonus: Byte);  { 1068:5439 }
+procedure InitAvenger(var U: TUnit);                        { 1068:5638 }
+function AvengerJoinsWeaker(var A, B: TPlayer; var U: TUnit): Word;  { 1068:56bc }
+procedure AvengerLeaves(var A, B: TPlayer; var U: TUnit);   { 1068:5835 }
+procedure InitUnit(var P: TPlayer; var U: TUnit; UnitType, Bonus: Byte);  { 1068:598d }
+procedure AddUnitToArmy(var P: TPlayer; Army: Byte; var U: TUnit);  { 1068:5b06 }
+procedure KnightSquire(var P: TPlayer; var U: TUnit);       { 1068:5b8b }
+procedure SortArmy(var P: TPlayer; Army: Byte);             { 1068:5e85 }
+procedure CreateHero(var U: TUnit; Name: PChar);            { 1068:5f0c }
+procedure HeroRankName(Level: Byte; Dest: PChar);           { 1068:6122 }
+function RandomMercenaryType(const P: TPlayer): Byte;       { 1068:6199 }
+procedure UnitRankName(const U: TUnit; Dest: PChar);        { 1068:61db }
+procedure RaiderVictoryReward(var P: TPlayer; Kind: Byte);  { 1068:66af }
+procedure MakeVampire(var Dest: TUnit; const Src: TUnit);   { 1068:674b }
 
 implementation
 
@@ -1150,6 +1182,769 @@ begin
   B := FromLong(SmallInt(Players[Me].SabotageBudget[Target] * 100));
   F := FromLong(PSmallInt(@Players[Me].SabotageFunds)[Target]);
   Result := SmallInt(MaxLong(1, R48Round(R48Div(R48Sub(C, F), B))));
+end;
+
+{ ---- batch 4: units and armies ---- }
+
+{ Units of both armies are indexed 1..Count like the original; the slot
+  after the 8th (Pad321 / Pad546) is reachable with index 9, as there. }
+
+procedure IntToPChar(Dest: PChar; V: LongInt);
+var
+  S: ShortString;
+begin
+  Str(V, S);
+  StrPCopy(Dest, S);
+end;
+
+function UnitGainExperience(var U: TUnit; var Gains: THeroGains; XP, Spell: Byte): Boolean;
+var
+  MaxLevel: Byte;
+begin
+  { adds XP; at level*2 + 10 experience the unit rises one level and its
+    type decides what improves. Heroes fill Gains for the dialog. }
+  Result := False;
+  if Spell = 9 then                                    { Heldentum }
+    MaxLevel := 3
+  else
+    MaxLevel := 2;
+  if (U.UnitType = 9) or (U.UnitType = $0D) then
+    MaxLevel := 105;
+  U.Experience := SmallInt(U.Experience + XP);
+  if U.Level * 2 + 10 > U.Experience then
+    Exit;
+  if U.Level >= MaxLevel then
+    Exit;
+  case U.UnitType of
+    $21, 1, 3, $23, $0F, 8, $0B, 7, $0C, $12, $14, $18, $1B, $1D, $1F, $22:
+      begin
+        Inc(U.MaxHp);
+        if U.Level mod 2 = 0 then Inc(U.Attack) else Inc(U.Defence);
+      end;
+    2, 4, $17, $10:
+      begin
+        if U.Range < 6 then Inc(U.Range);
+        if U.Level mod 2 = 0 then Inc(U.MaxHp) else Inc(U.Attack);
+        Inc(U.MaxAmmo, 3);
+      end;
+    5, $19, $1E:
+      begin
+        Inc(U.MaxHp);
+        if U.MaxSteps < 4 then Inc(U.MaxSteps) else Inc(U.Attack);
+      end;
+    6:
+      begin
+        if U.Range < 6 then Inc(U.Range) else Inc(U.MaxHp);
+        Inc(U.MaxAmmo, 3);
+      end;
+    $1C:
+      begin
+        Inc(U.MaxHp);
+        Inc(U.Attack);
+      end;
+    9:
+      begin
+        Result := True;
+        StrCopy(Gains.Name, U.Name);
+        Gains.Level := Byte(U.Level + 1);
+        case U.Level of
+          0..1:
+            begin
+              Gains.Attack := 1;
+              Gains.Defence := 1;
+              Gains.MaxHp := Random(2) + 1;
+            end;
+          2..5:
+            begin
+              Gains.Attack := 1;
+              Gains.Defence := 0;
+              Gains.MaxHp := 1;
+            end;
+          6..250:
+            begin
+              Gains.Attack := 0;
+              Gains.Defence := 0;
+              Gains.MaxHp := 1;
+            end;
+        end;
+        Gains.Range := 0;
+        Gains.Steps := 0;
+        Gains.Ammo := 0;
+        Inc(U.Attack, Gains.Attack);
+        Inc(U.Defence, Gains.Defence);
+        Inc(U.MaxHp, Gains.MaxHp);
+        if (U.Level = 2) and (U.Ability <> 6) then
+        begin
+          Inc(U.MaxSteps);
+          Inc(Gains.Steps);
+        end;
+        if (U.Ability = 5) and (U.Level = 0) then
+        begin
+          Inc(U.MaxSteps);
+          Inc(Gains.Steps);
+        end;
+        if U.Ability = 8 then
+        begin
+          if (U.Level = 1) or (U.Level = 3) then
+          begin
+            Inc(U.Range);
+            Inc(Gains.Range);
+          end;
+          if U.Level < 6 then
+          begin
+            Inc(U.MaxAmmo);
+            Inc(Gains.Ammo);
+          end;
+        end;
+        if (U.Level < 6) and (U.Ability = $11) then
+        begin
+          Inc(U.MaxAmmo);
+          Inc(Gains.Ammo);
+        end;
+      end;
+    $0D:
+      begin
+        if U.Level < 6 then
+          if U.Level mod 2 = 0 then Inc(U.Attack) else Inc(U.Defence);
+        Inc(U.MaxHp);
+        if U.Range < 6 then Inc(U.Range);
+        Inc(U.MaxAmmo);
+      end;
+    $0A:
+      Inc(U.MaxHp);
+    $16:
+      begin
+        Inc(U.Range, Random(3) + 1);
+        if U.Range > 6 then U.Range := 6;
+        Inc(U.Attack, Random(3) + 1);
+        Inc(U.MaxAmmo, Random(3) + 1);
+      end;
+    $20:
+      begin
+        Inc(U.MaxHp);
+        if U.MaxSteps < 2 then Inc(U.MaxSteps) else Inc(U.Attack);
+      end;
+    $0E:
+      begin
+        if U.Level mod 2 = 0 then Inc(U.MaxHp) else Inc(U.Attack);
+        if U.MaxSteps < 2 then Inc(U.MaxSteps);
+      end;
+    $11:
+      begin
+        Inc(U.MaxHp);
+        Inc(U.Range);
+        if U.Range > 6 then U.Range := 6;
+        if U.MaxSteps < 4 then Inc(U.MaxSteps);
+        if U.Level mod 2 = 0 then Inc(U.Attack) else Inc(U.Defence);
+        Inc(U.MaxAmmo);
+      end;
+    $13:
+      begin
+        if U.Level mod 2 = 0 then Inc(U.Attack) else Inc(U.Defence);
+        if U.MaxSteps < 4 then Inc(U.MaxSteps) else Inc(U.Attack);
+        Inc(U.MaxHp);
+      end;
+    $15:
+      Inc(U.MaxAmmo, 2);
+    $1A:
+      begin
+        if U.Range < 3 then Inc(U.Range) else Inc(U.Defence);
+        Inc(U.MaxHp);
+        Inc(U.Attack);
+        Inc(U.MaxAmmo);
+      end;
+  end;
+  if U.Range > 6 then
+    U.Range := 6;
+  U.Experience := SmallInt(U.Experience - (U.Level * 2 + 10));
+  Inc(U.Level);
+end;
+
+procedure FillWithMilitia(var P: TPlayer);
+var
+  I: Byte;
+begin
+  { fill the Heer up to 8 units with militia, stronger with more people }
+  for I := Byte(P.Army1Count + 1) to 8 do
+    with P.Army1[I] do
+    begin
+      StrCopy(Name, DS.UnitNames[0]);
+      UnitType := 0;
+      Attack := Byte(P.Population div 3500 + DS.UnitAttack[0]);
+      if Attack > 6 then Attack := 6;
+      Defence := Byte(P.Population div 4500 + DS.UnitDefence[0]);
+      if Defence > 6 then Defence := 6;
+      MaxHp := Byte(P.Population div 3000 + ShortInt(DS.UnitHp[0]));
+      if ShortInt(MaxHp) > 6 then MaxHp := 6;
+      MaxSteps := DS.UnitSteps[0];
+      MaxAmmo := DS.UnitAmmo[0];
+      Level := 0;
+      Experience := 0;
+      Kills := 0;
+      Ability := Byte(DS.UnitDefaultAbility[0]);
+      Range := DS.UnitRange[0];
+      Pay := DS.UnitPay[0];
+      BasePay := Pay;
+    end;
+  P.Army1Count := 8;
+end;
+
+procedure GenerateMarauders(var P: TPlayer; Strength: SmallInt);
+var
+  I, N, Rank, Kind: Byte;
+begin
+  { a computer "player" with 3..8 raider units, stronger kinds for a
+    higher Strength }
+  FillChar(P, PlayerSize, 0);
+  StrCopy(P.Name, DS.MaraudersName);
+  Strength := Strength div 8;
+  if Strength > 6 then
+    N := 8
+  else
+    N := Random(Word(Strength)) + 3;
+  if N > 8 then
+    N := 8;
+  P.Army1Count := N;
+  P.Happiness := RC($0081, 0, 0);
+  P.CpuLevel := 1;
+  P.Title := 10;
+  P.Population := 0;
+  for I := 1 to N do
+    with P.Army1[I] do
+    begin
+      Rank := Random(3) + 1;
+      Kind := Random(Word(Strength)) + 1;
+      if Kind > 9 then Kind := 9;
+      UnitType := DS.RaiderType[Kind];
+      Attack := Byte(Random(Rank) + DS.RaiderAttack[Kind]);
+      Defence := Byte(Random(Rank) + DS.RaiderDefence[Kind]);
+      MaxHp := Byte(Random(Rank) + DS.RaiderHp[Kind]);
+      MaxAmmo := 0;
+      Range := DS.RaiderRange[Kind];
+      Level := Rank - 1;
+      MaxSteps := DS.RaiderSteps[Kind];
+      Ability := DS.RaiderAbility[Kind];
+      StrCopy(Name, DS.AbilityNames[29 + Kind]);         { Diebe .. Raubritter }
+      if Kind = 3 then
+      begin
+        Inc(Range, Rank - 1);
+        Inc(MaxAmmo, Rank + 3);
+      end;
+      if Kind = 8 then
+        case Random(5) of
+          0: Ability := 9;
+          1: Ability := 6;
+          2: Ability := 3;
+          3: Ability := 4;
+          4: Ability := 7;
+        end;
+    end;
+end;
+
+procedure GenerateLindwurm(var P: TPlayer);
+begin
+  FillChar(P, PlayerSize, 0);
+  StrCopy(P.Name, DS.LindwurmName);
+  P.Happiness := RC($0081, 0, 0);
+  P.CpuLevel := 1;
+  P.Title := 10;
+  P.Population := 0;
+  RecruitUnit(P, 1, 12, 0);
+end;
+
+procedure ClearUnit(var U: TUnit);
+begin
+  FillChar(U, UnitSize, 0);
+  U.UnitType := $FF;
+end;
+
+procedure RemoveArmy1Unit(var P: TPlayer; Index: Byte);
+var
+  I, Last: Byte;
+begin
+  ClearUnit(P.Army1[Index]);
+  Last := Byte(P.Army1Count - 1);
+  for I := Index to Last do
+    Move(P.Army1[I + 1], P.Army1[I], UnitSize);
+  Dec(P.Army1Count);
+end;
+
+procedure RemoveArmy2Unit(var P: TPlayer; Index: Byte);
+var
+  I, Last: Byte;
+begin
+  ClearUnit(P.Army2[Index]);
+  Last := Byte(P.Army2Count - 1);
+  for I := Index to Last do
+    Move(P.Army2[I + 1], P.Army2[I], UnitSize);
+  Dec(P.Army2Count);
+end;
+
+procedure RemoveMilitia(var P: TPlayer);
+var
+  I: Byte;
+begin
+  { militia stand at the end of the Heer: cut it off at the first one }
+  I := 1;
+  while (I <= P.Army1Count) and (P.Army1[I].UnitType <> 0) do
+    Inc(I);
+  if I <= P.Army1Count then
+    P.Army1Count := I - 1;
+end;
+
+procedure SwapArmies(var P: TPlayer);
+var
+  I, N, C: Byte;
+  Tmp: TUnit;
+begin
+  N := Byte(MinLong(P.Army1Count, P.Army2Count));
+  for I := 1 to N do
+  begin
+    Tmp := P.Army1[I];
+    P.Army1[I] := P.Army2[I];
+    P.Army2[I] := Tmp;
+  end;
+  if P.Army1Count > P.Army2Count then
+  begin
+    for I := Byte(N + 1) to P.Army1Count do
+      P.Army2[I] := P.Army1[I];
+  end
+  else
+    for I := Byte(N + 1) to P.Army2Count do
+      P.Army1[I] := P.Army2[I];
+  C := P.Army1Count;
+  P.Army1Count := P.Army2Count;
+  P.Army2Count := C;
+end;
+
+procedure MakeUnitName(Dest: PChar; UnitType, Number, Country: Byte);
+var
+  Tmp: array[0..25] of Char;
+begin
+  { "<type>" or "<country adjective> Ritter", then "+<number>" }
+  if UnitType = 7 then
+  begin
+    StrCopy(Dest, DS.CountryAdjectives[Country]);
+    StrCat(Dest, DS.StrSpace);
+    StrCat(Dest, DS.UnitNames[7]);
+  end
+  else
+    StrCopy(Dest, DS.UnitNames[UnitType]);
+  if Number > 0 then
+  begin
+    IntToPChar(Tmp, Number);
+    StrCat(Dest, DS.StrPlusName);
+    StrCat(Dest, Tmp);
+  end;
+end;
+
+procedure RecruitUnit(var P: TPlayer; Army, UnitType, Bonus: Byte);
+var
+  NewU: TUnit;
+  Gains: THeroGains;
+  I: Byte;
+begin
+  { fields the original leaves uninitialised (hp, steps, ammo, motivation,
+    position, ...) are 0 here }
+  FillChar(NewU, SizeOf(NewU), 0);
+  FillChar(Gains, SizeOf(Gains), 0);
+  MakeUnitName(NewU.Name, UnitType, Bonus, P.Country);
+  NewU.UnitType := UnitType;
+  NewU.HeroPortrait := Bonus;
+  NewU.Attack := DS.UnitAttack[UnitType];
+  NewU.Defence := DS.UnitDefence[UnitType];
+  NewU.MaxHp := DS.UnitHp[UnitType];
+  NewU.MaxSteps := DS.UnitSteps[UnitType];
+  NewU.MaxAmmo := DS.UnitAmmo[UnitType];
+  NewU.Range := DS.UnitRange[UnitType];
+  NewU.Pay := SmallInt(FameDiscount(P.Fame, DS.UnitPay[UnitType]) * (Bonus + 1));
+  NewU.BasePay := NewU.Pay;
+  if (P.Spell = $0C) and (UnitType = $12) then         { Terror }
+    NewU.Pay := NewU.Pay div 3;
+  NewU.Experience := 0;
+  if UnitType = $0C then                               { Lindwurm }
+    NewU.Level := 6
+  else
+    NewU.Level := 0;
+  NewU.Kills := 0;
+  NewU.UnconsciousRounds := 1;
+  NewU.Ability := Byte(DS.UnitDefaultAbility[UnitType]);
+  if UnitType = 8 then                                 { Kreuzritter }
+    case Random(3) of
+      0: NewU.Ability := 7;
+      1: NewU.Ability := 4;
+      2: NewU.Ability := 9;
+    end;
+  { as in the original, the bonus ranks go to the last unit of the Heer
+    (every caller passes 0) }
+  for I := 1 to Bonus do
+  begin
+    UnitGainExperience(P.Army1[P.Army1Count], Gains, 10, 0);
+    NewU.Level := 0;
+    NewU.Experience := 0;
+  end;
+  if P.Spell = 9 then                                  { Heldentum }
+    UnitGainExperience(NewU, Gains, 10, P.Spell);
+  if Army = 1 then
+  begin
+    Inc(P.Army1Count);
+    P.Army1[P.Army1Count] := NewU;
+  end
+  else
+  begin
+    Inc(P.Army2Count);
+    P.Army2[P.Army2Count] := NewU;
+  end;
+end;
+
+procedure InitAvenger(var U: TUnit);
+begin
+  { the Reisiger Raecher (type 13) }
+  MakeUnitName(U.Name, $0D, 0, 0);
+  U.UnitType := $0D;
+  U.HeroPortrait := 0;
+  U.Attack := DS.UnitAttack[$0D];
+  U.Defence := DS.UnitDefence[$0D];
+  U.MaxHp := DS.UnitHp[$0D];
+  U.MaxSteps := DS.UnitSteps[$0D];
+  U.MaxAmmo := DS.UnitAmmo[$0D];
+  U.Range := DS.UnitRange[$0D];
+  U.Pay := 0;
+  U.BasePay := U.Pay;
+  U.Experience := 0;
+  U.Level := 0;
+  U.Kills := 0;
+  U.UnconsciousRounds := 1;
+  U.Ability := Byte(DS.UnitDefaultAbility[$0D]);
+end;
+
+function AvengerJoinsWeaker(var A, B: TPlayer; var U: TUnit): Word;
+var
+  ScoreA, ScoreB, StrA, StrB: LongInt;
+  Side: SmallInt;
+begin
+  { the avenger joins a player who has less than 2/3 of the other's score
+    and army strength. The original never sets its result (0 here). }
+  Result := 0;
+  Side := -1;
+  ScoreA := ComputeScore(A, 0, 0);
+  ScoreB := ComputeScore(B, 0, 0);
+  StrA := ArmyStrength(A, 1);
+  StrB := ArmyStrength(B, 1);
+  if (LongInt(ScoreB - ScoreB div 3) > ScoreA) and (LongInt(StrB - StrB div 3) > StrA) then
+    Side := 1
+  else if (LongInt(ScoreA - ScoreA div 3) > ScoreB) and (LongInt(StrA - StrA div 3) > StrB) then
+    Side := 0;
+  if Side > -1 then
+    if Side = 0 then
+    begin
+      if B.Army1Count < 8 then
+        AddUnitToArmy(B, 1, U)
+      else if B.Army2Count < 8 then
+        AddUnitToArmy(B, 2, U);
+    end
+    else if A.Army1Count < 8 then
+      AddUnitToArmy(A, 1, U);
+end;
+
+procedure AvengerLeaves(var A, B: TPlayer; var U: TUnit);
+var
+  I: Byte;
+  Found: Boolean;
+begin
+  { take the avenger out of B's Heer or Garde or A's Heer into U, or make
+    a new one }
+  Found := False;
+  I := 0;
+  while (I < B.Army1Count) and not Found do
+  begin
+    Inc(I);
+    Found := B.Army1[I].UnitType = $0D;
+  end;
+  if Found then
+  begin
+    U := B.Army1[I];
+    RemoveArmy1Unit(B, I);
+    Exit;
+  end;
+  I := 0;
+  while (I < B.Army2Count) and not Found do
+  begin
+    Inc(I);
+    Found := B.Army2[I].UnitType = $0D;
+  end;
+  if Found then
+  begin
+    U := B.Army2[I];
+    RemoveArmy2Unit(B, I);
+    Exit;
+  end;
+  I := 0;
+  while (I < A.Army1Count) and not Found do
+  begin
+    Inc(I);
+    Found := A.Army1[I].UnitType = $0D;
+  end;
+  if Found then
+  begin
+    U := A.Army1[I];
+    RemoveArmy1Unit(A, I);
+  end
+  else
+    InitAvenger(U);
+end;
+
+procedure InitUnit(var P: TPlayer; var U: TUnit; UnitType, Bonus: Byte);
+var
+  Gains: THeroGains;
+  I: Byte;
+begin
+  FillChar(Gains, SizeOf(Gains), 0);
+  MakeUnitName(U.Name, UnitType, Bonus, P.Country);
+  U.UnitType := UnitType;
+  U.HeroPortrait := Bonus;
+  U.Attack := DS.UnitAttack[UnitType];
+  U.Defence := DS.UnitDefence[UnitType];
+  U.MaxHp := DS.UnitHp[UnitType];
+  U.MaxSteps := DS.UnitSteps[UnitType];
+  U.MaxAmmo := DS.UnitAmmo[UnitType];
+  U.Range := DS.UnitRange[UnitType];
+  U.Pay := SmallInt(FameDiscount(P.Fame, DS.UnitPay[UnitType]) * (Bonus + 1));
+  if (P.Spell = $0C) and (UnitType = $12) then
+    U.Pay := U.Pay div 3;
+  U.BasePay := U.Pay;
+  U.Experience := 0;
+  U.Level := 0;
+  U.Kills := 0;
+  U.UnconsciousRounds := 1;
+  U.Ability := Byte(DS.UnitDefaultAbility[UnitType]);
+  { bonus ranks raise the values but the level stays 0 }
+  for I := 1 to Bonus do
+  begin
+    UnitGainExperience(U, Gains, 10, 0);
+    U.Level := 0;
+    U.Experience := 0;
+  end;
+end;
+
+procedure AddUnitToArmy(var P: TPlayer; Army: Byte; var U: TUnit);
+var
+  Gains: THeroGains;
+begin
+  FillChar(Gains, SizeOf(Gains), 0);
+  if P.Spell = 9 then
+    UnitGainExperience(U, Gains, 10, P.Spell);
+  if Army = 1 then
+  begin
+    Inc(P.Army1Count);
+    P.Army1[P.Army1Count] := U;
+  end
+  else
+  begin
+    Inc(P.Army2Count);
+    P.Army2[P.Army2Count] := U;
+  end;
+end;
+
+procedure KnightSquire(var P: TPlayer; var U: TUnit);
+var
+  Gains: THeroGains;
+  Pay: LongInt;
+begin
+  { a Knappe becomes a Ritter for 5000 Taler and keeps double his pay }
+  FillChar(Gains, SizeOf(Gains), 0);
+  Pay := SmallInt(U.Pay shl 1);
+  InitUnit(P, U, 7, U.HeroPortrait);
+  U.Pay := SmallInt(Pay);
+  U.BasePay := SmallInt(Pay);
+  P.Taler := P.Taler - 5000;
+  P.TotalRecruiting := P.TotalRecruiting - 5000;
+  GainFame(P.Fame, 1);
+  if P.Spell = 9 then
+    UnitGainExperience(U, Gains, 10, P.Spell);
+end;
+
+{ SortUnits/UnitLess are local routines of the original (near calls) }
+function UnitLess(const A, B: TUnit; Mode: Byte): Boolean;  { 1068:5d18 }
+begin
+  Result := False;
+  case Mode of
+    1: Result := A.Attack + A.Defence < B.Attack + B.Defence;
+    3: Result := ShortInt(A.MaxHp) < ShortInt(B.MaxHp);
+    2: Result := A.Level < B.Level;
+    4: Result := A.Kills < B.Kills;
+  end;
+end;
+
+procedure SortUnits(Units: PUnit; Count, Mode: Byte);       { 1068:5db8 }
+var
+  I, J: Byte;
+  Tmp: TUnit;
+begin
+  { insertion sort, strongest first; Units points to unit 1 }
+  for I := 2 to Count do
+  begin
+    J := I;
+    Tmp := Units[I - 1];
+    while (J > 1) and UnitLess(Units[J - 2], Tmp, Mode) do
+    begin
+      Units[J - 1] := Units[J - 2];
+      Dec(J);
+    end;
+    Units[J - 1] := Tmp;
+  end;
+end;
+
+procedure SortArmy(var P: TPlayer; Army: Byte);
+begin
+  { sorts only when both armies have units, as the original }
+  if (P.Army1Count < 1) or (P.Army2Count < 1) then
+    Exit;
+  if Army = 1 then
+  begin
+    SortUnits(@P.Army1[1], P.Army1Count, 3);
+    SortUnits(@P.Army1[1], P.Army1Count, 1);
+  end
+  else
+  begin
+    SortUnits(@P.Army2[1], P.Army2Count, 3);
+    SortUnits(@P.Army2[1], P.Army2Count, 1);
+  end;
+end;
+
+procedure CreateHero(var U: TUnit; Name: PChar);
+var
+  K: Byte;
+  Buf: array[0..25] of Char;
+begin
+  { a random hero kind 1..18 decides the ability and stat changes; without
+    a name a random one from string resources 101..320 }
+  FillChar(Buf, SizeOf(Buf), 0);
+  U.UnitType := 9;
+  K := Random(18) + 1;
+  U.HeroPortrait := K;
+  if Name = nil then
+  begin
+    LoadString(Random(220) + 101, Buf, 16);
+    StrCopy(U.Name, Buf);
+  end
+  else
+    StrCopy(U.Name, Name);
+  U.Attack := DS.UnitAttack[9];
+  U.Defence := DS.UnitDefence[9];
+  U.MaxHp := DS.UnitHp[9];
+  U.MaxSteps := DS.UnitSteps[9];
+  U.Range := DS.UnitRange[9];
+  U.MaxAmmo := DS.UnitAmmo[9];
+  U.Level := 0;
+  U.Experience := 0;
+  U.Kills := 0;
+  U.Pay := 0;
+  U.BasePay := 0;
+  case K of
+    1: U.Ability := $15;
+    2: begin U.Ability := 1; Inc(U.Attack, 2); end;
+    3: begin U.Ability := 3; Dec(U.Attack, 2); end;
+    4: begin U.Ability := 5; Inc(U.Defence); end;
+    5: U.Ability := $12;
+    6: begin U.Ability := 2; Inc(U.Defence, 2); end;
+    7: begin U.Ability := 6; Dec(U.Attack, 2); end;
+    8: begin U.Ability := 7; Dec(U.Defence); Dec(U.MaxHp, 2); end;
+    9: begin U.Ability := $10; Inc(U.MaxHp); end;
+    10: U.Ability := 9;
+    11: begin U.Ability := 4; Inc(U.Defence); end;
+    12: begin U.Ability := 8; Inc(U.Range); Dec(U.Attack); Inc(U.MaxAmmo); end;
+    13: begin U.Ability := $0F; Dec(U.Defence); end;
+    14: begin U.Ability := $11; Dec(U.Defence); Dec(U.Attack); Dec(U.MaxHp, 2); Inc(U.MaxAmmo, 2); end;
+    15: begin U.Ability := $13; Dec(U.Defence); end;
+    16: begin U.Ability := $16; Dec(U.Attack); end;
+    17: U.Ability := $18;
+    18: U.Ability := $1B;
+  end;
+end;
+
+procedure HeroRankName(Level: Byte; Dest: PChar);
+var
+  Tmp: array[0..11] of Char;
+begin
+  if Level <= 6 then
+    StrCopy(Dest, DS.RankNames[4 + Level])
+  else
+  begin
+    Level := Byte(Level - 6);
+    StrCopy(Dest, DS.RankNames[10]);                   { Halbgott }
+    StrCat(Dest, DS.StrPlusHero);
+    IntToPChar(Tmp, Level);
+    StrCat(Dest, Tmp);
+  end;
+end;
+
+function RandomMercenaryType(const P: TPlayer): Byte;
+begin
+  { a random mercenary type 14..35 the player's title allows }
+  repeat
+    Result := Random(22) + 14;
+  until DS.UnitTitleNeeded[Result] <= P.Title;
+end;
+
+procedure UnitRankName(const U: TUnit; Dest: PChar);
+var
+  Tmp: array[0..11] of Char;
+begin
+  if (U.UnitType = 9) or ((U.UnitType >= $0C) and (U.UnitType <= $0D)) then
+  begin
+    if U.Level <= 6 then
+      StrCopy(Dest, DS.RankNames[4 + U.Level])
+    else
+    begin
+      StrCopy(Dest, DS.RankNames[10]);
+      StrCat(Dest, DS.StrPlusRank);
+      IntToPChar(Tmp, Byte(U.Level - 6));
+      StrCat(Dest, Tmp);
+    end;
+  end
+  else
+    StrCopy(Dest, DS.RankNames[U.Level]);
+end;
+
+procedure RaiderVictoryReward(var P: TPlayer; Kind: Byte);
+var
+  Reward: LongInt;
+  I: Byte;
+begin
+  { 1: bandits, (1000 + Random(1500)) * title Taler; 2: the Lindwurm,
+    100000 Taler, 20 fame and +3 defence for the Heer }
+  Reward := 0;                     { other kinds: uninitialised in the original }
+  if Kind = 1 then
+    Reward := Word(P.Title * (Random(1500) + 1000))
+  else if Kind = 2 then
+  begin
+    Reward := 100000;
+    GainFame(P.Fame, 20);
+    for I := 1 to P.Army1Count do
+      Inc(P.Army1[I].Defence, 3);
+  end;
+  P.EventMoney := P.EventMoney + Reward;
+  P.Event := 0;
+end;
+
+procedure MakeVampire(var Dest: TUnit; const Src: TUnit);
+begin
+  Dest := Src;
+  StrCopy(Dest.Name, DS.UnitNames[10]);                { Vampire }
+  Dest.UnitType := $0A;
+  Dest.Level := 0;
+  Dest.Experience := 0;
+  Dest.Hp := Dest.MaxHp;
+  Dest.Range := 1;
+  Dest.Steps := 0;
+  Dest.Ammo := 0;
+  Dest.MaxAmmo := 0;
+  Dest.Pay := 0;
+  Dest.BasePay := 0;
+  Dest.BlindRounds := 0;
+  Dest.UnconsciousRounds := 0;
+  Dest.Ability := Byte(DS.UnitDefaultAbility[10]);
 end;
 
 end.

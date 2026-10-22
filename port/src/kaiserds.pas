@@ -28,7 +28,13 @@ type
     AttackInitiativeCost: array[0..9, 0..9] of Byte;  { +0x4256 [defender country, attacker country] 2..4 }
     Pad42BA: array[0..15] of Byte;
     SkipTurnLoss: array[0..1] of TReal48;  { +0x42ca SkipTurnLosses fraction: 0.1 (mode 0), 0.3 (mode 1) }
-    Pad42D6: array[0..639] of Byte;
+    MaraudersName: array[0..9] of Char;  { +0x42d6 "Marodeure" (GenerateMarauders) }
+    LindwurmName: array[0..5] of Char;  { +0x42e0 "Lindi" (GenerateLindwurm) }
+    StrSpace: array[0..1] of Char;  { +0x42e6 " " (MakeUnitName) }
+    StrPlusName: array[0..1] of Char;  { +0x42e8 "+" before the number in unit names }
+    StrPlusHero: array[0..1] of Char;  { +0x42ea "+" in hero rank names }
+    StrPlusRank: array[0..1] of Char;  { +0x42ec "+" in unit rank names }
+    Pad42EE: array[0..615] of Byte;
     TitleNames: array[0..10] of array[0..24] of Char;  { +0x4556 Herr .. Kaiser }
     Pad4669: array[0..0] of Byte;
     FemaleTitleNames: array[0..10] of array[0..24] of Char;  { +0x466a }
@@ -40,7 +46,8 @@ type
     UnitNames: array[-10..35] of array[0..24] of Char;  { +0x4ac2 unit type -10..35 }
     UnitKnight: array[0..35] of Byte;  { +0x4f40 receives the Knappen bonus }
     UnitTitleNeeded: array[0..35] of Byte;  { +0x4f64 }
-    Pad4F88: array[0..275] of Byte;
+    RankNames: array[0..10] of array[0..24] of Char;  { +0x4f88 troops 0..3 (Fuchs .. Elite), heroes 4..10 = hero level 0..6 (Lehrling .. Halbgott) }
+    Pad509B: array[0..0] of Byte;
     UnitAttack: array[0..35] of Byte;  { +0x509c }
     UnitDefence: array[0..35] of Byte;  { +0x50c0 }
     UnitHp: array[0..35] of Byte;  { +0x50e4 }
@@ -56,7 +63,15 @@ type
     UnitMotivationBonus: array[0..35] of TReal48;  { +0x5300 }
     Pad53D8: array[0..24] of Byte;
     AbilityNames: array[1..38] of array[0..24] of Char;  { +0x53f1 }
-    Pad57A7: array[0..80] of Byte;
+    RaiderAttack: array[0..9] of Byte;  { +0x57a7 GenerateMarauders, by raider kind 1..9 (Diebe .. Raubritter) }
+    RaiderDefence: array[0..9] of Byte;  { +0x57b1 }
+    RaiderHp: array[0..9] of Byte;  { +0x57bb }
+    RaiderRange: array[0..9] of Byte;  { +0x57c5 }
+    RaiderAmmoQ: array[0..9] of Byte;  { +0x57cf not read by GenerateMarauders }
+    RaiderType: array[0..9] of Byte;  { +0x57d9 unit type }
+    RaiderAbility: array[0..9] of Byte;  { +0x57e3 }
+    RaiderSteps: array[0..9] of Byte;  { +0x57ed }
+    Pad57F7: array[0..0] of Byte;
     PromotionLand: array[1..10] of LongInt;  { +0x57f8 CanBePromoted: needed for title t }
     PromotionTaler: array[1..10] of LongInt;  { +0x5820 }
     PromotionPopulation: array[1..10] of LongInt;  { +0x5848 }
@@ -70,7 +85,11 @@ type
     RandSeed: LongInt;  { +0x6000 System.RandSeed (the port keeps it in Real48.RandSeed) }
     Pad6004: array[0..259] of Byte;
     Game: TGameHeader;  { +0x6108 the global game record = savegame header }
-    Pad639D: array[0..1150] of Byte;
+    Pad639D: array[0..10] of Byte;
+    CountryNamesRt: array[0..9] of array[0..24] of Char;  { +0x63a8 runtime copy, editable (CountryNamesDlg) }
+    Pad64A2: array[0..499] of Byte;
+    CountryAdjectives: array[0..9] of array[0..24] of Char;  { +0x6696 runtime, editable (CountryNamesDlg); knight names (MakeUnitName) }
+    Pad6790: array[0..139] of Byte;
   end;
 
 var

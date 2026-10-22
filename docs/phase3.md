@@ -18,13 +18,21 @@ original resources.
 - **Code layout**: `port/src` engine units (no UI), `port/tools` command-line tools,
   `port/tests` test programs; `tools/gen_pascal_types.py` generates the record types
   (`kaisertypes.pas`) and the data segment (`kaiserds.pas`) from `tools/kaiser_structs.py`;
-  the emulator harness lives in `tools/emu/`.
+  the emulator harness lives in `tools/emu/`; `tools/gen_pascal_res.py` generates the string
+  table resources with a `LoadString` (`kaiserres.pas`).
 - **Globals stay where they were.** `KaiserDS.DS` is a packed record with the layout of the
   original data segment (0x681c bytes), initialised with its contents from `kaiser.exe`.
   Known tables and globals are named fields at their original offsets (`DS.Game` = DS:6108,
   `DS.PromotionLand` = DS:57f8, `DS.UnitCanDesert` = DS:52b8, …). Unknown bytes are padding.
   So an index that runs past a table reads the same neighbouring bytes as in the original
   (`CanBePromoted` reads `PromotionLand[11]` for a Kaiser).
+- **Uninitialised locals.** Some original functions copy partly uninitialised local records
+  (e.g. `RecruitUnit`'s new unit: hit points, steps, motivation). The emulator zeroes its stack
+  before every call and the port zero-initialises these locals, so both agree on 0.
+- **Relocated data.** The port's data segment is the raw image from the file; far pointers that
+  the loader fills in (at relocation sites) are 0. Only out-of-range reads that run into such
+  pointers differ (e.g. `UnitRankName` for troop levels far past the rank table), and the
+  vectors avoid them.
 - **Integer width.** The original wraps at 32 bits (longint) or 16 bits (integer), but FPC
   on 64-bit evaluates in 64 bits. The port truncates with `LongInt()`/`SmallInt()` wherever a
   division or comparison follows a possible overflow. Byte `for` loops keep the original's byte
@@ -37,7 +45,7 @@ original resources.
 |---|---|---|---|
 | 1 | Data layer: `TGameHeader`, `TPlayer`, `TUnit`, load/save `.KSR` | all 30 saves round-trip byte-identically | ✅ |
 | 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical |
-| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 60 of 102 functions (`port/src/rules.pas`), 141,000 / 141,000 vectors identical |
+| 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | in progress: 84 of 102 functions (`port/src/rules.pas`); full run 84,000 / 84,000 vectors identical (1,000 per function) |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |
@@ -73,7 +81,8 @@ port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
   `RandSeed` and every changed byte of the player array and header. `SPECS` in the script lists
   each function's address, arguments, return type and the fields worth mutating.
   Header flags (`hmut`), pointers to fields, unit pointers, out parameters and Real48
-  arguments are supported (see the comment at the top of the script).
+  arguments are supported (see the comment at the top of the script). Windows API calls stop
+  the emulation unless the emulator implements them (`KaiserEmu.api`: so far `LoadString`).
 - `port/bin/ruletest SAVEDIR VECTORS` replays each line on the port and compares the return
   value, out parameters, `RandSeed`, the player array and the header. `port/tests/rules.vec`
   (100 per function) is the checked-in set. Larger sets are generated on demand with another

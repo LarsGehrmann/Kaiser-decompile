@@ -11,6 +11,7 @@ uses
 
 type
   TBytes = array of Byte;
+  PHeroGainsT = ^THeroGains;
 
 function Field(const Line, Key: string): string;
 var
@@ -106,6 +107,8 @@ var
   O1, O2, O3: LongInt;
   HasOuts, HasLoss: Boolean;
   Loss: TLandLoss;
+  OutBuf: array[0..1023] of Byte;
+  OutSize, K: Integer;
   B1, B2: Byte;
   U: PUnit;
 
@@ -172,6 +175,11 @@ begin
     O1 := 0; O2 := 0; O3 := 0;
     HasLoss := False;
     FillChar(Loss, SizeOf(Loss), 0);
+    OutSize := 0;
+    FillChar(OutBuf, SizeOf(OutBuf), 0);
+    { runtime country adjectives (DS:6696) as a new game sets them }
+    for K := 0 to 9 do
+      DS.CountryAdjectives[K] := DS.CountryNames[10 + K];
     try
       with Save do
         case Func of
@@ -260,6 +268,65 @@ begin
           'SkipTurnLosses': begin SkipTurnLosses(Pl^, ArgI(0)); Got := '-'; end;
           'SabotageYearlyCost': Got := IntToStr(SabotageYearlyCost(Players, ArgI(0), ArgI(1)));
           'SabotageFunding': begin SabotageFunding(Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'UnitGainExperience':
+            begin
+              OutSize := 32;
+              Got := B2S(UnitGainExperience(UnitArg(0)^, PHeroGainsT(@OutBuf)^, ArgI(1), ArgI(2)));
+            end;
+          'FillWithMilitia': begin FillWithMilitia(Pl^); Got := '-'; end;
+          'GenerateMarauders': begin GenerateMarauders(Pl^, ArgI(0)); Got := '-'; end;
+          'GenerateLindwurm': begin GenerateLindwurm(Pl^); Got := '-'; end;
+          'ClearUnit': begin ClearUnit(UnitArg(0)^); Got := '-'; end;
+          'RemoveArmy1Unit': begin RemoveArmy1Unit(Pl^, ArgI(0)); Got := '-'; end;
+          'RemoveArmy2Unit': begin RemoveArmy2Unit(Pl^, ArgI(0)); Got := '-'; end;
+          'RemoveMilitia': begin RemoveMilitia(Pl^); Got := '-'; end;
+          'SwapArmies': begin SwapArmies(Pl^); Got := '-'; end;
+          'MakeUnitName':
+            begin
+              OutSize := 40;
+              MakeUnitName(@OutBuf, ArgI(0), ArgI(1), ArgI(2));
+              Got := '-';
+            end;
+          'RecruitUnit': begin RecruitUnit(Pl^, ArgI(0), ArgI(1), ArgI(2)); Got := '-'; end;
+          'InitAvenger': begin InitAvenger(UnitArg(0)^); Got := '-'; end;
+          'AvengerJoinsWeaker':
+            Got := IntToStr(AvengerJoinsWeaker(Pl^, Players[ArgI(0)],
+              Players[ArgI(1)].Army1[ArgI(2)]));
+          'AvengerLeaves':
+            begin
+              OutSize := 61;
+              AvengerLeaves(Pl^, Players[ArgI(0)], PUnit(@OutBuf)^);
+              Got := '-';
+            end;
+          'InitUnit': begin InitUnit(Pl^, UnitArg(0)^, ArgI(1), ArgI(2)); Got := '-'; end;
+          'AddUnitToArmy':
+            begin
+              AddUnitToArmy(Pl^, ArgI(0), Players[ArgI(1)].Army1[ArgI(2)]);
+              Got := '-';
+            end;
+          'KnightSquire': begin KnightSquire(Pl^, UnitArg(0)^); Got := '-'; end;
+          'SortArmy': begin SortArmy(Pl^, ArgI(0)); Got := '-'; end;
+          'CreateHero': begin CreateHero(UnitArg(0)^, nil); Got := '-'; end;
+          'HeroRankName':
+            begin
+              OutSize := 40;
+              HeroRankName(ArgI(0), @OutBuf);
+              Got := '-';
+            end;
+          'RandomMercenaryType': Got := IntToStr(RandomMercenaryType(Pl^));
+          'UnitRankName':
+            begin
+              OutSize := 40;
+              UnitRankName(UnitArg(0)^, @OutBuf);
+              Got := '-';
+            end;
+          'RaiderVictoryReward': begin RaiderVictoryReward(Pl^, ArgI(0)); Got := '-'; end;
+          'MakeVampire':
+            begin
+              OutSize := 61;
+              MakeVampire(PUnit(@OutBuf)^, UnitArg(0)^);
+              Got := '-';
+            end;
           'SabotageYearsToNextOp':
             begin
               B1 := PIdx;
@@ -280,6 +347,8 @@ begin
       Outs := IntToStr(O1) + ',' + IntToStr(O2) + ',' + IntToStr(O3);
     if HasLoss then
       Outs := HexOf(Snapshot(Loss, SizeOf(Loss)));
+    if OutSize > 0 then
+      Outs := HexOf(Snapshot(OutBuf, OutSize));
     After := Snapshot(Save.Players[0], Num * PlayerSize);
     HAfter := Snapshot(DS.Game, HeaderSize);
     Got := 'ret=' + Got + ' out=' + Outs + ' seedout=' + IntToStr(RandSeed) +
