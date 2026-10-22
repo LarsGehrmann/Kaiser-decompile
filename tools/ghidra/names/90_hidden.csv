@@ -1,0 +1,12 @@
+address,name,kind,comment
+1000:3944,KaiserWindow::CmBossKey,func,"Cmd 801 (key b): save to boss.ksr and close immediately"
+1000:1292,KaiserWindow::CmLoadLastGame,func,"Cmd 803 (Ctrl+L): load the last savegame from KAISER.INI and resume"
+1000:1fc8,KaiserWindow::CmResolution1024,func,"Cmd 612 (no menu entry): hidden 1024x768 window size"
+1060:019c,UpdateSettingsMenu,func,"Check marks of the Einstellungen menu (autosave, sound, music, resolution)"
+1068:6323,FindHero,func,"Returns the player's hero unit (mode 1: army1 only?); used for the census password and event 23"
+10d0:63a1,Opt_Debug,label,"KAISER.INI Debug=an; copied to header census_editor_enabled at new game"
+10d0:639e,Opt_SoundEffects,label,"Krach & Geschrei"
+10d0:639f,Opt_Music,label,"Schalmeienklaenge"
+10d0:63a0,Opt_Resolution,label,"0 = 640x480, 1 = 800x600, 2 = 1024x768"
+10d0:4536,ResolutionWidth,label,"word[3] 640, 800, 1024"
+10d0:453c,ResolutionHeight,label,"word[3] 480, 600, 768"

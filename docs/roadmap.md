@@ -38,7 +38,7 @@ the turn simulation understood well enough to write it down as rules.
 | 7 | Military & battles | unit tables, recruitment, war — `docs/rules/military.md`; tactical battle → `battle.md` (in progress) | ✅ / battle in progress |
 | 8 | Diplomacy & sabotage | mailbox protocol, treaties, `SabotageAction` — `docs/rules/diplomacy.md` | ✅ protocol + sabotage effects; costs open |
 | 9 | Computer players (AI) | `Ai_Turn` and policies — `docs/rules/ai.md` | ✅ structure + main heuristics |
-| 10 | Hidden commands | cm 612, 801 (`b` key), 802 (Ctrl+P), 803 (Ctrl+L) and `Debug=an` | |
+| 10 | Hidden commands | boss key, Census Editor (password = hero name), Ctrl+L, 1024×768 — `docs/rules/hidden-features.md` | ✅ |
 
 ## Phase 3 – reimplementation (later)
 

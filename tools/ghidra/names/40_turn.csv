@@ -8,7 +8,7 @@ address,name,kind,comment
 1000:0a6f,KaiserWindow::EndGame,func,"Called after victory / game end; plays kaiser.mid"
 1010:37b6,PlayerTurnStart,func,"Start-of-turn processing for the current player (4 KB, 66 calls); result != 0 keeps the game running. Called only from BeginHumanTurn"
 1010:57b2,PlayerTurnEnd,func,"End-of-turn processing for the current player, called first in CmBeenden"
-1008:0002,Ai_Economy,func,"First step of CpuTurn (segment 2 = AI unit)"
+1008:0002,Ai_Turn,func,"First step of CpuTurn: the whole AI year (see names/85_ai.csv)"
 1008:24eb,Ai_ChooseWarTarget,func,"CpuTurn: returns true + target player index when the computer declares war"
 1008:29ea,Ai_EndTurn,func,"Last step of CpuTurn; also called after a war turn in EmailGameStep"
 1018:0558,Battle,func,"Battle between current player and target; result 1 = won, 3 = retry once"

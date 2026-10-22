@@ -44,7 +44,7 @@ year (`skip_turn`, dialog `AUSSETZDLG`) costs exactly one turn.
 ## Computer turn – CpuTurn (1000:36d2)
 
 ```
-Ai_Economy(year, num_players, current, players)        ; 1008:0002
+Ai_Turn(year, num_players, current, players)            ; 1008:0002, the AI year (ai.md)
 if Ai_ChooseWarTarget(&target, ...):                   ; 1008:24eb
     e-mail game with a human target -> save, hand over (game_state 2)
     otherwise                         -> ResolveWar(target)
