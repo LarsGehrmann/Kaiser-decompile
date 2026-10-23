@@ -73,7 +73,7 @@ var
   Exe: TNEFile;
   DialogBackground: TColor = $00ACFFFF;   { INI Hintergrund rot/gruen/blau = 255,255,172 }
 
-{ kaiser.exe next to the program, in ../Kaiser or given as -exe PATH }
+{ kaiser.exe next to the program, in Kaiser/ or ../Kaiser or given as -exe PATH }
 function FindExe: string;
 { the port's KAISER.INI (macOS: Application Support, Windows: %APPDATA%\Kaiser);
   the original's next to
@@ -105,9 +105,12 @@ begin
     if ParamStr(I) = '-exe' then
       Exit(ParamStr(I + 1));
   Dir := ExtractFilePath(ParamStr(0));
-  for Result in [Dir + 'kaiser.exe', Dir + '../Kaiser/kaiser.exe', Dir + '../../Kaiser/kaiser.exe',
-                 Dir + '../../../../Kaiser/kaiser.exe', Dir + '../../../../../Kaiser/kaiser.exe'] do
-    if FileExists(Result) then
+  for Result in [Dir + 'kaiser.exe', Dir + 'Kaiser/kaiser.exe', Dir + '../Kaiser/kaiser.exe',
+                 Dir + '../../Kaiser/kaiser.exe', Dir + '../../../../Kaiser/kaiser.exe',
+                 Dir + '../../../../../Kaiser/kaiser.exe'] do
+    { (on Windows the port itself may be called Kaiser.exe) }
+    if FileExists(Result) and
+       (CompareText(ExpandFileName(Result), ExpandFileName(ParamStr(0))) <> 0) then
       Exit;
   Result := 'kaiser.exe';
 end;
