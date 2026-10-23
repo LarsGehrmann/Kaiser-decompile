@@ -92,7 +92,10 @@ type
     RandSeed: LongInt;  { +0x6000 System.RandSeed (the port keeps it in Real48.RandSeed) }
     Pad6004: array[0..259] of Byte;
     Game: TGameHeader;  { +0x6108 the global game record = savegame header }
-    Pad639D: array[0..10] of Byte;
+    OptAutosave: Byte;  { +0x639d INI Geschichtsschreibung: autosave at every human turn start }
+    Pad639E: array[0..2] of Byte;
+    OptDebug: Byte;  { +0x63a1 INI Debug: census editor in new games }
+    Pad63A2: array[0..5] of Byte;
     CountryNamesRt: array[0..9] of array[0..24] of Char;  { +0x63a8 runtime copy, editable (CountryNamesDlg) }
     CpuRulerNames: array[0..9] of array[0..24] of Char;  { +0x64a2 runtime, from KAISER.INI (InitPlayers, InitComputerRuler) }
     Pad659C: array[0..249] of Byte;

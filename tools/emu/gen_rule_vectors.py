@@ -330,6 +330,9 @@ SPECS = {
                       {'army1_count': (0, 8), 'army2_count': (0, 8),
                        'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
     # segment 1: the turn loop, a whole round of computer players
+    'CmBeenden': ('1000:2476', ['NIL', 'SELF'], 'none',   # (Msg, Self: Self is pushed last)
+                  ['title', 'lifetime', 'J.title', 'J.lifetime', 'h.immortality'],
+                  {'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
     'NextPlayer': ('1000:35ad', ['SELF'], 'none',
                    ['title', 'lifetime', 'J.title', 'J.lifetime', 'h.immortality'],
                    {'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
@@ -420,6 +423,9 @@ UI_SCRIPTS = {
                                                  {0x100: b'Neuheld\0'}))],
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'Ai_Turn': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'CmBeenden': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
+                  ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
+                  ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
     'NextPlayer': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
                    ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
                    ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
@@ -684,6 +690,7 @@ PRESETS = {
     'Ai_LandPolicy': preset_land,
     'Ai_SellGoods': preset_goods,
     'NextPlayer': preset_round,
+    'CmBeenden': preset_round,
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'PlayerTurnEnd': preset_promotion,
@@ -711,6 +718,7 @@ def header_turn(rng, header, players, p, num):
 # per function: header mutations after the random ones
 HEADER_PRESETS = {
     'NextPlayer': header_turn,
+    'CmBeenden': header_turn,
 }
 
 

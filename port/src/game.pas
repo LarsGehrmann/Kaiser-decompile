@@ -10,11 +10,13 @@ unit Game;
 interface
 
 uses
-  KaiserTypes, KaiserDS, Rules, KaiserUI, Turn, Ai;
+  Strings, KaiserTypes, KaiserDS, Rules, KaiserUI, Turn, Ai;
 
 procedure NextPlayer(Parent: Pointer; HWnd: Word; var Players: TPlayers);  { 1000:35ad }
 procedure CpuTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);     { 1000:36d2 }
 procedure ResolveWar(Parent: Pointer; var Players: TPlayers; Target: Byte);  { 1000:37c0 }
+procedure BeginHumanTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);  { 1000:33c0 }
+procedure EndHumanTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);    { 1000:2476 }
 
 implementation
 
@@ -125,6 +127,82 @@ begin
     else
       AddNews(Players, NumPlayers, Target, CurrentPlayer, 9);
     GameState := 1;
+  end;
+end;
+
+procedure BeginHumanTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);
+begin
+  with DS.Game do
+  begin
+    GameState := 6;
+    if PlayerTurnStart(Parent, HWnd, Players, CurrentPlayer, NumPlayers, Year) then
+      GameState := 1
+    else
+    begin
+      UI.Call('ShowPasswordFail', [APtr(Parent)]);
+      GameState := 0;
+    end;
+    { autosave.ksr (the original passes its save buffers) }
+    if (DS.OptAutosave <> 0) and (EmailGameQ = 0) then
+      UI.Call('SaveGame', [APtr(nil), APtr(@Players), APtr(nil)]);
+  end;
+end;
+
+procedure EndHumanTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);
+var
+  Title: array[0..81] of Char;
+  Buf: array[0..7] of Char;
+  D: TDialog;
+begin
+  { menu "Runde beenden" (CmBeenden): the end of the human's year, the
+    computer players, then the next human's turn start }
+  FillChar(Title, SizeOf(Title), 0);
+  FillChar(Buf, SizeOf(Buf), 0);
+  with DS.Game do
+  begin
+    if GameState <> 1 then
+      Exit;
+    PlayerTurnEnd(Parent, HWnd, Players, CurrentPlayer, NumPlayers, Year);
+    if Players[CurrentPlayer].Title = 10 then
+    begin
+      UI.Call('Victory', [APtr(Parent)]);
+      Exit;
+    end;
+    if (Immortality = 0) and (Players[CurrentPlayer].Lifetime <= 0) then
+    begin
+      { the ruler dies: a computer player takes the country over }
+      FormatPlayerTitle(Players[CurrentPlayer], Title, 0, 0);
+      IntToPChar(Buf, LongInt(Word(Year + 1400)));
+      if Players[CurrentPlayer].IsFemale = 0 then
+        D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($04A4)), AStr(Title),
+          AStr(Buf)])
+      else
+        D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($04A8)), AStr(Title),
+          AStr(Buf)]);
+      UI.Execute(D);
+      UI.Done(D, 1);
+      InitComputerRuler(Players, CurrentPlayer);
+      Dec(HumanPlayers);
+      LastHuman := CurrentPlayer;
+      AddNews(Players, NumPlayers, CurrentPlayer, CurrentPlayer, $10);
+    end;
+    NextPlayer(Parent, HWnd, Players);
+    if GameState = 1 then
+    begin
+      if (EmailGameQ <> 0) and (CurrentPlayer <> LastHuman) then
+      begin
+        GameState := 5;
+        UI.Call('EmailGameStep', [APtr(Parent)]);
+      end
+      else
+        BeginHumanTurn(Parent, HWnd, Players);
+    end;
+    if (EmailGameQ <> 0) and (HumanPlayers < 2) then
+    begin
+      { e-mail mode ends with the last but one human }
+      EmailGameQ := 0;
+      UI.Call('Menu_DisableSave', [AWord(0), AWord(HWnd)]);
+    end;
   end;
 end;
 

@@ -293,6 +293,8 @@ DS = [
     (0x5b10, 's32[0..8]', 'building_prices', 'markets, mills, palace part, cathedral part, granaries, warehouses, university part, taverns, smithies'),
     (0x6000, 's32', 'rand_seed', 'System.RandSeed (the port keeps it in Real48.RandSeed)'),
     (0x6108, 'header', 'game', 'the global game record = savegame header'),
+    (0x639d, 'u8', 'opt_autosave', 'INI Geschichtsschreibung: autosave at every human turn start'),
+    (0x63a1, 'u8', 'opt_debug', 'INI Debug: census editor in new games'),
     (0x63a8, 'cstr25[0..9]', 'country_names_rt', 'runtime copy, editable (CountryNamesDlg)'),
     (0x64a2, 'cstr25[0..9]', 'cpu_ruler_names', 'runtime, from KAISER.INI (InitPlayers, InitComputerRuler)'),
     (0x6696, 'cstr25[0..9]', 'country_adjectives', 'runtime, editable (CountryNamesDlg); knight names (MakeUnitName)'),

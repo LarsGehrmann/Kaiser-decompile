@@ -73,6 +73,9 @@ FUNCS = {
     'EndGame': ('1000:0a6f', True, ['p'], False),
     'ShowEmailHandOver': ('1020:02ee', True, ['p', 'p', 'p'], False),
     'SaveGame': ('1050:058b', True, ['p', 'p', 'p'], False),
+    'ShowPasswordFail': ('1020:0216', True, ['p'], False),
+    'EmailGameStep': ('1000:2637', True, ['p'], False),
+    'Menu_DisableSave': ('1060:0037', True, ['w', 'w'], False),
 }
 # segments that may only run through the stubs above (UI, OWL, battle view)
 GUARDED_SEGMENTS = [1, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24]
@@ -80,7 +83,9 @@ GUARDED_SEGMENTS = [1, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 
 ALLOWED = [('1060:03d9', 0x14e),           # FormatPlayerTitle
            ('1000:35ad', 0x125),           # NextPlayer
            ('1000:36d2', 0xee),            # CpuTurn
-           ('1000:37c0', 0x10f)]           # ResolveWar
+           ('1000:37c0', 0x10f),           # ResolveWar
+           ('1000:2476', 0x1c1),           # CmBeenden
+           ('1000:33c0', 0x99)]            # BeginHumanTurn
 
 
 def arg_bytes(kinds):
