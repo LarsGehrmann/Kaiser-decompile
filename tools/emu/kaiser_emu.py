@@ -16,7 +16,7 @@ import os
 import struct
 import sys
 
-from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_CODE, UC_HOOK_INTR
+from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_CODE, UC_HOOK_INTR, UC_HOOK_BLOCK
 from unicorn.x86_const import (UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX,
                                UC_X86_REG_DX, UC_X86_REG_SI, UC_X86_REG_DI,
                                UC_X86_REG_BP, UC_X86_REG_SP, UC_X86_REG_CS,
@@ -43,6 +43,24 @@ LOGIC_SEGMENTS = (2, 3, 4, 6, 7, 8, 9, 13, 14)
 # functions of the UI segments with uninitialised locals the port zeroes too:
 # RecruitDialog (the new hero's record and his level-up gains)
 ZERO_FRAME_FUNCS = ('1040:5108',)
+
+
+# KAISER_COVERAGE=file: the executed basic blocks (linear address, size) are
+# appended to file at exit (tools/emu/coverage.py turns them into a report)
+COVERAGE_FILE = os.environ.get('KAISER_COVERAGE')
+COVERAGE = set()
+if COVERAGE_FILE:
+    import atexit
+
+    def _dump_coverage():
+        with open(COVERAGE_FILE, 'a') as f:
+            for a, n in sorted(COVERAGE):
+                f.write(f'{a:x} {n:x}\n')
+    atexit.register(_dump_coverage)
+
+# KAISER_TRACE_TAIL=n: a failing run prints its last n basic blocks in the
+# program's segments (Ghidra selector:offset)
+TRACE_TAIL = int(os.environ.get('KAISER_TRACE_TAIL', '0'))
 
 
 def ghidra_seg(addr):
@@ -158,6 +176,13 @@ class KaiserEmu:
         self.uc.hook_add(UC_HOOK_INTR, on_int)
 
     # -- memory helpers --------------------------------------------------
+    def logical_seg(self, para):
+        """the Ghidra selector (1000 + 8 × (segment − 1)) of a loaded segment"""
+        for s, p in self.para.items():
+            if p == para:
+                return f'{0x1000 + 8 * (s - 1):04x}'
+        return f'para {para:04x}'
+
     @staticmethod
     def lin(para, off):
         return para * 16 + off
@@ -255,7 +280,10 @@ class KaiserEmu:
                     self._api_return(self._api_arg_bytes(*name), 0)
                     return
                 uc.emu_stop()
-                raise_box.append(f'Windows API call {name} (stub offset {off:#x})')
+                ss, sp = uc.reg_read(UC_X86_REG_SS), uc.reg_read(UC_X86_REG_SP)
+                ret_ip, ret_cs = struct.unpack('<HH', uc.mem_read(ss * 16 + sp, 4))
+                raise_box.append(f'Windows API call {name} (stub offset {off:#x}, '
+                                 f'from {self.logical_seg(ret_cs)}:{ret_ip:04x})')
 
         def runerror(uc, address, size, user):
             uc.emu_stop()
@@ -277,12 +305,35 @@ class KaiserEmu:
             raise_box.append(f'unstubbed code at linear {address:#x} ({user})')
         guards = [self.uc.hook_add(UC_HOOK_CODE, guard, user_data=name, begin=b, end=e - 1)
                   for b, e, name in self.guard_ranges]
+        cov = None
+        if COVERAGE_FILE:
+            def block(uc, address, size, user):
+                COVERAGE.add((address, size))
+            cov = self.uc.hook_add(UC_HOOK_BLOCK, block)
+        tail = None
+        if TRACE_TAIL:
+            import collections
+            tail = collections.deque(maxlen=TRACE_TAIL)
+
+            known = {p: s for s, p in self.para.items()}
+
+            def tblock(uc, address, size, user):
+                cs = uc.reg_read(UC_X86_REG_CS)
+                if cs in known:                  # the program's own segments
+                    tail.append((0x1000 + 8 * (known[cs] - 1), uc.reg_read(UC_X86_REG_IP)))
+            tail_h = self.uc.hook_add(UC_HOOK_BLOCK, tblock)
         try:
             self.uc.emu_start(self.lin(para, off), self.lin(*until),
                               count=max_insns)
         except UcError as e:
             raise EmuError(f'emulation failed: {e}')
         finally:
+            if cov is not None:
+                self.uc.hook_del(cov)
+            if tail is not None:
+                self.uc.hook_del(tail_h)
+                if raise_box:
+                    print(' '.join(f'{c:04x}:{i:04x}' for c, i in tail), file=sys.stderr)
             self.uc.hook_del(h)
             self.uc.hook_del(h2)
             for g in guards:

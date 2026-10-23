@@ -1339,8 +1339,11 @@ def advance_battle(emu, ui, sp, rng):
 
 # the original smashes its stack on some random inputs; those vectors are
 # dropped: Do_UnitEditDlg on an empty army slot (UnitRankName 1068:61db copies
-# an out-of-table rank text into a 26-byte buffer)
-SKIP_ON_CRASH = {'Do_UnitEditDlg'}
+# an out-of-table rank text into a 26-byte buffer); CmDemissionieren: in about
+# 1 of 130 random states a computer turn that follows (NextPlayer → CpuTurn)
+# returns to a smashed address (VERBAND.KSR, a player with 16 units: most
+# likely the 17-unit overrun of Ai_ArrangeArmies, docs/rules/ai.md)
+SKIP_ON_CRASH = {'Do_UnitEditDlg', 'CmDemissionieren'}
 
 HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
                       'Battle_CmAufgeben', 'Battle_CombatOptionsMenu', 'Battle_WMLButtonDown')
@@ -1828,7 +1831,10 @@ def main():
     for func in funcs:
         addr, args, ret, fields = SPECS[func][:4]
         clamps = SPECS[func][4] if len(SPECS[func]) > 4 else {}
-        for _ in range(n):
+        for vec_i in range(n):
+            if os.environ.get('KAISER_TRACE_FROM') and vec_i >= int(os.environ['KAISER_TRACE_FROM']):
+                import kaiser_emu
+                kaiser_emu.TRACE_TAIL = 60    # a failing run prints its last blocks
             save = rng.choice(SAVES)
             header, players, num = load_save(save)
             p = rng.randrange(num)
@@ -2146,6 +2152,7 @@ def main():
             except EmuError:
                 if emu.last_runerror is None:
                     if os.environ.get('KAISER_DEBUG_UI'):
+                        print(f'save={os.path.basename(save)} p={p} seed={seed}', file=sys.stderr)
                         print('|'.join(ui.log), file=sys.stderr)
                     if func in SKIP_ON_CRASH:
                         continue                  # an input the original can't take

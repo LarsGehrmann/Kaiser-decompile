@@ -10,3 +10,4 @@ port/bin/
 port/obj/
 tools/lazarus/
 .claude/worktrees/
+tools/emu/coverage/
