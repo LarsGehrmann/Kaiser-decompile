@@ -20,6 +20,8 @@ type
     FSaveFile: string;
     FToolbar: TKaiserToolbar;
     FBuffer: TBitmap;
+    FBoss: Boolean;                 { CmBossKey: close without asking (Self+0x4958) }
+    FAccel: TBytes;                 { ACCELERATORS MENUKEYS: flags, key, command (5 bytes) }
     procedure BuildMenu;
     procedure AddItems(Into: TMenuItem; const M: TMenuTemplate);
     procedure MenuClick(Sender: TObject);
@@ -27,6 +29,12 @@ type
     procedure UpdateMenu;
     procedure CheckCommand(Id: Word; On: Boolean);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormKeyPress(Sender: TObject; var Key: Char);
+    function Accelerator(Virt: Boolean; Key: Word; Shift: TShiftState): Boolean;
+    procedure CmLoadLastGame;
+    procedure CmBossKey;
     procedure FormShow(Sender: TObject);
     procedure FormWindowStateChange(Sender: TObject);
     procedure FormPaint(Sender: TObject);
@@ -364,6 +372,11 @@ begin
   Color := clBlack;
   OnPaint := @FormPaint;
   OnClose := @FormClose;
+  OnCloseQuery := @FormCloseQuery;
+  KeyPreview := True;
+  OnKeyDown := @FormKeyDown;
+  OnKeyPress := @FormKeyPress;
+  FAccel := Exe.Find(9, 'MENUKEYS');              { RT_ACCELERATOR }
   OnShow := @FormShow;
   OnWindowStateChange := @FormWindowStateChange;
   OnMouseDown := @FormMouseDown;
@@ -406,13 +419,17 @@ begin
       MI.Caption := Utf8(M.Items[I].Text);
     MI.Tag := M.Items[I].Id;
     MI.Checked := M.Items[I].Flags and $8 <> 0;           { MF_CHECKED }
-    { the usual macOS shortcuts for the file commands }
+    {$ifdef darwin}
+    { the usual macOS shortcuts for the file commands (besides the
+      original's keys, FormKeyDown; on Windows those alone: ssMeta would be
+      the Windows key) }
     case MI.Tag of
       101: MI.ShortCut := ShortCut(VK_N, [ssMeta]);         { Neues Spiel }
       102: MI.ShortCut := ShortCut(VK_O, [ssMeta]);         { Öffnen }
       103: MI.ShortCut := ShortCut(VK_S, [ssMeta]);         { Speichern }
       401: MI.ShortCut := ShortCut(VK_E, [ssMeta]);         { Runde beenden }
     end;
+    {$endif}
     if M.Items[I].Flags and $10 <> 0 then
       AddItems(MI, M.Items[I])
     else
@@ -490,6 +507,92 @@ begin
   if Running then
     for I := 0 to 7 do
       CheckCommand(701 + I, FSave.Players[DS.Game.CurrentPlayer].ReportFlags and (1 shl I) <> 0);
+end;
+
+{ CanClose (1000:0af4): a running game ends only after asking, except by the
+  boss key (and under the autopilot) }
+procedure TKaiserForm.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  if (DS.Game.GameState = 1) and not FBoss and (GetEnvironmentVariable('KAISER_AUTOPILOT') = '') and
+     (GetEnvironmentVariable('KAISER_AUTOGAME') = '') and (GetEnvironmentVariable('KAISER_MAINSHOT') = '') then
+    CanClose := Application.MessageBox(PChar(Utf8(DSText($0284))), PChar(Utf8(DSText($02BF))),
+      MB_YESNO or MB_ICONQUESTION) = IDYES;
+end;
+
+{ the original's accelerators (MENUKEYS, TranslateAccelerator): VIRTKEY
+  entries by key and SHIFT/CONTROL/ALT, ASCII entries by character (the
+  control characters are Ctrl + letter); the first match counts. Commands
+  without a handler in the original (212, 313) do nothing }
+function TKaiserForm.Accelerator(Virt: Boolean; Key: Word; Shift: TShiftState): Boolean;
+var
+  P: Integer;
+  Flags: Byte;
+  K, Cmd: Word;
+  Mods: TShiftState;
+begin
+  Result := False;
+  P := 0;
+  while P + 5 <= Length(FAccel) do
+  begin
+    Flags := FAccel[P];
+    K := FAccel[P + 1] or (FAccel[P + 2] shl 8);
+    Cmd := FAccel[P + 3] or (FAccel[P + 4] shl 8);
+    Mods := [];
+    if Flags and $04 <> 0 then Include(Mods, ssShift);
+    if Flags and $08 <> 0 then Include(Mods, ssCtrl);
+    if Flags and $10 <> 0 then Include(Mods, ssAlt);
+    if (K <> 0) and ((Flags and 1 <> 0) = Virt) and (K = Key) and
+       (not Virt or (Shift * [ssShift, ssCtrl, ssAlt] = Mods)) then
+    begin
+      if (Cmd <> 212) and (Cmd <> 313) then
+        Command(Cmd);
+      Exit(True);
+    end;
+    if Flags and $80 <> 0 then
+      Break;
+    Inc(P, 5);
+  end;
+end;
+
+procedure TKaiserForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Accelerator(True, Key, Shift) then
+    Key := 0
+  else if (Shift * [ssCtrl, ssAlt, ssMeta] = [ssCtrl]) and (Key >= VK_A) and (Key <= VK_Z) and
+          Accelerator(False, Key - VK_A + 1, Shift) then                    { Ctrl+A = #1 }
+    Key := 0;
+end;
+
+procedure TKaiserForm.FormKeyPress(Sender: TObject; var Key: Char);
+begin
+  if (Key >= ' ') and Accelerator(False, Ord(Key), []) then
+    Key := #0;
+end;
+
+{ CmLoadLastGame (1000:1292, Ctrl+L): the game of KAISER.INI's "Letzter Pfad" }
+procedure TKaiserForm.CmLoadLastGame;
+var
+  F: string;
+begin
+  if (DS.Game.GameState = 1) and
+     (Application.MessageBox(PChar(Utf8(DSText($03BA))), PChar(Utf8(DSText($03F0))),
+       MB_YESNO or MB_ICONQUESTION) <> IDYES) then
+    Exit;
+  F := ReadLastGame(SettingsFile);
+  if F <> '' then
+    LoadGameFile(F);
+end;
+
+{ CmBossKey (1000:3944, key b): a running game to boss.ksr (DS:0251), then
+  closed without asking }
+procedure TKaiserForm.CmBossKey;
+begin
+  if DS.Game.GameState <> 1 then
+    Exit;
+  FBoss := True;
+  FSave.Header := DS.Game;
+  WriteSaveGame(ExtractFilePath(OwnSettingsFile) + 'boss.ksr', FSave);
+  Close;
 end;
 
 procedure TKaiserForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
@@ -673,6 +776,8 @@ begin
         Invalidate;
       end;
     CmdExit: Close;
+    801: CmBossKey;
+    803: CmLoadLastGame;
     CmdInfo:                                    { CmInfo 1000:390b: KaiserDlg ABOUTBOX }
       begin
         D := UI.Dialog('KaiserDlg', $3364, [APtr(Self), AStr(DSText($04F2))]);
@@ -699,7 +804,8 @@ var
 begin
   { 1000:0e3c: a running game is given up only after asking }
   if (DS.Game.GameState = 1) and
-     (Application.MessageBox('Das laufende Spiel abbrechen?', 'Kaiser', MB_YESNO) <> IDYES) then
+     (Application.MessageBox(PChar(Utf8(DSText($0324))), PChar(Utf8(DSText($035A))),
+       MB_YESNO or MB_ICONQUESTION) <> IDYES) then
     Exit;
   DS.Game.GameState := 0;
   OD := TOpenDialog.Create(Self);
@@ -725,6 +831,11 @@ begin
   end;
   FSave := S;
   FSaveFile := FileName;
+  { Ini_WriteLastGame (after CmFileOpen / LoadFromCommandLine); not for
+    autosave.ksr and boss.ksr, which are not kept as the game's file }
+  if (CompareText(ExtractFileName(FileName), 'autosave.ksr') <> 0) and
+     (CompareText(ExtractFileName(FileName), 'boss.ksr') <> 0) then
+    WriteLastGame(OwnSettingsFile, ExpandFileName(FileName), ExtractFileName(FileName));
   DS.Game := FSave.Header;
   { LoadGame (1050:07ed): Randomize, an e-mail game its stored RandSeed }
   if DS.Game.EmailGameQ = 0 then

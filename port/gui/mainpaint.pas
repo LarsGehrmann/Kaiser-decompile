@@ -51,6 +51,7 @@ type
     R: TRect;                 { button: +0d (X, Y, X + bmWidth + 4, Y + bmHeight + 4) }
     Enabled: Boolean;         { +0c }
     Down: Boolean;            { +0b drawn down }
+    Grey: TBitmap;            { the disabled look, made once (the pattern is fixed to the spot) }
   end;
 
   TKaiserToolbar = class(TCustomControl)
@@ -61,10 +62,14 @@ type
     FPending: PtrInt;
     procedure LoadTools(const ResName: RawByteString);
     procedure DrawTool(C: TCanvas; I: Integer);
+    procedure FreeGrey;
     function HitTest(I, X, Y: Integer): Boolean;
     procedure Post(Data: PtrInt);
   protected
     procedure Paint; override;
+  public
+    destructor Destroy; override;
+  protected
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -624,6 +629,7 @@ var
 begin
   { Toolbar::LoadTools (1080:0229): word N, N x (bitmap id, command);
     bitmap 0 is a spacer of that size; tools from (2, 2); +8 px border }
+  FreeGrey;
   SetLength(FTools, 0);
   FW := 5;
   FH := 5;
@@ -738,6 +744,11 @@ begin
   begin
     { ROP 00A803A9 = D and (P or S) with the GrayingBitmap pattern (origin
       0, 0 of the toolbar) over the LTGRAY face }
+    if FTools[I].Grey <> nil then
+    begin
+      C.Draw(L + Off, T + Off, FTools[I].Grey);
+      Exit;
+    end;
     if GrayImg = nil then
       if ResBitmap('GRAYINGBITMAP') <> nil then
         GrayImg := ResBitmap('GRAYINGBITMAP').CreateIntfImage;
@@ -759,18 +770,30 @@ begin
           Sc.Alpha := $FFFF;
           DI.Colors[X, Y] := Sc;
         end;
+      { (a disabled tool is never drawn down: Off is always 2 here) }
       Dis := TBitmap.Create;
-      try
-        Dis.LoadFromIntfImage(DI);
-        C.Draw(L + Off, T + Off, Dis);
-      finally
-        Dis.Free;
-      end;
+      Dis.LoadFromIntfImage(DI);
+      FTools[I].Grey := Dis;
+      C.Draw(L + Off, T + Off, Dis);
     finally
       DI.Free;
       SI.Free;
     end;
   end;
+end;
+
+procedure TKaiserToolbar.FreeGrey;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FTools) do
+    FreeAndNil(FTools[I].Grey);
+end;
+
+destructor TKaiserToolbar.Destroy;
+begin
+  FreeGrey;
+  inherited Destroy;
 end;
 
 procedure TKaiserToolbar.PaintTo(C: TCanvas; ClientH: Integer);

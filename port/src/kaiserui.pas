@@ -107,6 +107,9 @@ type
   protected
     FDialogs: array of TDialog;
     function Register(D: TDialog): TDialog;
+    { a dialog that is done for good (the GUI): out of the list and freed;
+      the test layers keep theirs for the O<n> numbering }
+    procedure Release(D: TDialog);
     function FindDialog(P: Pointer): TDialog;
   public
     destructor Destroy; override;
@@ -269,6 +272,21 @@ begin
   FDialogs[High(FDialogs)] := D;
   D.Index := Length(FDialogs);
   Result := D;
+end;
+
+procedure TGameUI.Release(D: TDialog);
+var
+  I, J: Integer;
+begin
+  for I := 0 to High(FDialogs) do
+    if FDialogs[I] = D then
+    begin
+      for J := I to High(FDialogs) - 1 do
+        FDialogs[J] := FDialogs[J + 1];
+      SetLength(FDialogs, Length(FDialogs) - 1);
+      D.Free;
+      Exit;
+    end;
 end;
 
 function TGameUI.FindDialog(P: Pointer): TDialog;

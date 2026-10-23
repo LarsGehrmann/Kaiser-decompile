@@ -275,7 +275,13 @@ begin
   if T.FontFace <> '' then
   begin
     Font.Name := Utf8(T.FontFace);
-    Font.Size := Round(T.FontSize * 96 / 72);   { Windows laid the dialogs out at 96 DPI }
+    { Windows laid the dialogs out at 96 DPI: there LCL converts the points
+      itself, on macOS a point is a pixel }
+    {$ifdef darwin}
+    Font.Size := Round(T.FontSize * 96 / 72);
+    {$else}
+    Font.Size := T.FontSize;
+    {$endif}
   end;
   { the dialog base units of the template font (GetDialogBaseUnits) }
   Measure := TBitmap.Create;
@@ -377,6 +383,7 @@ begin
       if It.Style and 1 <> 0 then
         TScrollBar(C).Kind := sbVertical;
       TScrollBar(C).OnChange := @ControlClick;
+      TScrollBar(C).LargeChange := 10;                { OWL's PageMagnitude }
     end
     else if (It.ClassName = 'STATIC') and (It.Style and $F = 3) then
     begin

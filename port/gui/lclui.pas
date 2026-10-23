@@ -10,7 +10,7 @@ interface
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
   KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports, GameDialogs,
-  Battle, War, BattleForm, HelpView;
+  Battle, War, BattleForm, HelpView, KaiserSave;
 
 type
   TLclUI = class(TGameUI)
@@ -20,6 +20,7 @@ type
   public
     MainForm: TForm;
     Players: PPlayers;            { the game's players (Victory) }
+    Save: ^TSaveGame;             { the game (the autosave) }
     function Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog; override;
     function Execute(D: TDialog): SmallInt; override;
     procedure Done(D: TDialog; Flag: Word); override;
@@ -100,20 +101,31 @@ begin
     end;
   end;
   {$ifdef windows}
-  { what the original calls: sndPlaySound (MMSYSTEM.2) }
+  { what the original calls: sndPlaySound (MMSYSTEM.2); the wide version
+    for a temp folder with non-ASCII characters }
   if Async then
-    sndPlaySound(PChar(FN), SND_ASYNC or SND_NODEFAULT)
+    sndPlaySoundW(PWideChar(UnicodeString(UTF8Decode(FN))), SND_ASYNC or SND_NODEFAULT)
   else
-    sndPlaySound(PChar(FN), SND_SYNC or SND_NODEFAULT);
+    sndPlaySoundW(PWideChar(UnicodeString(UTF8Decode(FN))), SND_SYNC or SND_NODEFAULT);
   {$else}
   with TProcess.Create(nil) do
   try
-    Executable := '/usr/bin/afplay';
-    Parameters.Add(FN);
+    { asynchronous: a shell that starts afplay in the background and ends
+      at once (waited for, so no exited child is left behind) }
     if Async then
-      Options := []
+    begin
+      Executable := '/bin/sh';
+      Parameters.Add('-c');
+      Parameters.Add('/usr/bin/afplay "$1" >/dev/null 2>&1 &');
+      Parameters.Add('sh');
+      Parameters.Add(FN);
+    end
     else
-      Options := [poWaitOnExit];
+    begin
+      Executable := '/usr/bin/afplay';
+      Parameters.Add(FN);
+    end;
+    Options := [poWaitOnExit];
     Execute;
   finally
     Free;
@@ -173,11 +185,21 @@ end;
 
 procedure TLclUI.Done(D: TDialog; Flag: Word);
 var
-  I: Integer;
+  I, J: Integer;
 begin
+  { the form and the dialog go (nothing uses a dialog after its Done; a
+    long game made thousands of them) }
+  J := 0;
   for I := 0 to High(FForms) do
-    if (FForms[I] <> nil) and (FForms[I].D = D) then
-      FreeAndNil(FForms[I]);
+    if FForms[I].D = D then
+      FForms[I].Free
+    else
+    begin
+      FForms[J] := FForms[I];
+      Inc(J);
+    end;
+  SetLength(FForms, J);
+  Release(D);
 end;
 
 function TLclUI.ExecDialog(D: TDialog): SmallInt;
@@ -308,7 +330,19 @@ begin
   else if Name = 'FightRaiders' then
     Result := War.FightRaiders(Args[0].P, PPlayer(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
   else if Name = 'MessageBox' then
-    Result := Application.MessageBox(PChar(Utf8(ArgText(Args[1]))), 'Kaiser', MB_OK)
+    { MessageBox(HWnd, text, caption, type): the answer counts (IDYES = 6) }
+    Result := Application.MessageBox(PChar(Utf8(ArgText(Args[1]))), PChar(Utf8(ArgText(Args[2]))),
+      Word(Args[3].V))
+  else if Name = 'SaveGame' then
+  begin
+    { the autosave of BeginHumanTurn (1000:33c0): autosave.ksr (DS:0244),
+      next to the port's KAISER.INI }
+    if Save <> nil then
+    begin
+      Save^.Header := DS.Game;
+      WriteSaveGame(OwnDataFile('autosave.ksr'), Save^);
+    end;
+  end
   else if Name = 'Randomize' then
     Real48.RandSeed := LongInt(GetTickCount64);      { the clock, like Borland's Randomize }
 end;

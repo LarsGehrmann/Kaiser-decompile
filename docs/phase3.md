@@ -108,6 +108,11 @@ GUI links with `-k-ld_classic`.
   [MAP], the anchor of `docs/manual.md`); the dialog types whose port does not keep the help
   context (+0x2e) take the constants of their `HelpDlg.Init` calls.
 - **Right click** on a unit of the map: `ShowUnitLookDlg` (1040:330f).
+- **Keys** (`MENUKEYS`, read from kaiser.exe): the original's accelerators (F1–F12, Ctrl+N/O/S/R/L/P …,
+  single letters such as `b`, the boss key: the game to boss.ksr and closed, 1000:3944; Ctrl+L
+  loads KAISER.INI's last game, 1000:1292, which loading now records); on macOS also Cmd+N/O/S/E.
+  Closing during a game asks like `CanClose` (1000:0af4). "Geschichtsschreibung" writes
+  autosave.ksr at every human turn start (next to the port's KAISER.INI).
 - **Music** (`port/gui/music.pas`): kaiser.mid in a loop on the title screen like MidiOpen /
   MidiPlay / MMMciNotify / MidiClose (1000:0920–0a0e): started by the first show and a
   restore (WMSize), EndGame and "Schalmeienklänge", stopped by a minimise, the painting of a

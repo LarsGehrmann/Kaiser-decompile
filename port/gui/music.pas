@@ -100,7 +100,9 @@ begin
   if (GetEnvironmentVariable('KAISER_AUTOPILOT') <> '') or not FileExists(FileName) then
     Exit;
   {$ifdef windows}
-  if mciSendString(PChar('open "' + FileName + '" type sequencer alias ' + Alias), nil, 0, 0) <> 0 then
+  { (the wide version: a path with non-ASCII characters) }
+  if mciSendStringW(PWideChar(UnicodeString('open "' + UTF8Decode(FileName) + '" type sequencer alias ' +
+    Alias)), nil, 0, 0) <> 0 then
     Exit;
   mciSendString('play ' + Alias, nil, 0, 0);
   {$endif}

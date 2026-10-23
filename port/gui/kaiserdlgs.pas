@@ -170,9 +170,9 @@ begin
   try
     if C is TScrollBar then
     begin
-      TScrollBar(C).Min := Lo;
-      TScrollBar(C).Max := Hi;
-      TScrollBar(C).PageSize := 0;
+      { in one step (Min first raised for Lo > the old Max); Hi < Lo is an
+        empty range, which LCL refuses }
+      TScrollBar(C).SetParams(TScrollBar(C).Position, Lo, Max(Lo, Hi), 0);
     end
     else if C is TSpinBar then
     begin

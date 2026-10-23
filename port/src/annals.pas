@@ -126,7 +126,9 @@ begin
   if not FileExists(FileName) then
     Exit;
   AssignFile(F, FileName);
+  FileMode := 0;  { read-only: the original's KAISER.SCO is write-protected }
   {$I-} Reset(F, 1); {$I+}
+  FileMode := 2;
   if IOResult <> 0 then
     Exit;
   try
@@ -196,7 +198,9 @@ begin
   if FileExists(FileName) then
   begin
     AssignFile(F, FileName);
+    FileMode := 0;  { read-only, like KAISER.SCO }
     {$I-} Reset(F, 1); {$I+}
+    FileMode := 2;
     if IOResult = 0 then
     begin
       BlockRead(F, R, RecordsSize, N);
