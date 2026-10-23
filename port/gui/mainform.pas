@@ -248,6 +248,13 @@ begin
         Do_Sabotage(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
         Invalidate;
       end;
+    214:                                        { CmKriegFuehren 1000:193f }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_KriegFuehren(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers,
+          DS.Game.Year);
+        Invalidate;
+      end;
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);

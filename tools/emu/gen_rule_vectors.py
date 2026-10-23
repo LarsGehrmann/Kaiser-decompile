@@ -481,6 +481,9 @@ SPECS = {
     'Do_Sabotage': ('1038:3564', ['Wnd', 'A', 'I', 'N'], 'none',
                     ['sabotage_agents', 'sabotage_budget', 'sabotage_funds', 'title',
                      'J.palace_parts', 'taler', 'J.fame', 'J.army1_count']),
+    'DeclareWar': ('1038:40e8', ['Wnd', 'A', 'I', 'OB:1', 'N', 'Y'], 'byte',
+                   ['title', 'army_away', 'army1_count', 'initiative', 'peace_years', 'fame',
+                    'J.army1_count', 'J.army2_count', 'h.initiative_enabled', 'J.mailbox']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -832,6 +835,17 @@ def preset_invest(rng, players, p, num):
     return m
 
 
+def preset_war_target(rng, players, p, num):
+    """Sometimes nobody has troops, sometimes a peace treaty is in force."""
+    m = []
+    if rng.random() < 0.3:
+        for j in range(num):
+            if j != p:
+                m += set_field(players, j, 'army1_count', 0)
+                m += set_field(players, j, 'army2_count', 0)
+    return m
+
+
 def preset_round(rng, players, p, num):
     """Human p ends the turn; the others are mostly computer players with
     their messages, attitudes and treaties."""
@@ -885,6 +899,7 @@ def preset_battle(rng, players, p, num):
 
 
 PRESETS = {
+    'DeclareWar': preset_war_target,
     'Do_Gebaeude': preset_invest,
     **{f: preset_battle for f in SPECS if f.startswith('Battle_')},
     **{f: preset_battle for f in ('Battle_OtherSide', 'Battle_IsInCity',
@@ -1202,6 +1217,7 @@ DIALOG_TESTS = {
     'CmSpiel': ['SZENARIENINFODLG'],
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
     'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
+    'DeclareWar': ['GEGNERDLG'],
     'Do_Sabotage': ['SABOTAGEBUDGETDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG'],
 }
 

@@ -12,7 +12,7 @@ unit Actions;
 interface
 
 uses
-  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn;
+  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn, War;
 
 { Land handeln (1040:7e4b): LANDDLG on a copy of all players; on OK the
   copy is taken over and buildings that no longer fit are lost }
@@ -65,6 +65,15 @@ procedure Do_Sabotage(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: By
 { 'Zuschlagen!' against Target (1038:35bf): SABOTAGEWAHLDLG, SabotageAction
   and its report }
 procedure SabotageStrike(Parent: Pointer; var Players: TPlayers; Me, NumPlayers, Target: Byte);
+{ the war declaration (1038:40e8): title, army and initiative checks, the
+  target (GEGNERDLG); True when the war is on, Target the enemy }
+function DeclareWar(Parent: Pointer; var Players: TPlayers; Me: Byte; var Target: Byte;
+  NumPlayers: Byte; Year: Word): Boolean;
+{ Krieg fuehren (CmKriegFuehren 1000:193f): declare, arrange the Heer,
+  fight (a second battle at the city if the field battle opened it), news;
+  the e-mail game hand-over is not ported }
+procedure Do_KriegFuehren(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -265,6 +274,20 @@ type
     procedure Init; override;
     procedure SetupWindow; override;
     function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { GEGNERDLG (VMT DS:1498, 1038:4379): combo box 101, statics 201 own
+    initiative, 202 the attack's cost; the target +0x3a, the number of
+    players +0x3b, Me +0x3c, the count +0x3d, the targets +0x3e, all
+    players at +0x48, country -> player +0x449a, names +0x44a4 (0x33 each) }
+  TGegnerDlg = class(TDialogLogic)
+  public
+    function Players: PPlayers;
+    procedure Init; override;
+    procedure SetupWindow; override;
+    procedure UpdateCost;
+    function Handle(Id: SmallInt): Boolean; override;
+    function CanClose: Boolean; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -1941,6 +1964,184 @@ begin
   UI.Done(D, 1);
 end;
 
+{ -- Krieg ------------------------------------------------------------------ }
+
+function TGegnerDlg.Players: PPlayers;
+begin
+  Result := PPlayers(@D.Data[$48]);
+end;
+
+procedure TGegnerDlg.Init;
+var
+  I, Last: Byte;
+begin
+  D.Data[$3D] := 0;
+  D.Data[$3A] := 0;
+  D.Data[$3C] := Byte(Args[3].V);
+  D.Data[$3B] := Byte(Args[2].V);
+  Move(PPlayers(Args[4].P)^, D.Data[$48], SizeOf(TPlayers));
+  for I := 0 to 9 do
+    D.Data[$449A + I] := $FF;
+  Last := Byte(D.Data[$3B] - 1);
+  I := 0;
+  repeat
+    D.Data[$449A + Players^[I].Country] := I;
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+  { every other player is a target (IsValidTarget 1038:4620 always agrees) }
+  I := 0;
+  repeat
+    if I <> D.Data[$3C] then
+    begin
+      D.Data[$3E + D.Data[$3D]] := I;
+      FormatPlayerTitle(Players^[I], PChar(@D.Data[$44A4 + D.Data[$3D] * $33]), 0, 0);
+      Inc(D.Data[$3D]);
+    end;
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+end;
+
+procedure TGegnerDlg.SetupWindow;
+var
+  I, Last: Byte;
+begin
+  Last := Byte(D.Data[$3D] - 1);
+  I := 0;
+  repeat
+    C.AddString(101, PChar(@D.Data[$44A4 + I * $33]));
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+  C.ComboSetText(101, PChar(@D.Data[$44A4 + D.Data[$3A] * $33]));
+  SetNumber(C, 201, Players^[D.Data[$3C]].Initiative);
+  UpdateCost;
+end;
+
+procedure TGegnerDlg.UpdateCost;
+var
+  M, T: Byte;
+begin
+  D.Data[$3A] := D.Data[$3E + C.GetSelIndex(101)];
+  M := D.Data[$3C];
+  T := D.Data[$3A];
+  SetNumber(C, 202, AttackInitiativeCost(Players^[M].Country, Players^[T].Country));
+end;
+
+function TGegnerDlg.Handle(Id: SmallInt): Boolean;
+begin
+  if Id <> 101 then
+    Exit(False);
+  D.Data[$3A] := D.Data[$3E + C.GetSelIndex(101)];
+  UpdateCost;
+  Result := True;
+end;
+
+function TGegnerDlg.CanClose: Boolean;
+var
+  M, T: Byte;
+  E: TDialog;
+begin
+  D.Data[$3A] := D.Data[$3E + C.GetSelIndex(101)];
+  M := D.Data[$3C];
+  T := D.Data[$3A];
+  if ShortInt(Players^[M].PeaceYears[T]) >= 1 then
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(D), AStr(DSText($153A))])          { CONFIRMPEACEBUSTDLG }
+  else if Players^[M].Initiative < AttackInitiativeCost(Players^[M].Country, Players^[T].Country) then
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(D), AStr(DSText($154E))])          { the Heer winters abroad }
+  else
+    Exit(True);
+  Result := UI.Execute(E) = 1;
+  UI.Done(E, 1);
+end;
+
+function DeclareWar(Parent: Pointer; var Players: TPlayers; Me: Byte; var Target: Byte;
+  NumPlayers: Byte; Year: Word): Boolean;
+var
+  D, E: TDialog;
+  P: PPlayer;
+begin
+  Result := False;
+  P := @Players[Me];
+  if P^.Title < 2 then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($14EC))]);    { GEGNERERRORDLG }
+    UI.Execute(D);
+    UI.Done(D, 1);
+  end
+  else if (P^.ArmyAway <> 0) or (P^.Army1Count = 0) then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($14FB))]);    { NOHEERDLG }
+    UI.Execute(D);
+    UI.Done(D, 1);
+  end
+  else if (P^.Initiative < 1) and (DS.Game.InitiativeEnabled <> 0) then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($1505))]);    { no initiative }
+    UI.Execute(D);
+    UI.Done(D, 1);
+  end
+  else
+  begin
+    D := UI.Dialog('GegnerDlg', $1498, [APtr(Parent), AStr(DSText($150D)), AByte(NumPlayers),
+      AByte(Me), APtr(@Players)]);
+    if UI.Execute(D) = 1 then
+    begin
+      Target := D.Data[$3A];
+      if (Players[Target].Army1Count = 0) and (Players[Target].Army2Count = 0) then
+      begin
+        E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($1517))]);   { HASNOTROOPSDLG }
+        if UI.Execute(E) <> 1 then
+          Exit(False);                       { no Done of either dialog: as the original }
+        UI.Done(E, 1);
+      end;
+      Result := True;
+      if ShortInt(P^.PeaceYears[Target]) > 0 then
+      begin
+        { breaking the peace; the original clears the target's entry of
+          itself instead of its treaty with Me }
+        LoseFame(P^.Fame, 50);
+        P^.PeaceYears[Target] := 0;
+        Players[Target].PeaceYears[Target] := 0;
+        Players[Target].Mailbox[Me * 6] := 0;
+      end;
+    end;
+    UI.Done(D, 1);
+  end;
+end;
+
+procedure Do_KriegFuehren(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);
+var
+  T, R: Byte;
+  Title: array[0..101] of Char;
+  D: TDialog;
+begin
+  if not DeclareWar(Parent, Players, Me, T, NumPlayers, Year) then
+    Exit;
+  UI.Call('Do_TruppenAufstellen', [APtr(Parent), APtr(@Players[Me]), AByte(1)]);
+  DS.Game.GameState := 2;
+  R := Battle(Parent, Players[Me], Players[T], Me, T, 0);
+  if R = 3 then
+  begin
+    { the field battle is won: on to the city? }
+    FormatPlayerTitle(Players[Me], Title, 0, 0);
+    D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText($043E)), AStr(Title)]);
+    if UI.Execute(D) = 1 then
+      R := Battle(Parent, Players[Me], Players[T], Me, T, 1);
+    UI.Done(D, 1);
+  end;
+  if R = 1 then
+    AddNews(Players, NumPlayers, T, Me, 8)
+  else
+    AddNews(Players, NumPlayers, T, Me, 9);
+  DS.Game.GameState := 1;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -2125,4 +2326,5 @@ initialization
   RegisterDialogLogic('TributDlg', TTributDlg);
   RegisterDialogLogic('SabotageBudgetDlg', TSabotageBudgetDlg);
   RegisterDialogLogic('SabotageWahlDlg', TSabotageWahlDlg);
+  RegisterDialogLogic('GegnerDlg', TGegnerDlg);
 end.
