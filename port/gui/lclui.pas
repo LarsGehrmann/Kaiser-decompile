@@ -111,7 +111,10 @@ begin
     Do_HandelMitGuetern(Args[0].P, PPlayer(Args[1].P)^)
   else if Name = 'PlaySound' then
   begin
-    { WAVEDATA resource n, played by afplay (sndPlaySound, asynchronous) }
+    { WAVEDATA resource n, played by afplay (sndPlaySound, asynchronous),
+      when "Krach & Geschrei" is on }
+    if DS.OptSound = 0 then
+      Exit;
     Data := Exe.FindNamedType('WAVEDATA', '', Word(Args[0].V));
     if Data = nil then
       Exit;

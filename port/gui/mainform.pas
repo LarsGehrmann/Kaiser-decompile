@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL;
+  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni;
 
 type
   TKaiserForm = class(TForm)
@@ -22,6 +22,8 @@ type
     procedure MenuClick(Sender: TObject);
     function FindItem(Id: Word): TMenuItem;
     procedure UpdateMenu;
+    procedure CheckCommand(Id: Word; On: Boolean);
+    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormPaint(Sender: TObject);
     procedure AutoStart(Sender: TObject);
   public
@@ -80,6 +82,7 @@ begin
   Position := poScreenCenter;
   Color := DialogBackground;
   OnPaint := @FormPaint;
+  OnClose := @FormClose;
   FillChar(FSave, SizeOf(FSave), 0);
   BuildMenu;
   UpdateMenu;
@@ -150,14 +153,43 @@ begin
     MI.Enabled := On;
 end;
 
+procedure TKaiserForm.CheckCommand(Id: Word; On: Boolean);
+var
+  MI: TMenuItem;
+begin
+  MI := FindItem(Id);
+  if MI <> nil then
+    MI.Checked := On;
+end;
+
 procedure TKaiserForm.UpdateMenu;
 var
   Running: Boolean;
+  I: Integer;
 begin
+  { Menu_EnableGameCommands / Menu_DisableGameCommands (1060:006c / 0104):
+    the 31 game commands of DS:3e4c }
   Running := DS.Game.GameState = 1;
+  for I := 0 to 30 do
+    EnableCommand(PWord(@PByte(@DS)[$3E4C + 2 * I])^, Running);
   EnableCommand(CmdSave, Running);
   EnableCommand(CmdSaveAs, Running);
   EnableCommand(CmdEndTurn, Running);
+  { UpdateSettingsMenu (1060:019c) }
+  CheckCommand(601, DS.OptAutosave <> 0);
+  CheckCommand(602, DS.OptSound <> 0);
+  CheckCommand(603, DS.OptMusic <> 0);
+  for I := 0 to 2 do
+    CheckCommand(610 + I, DS.OptResolution = I);
+  { Menu_UpdateReportChecks (1060:0254) }
+  if Running then
+    for I := 0 to 7 do
+      CheckCommand(701 + I, FSave.Players[DS.Game.CurrentPlayer].ReportFlags and (1 shl I) <> 0);
+end;
+
+procedure TKaiserForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
+begin
+  WriteSettings(OwnSettingsFile);
 end;
 
 procedure TKaiserForm.MenuClick(Sender: TObject);
@@ -261,6 +293,14 @@ begin
         Do_Demissionieren(Self, 0, FSave.Players);
         Invalidate;
       end;
+    601: DS.OptAutosave := Ord(DS.OptAutosave = 0);        { Geschichtsschreibung }
+    602: DS.OptSound := Ord(DS.OptSound = 0);              { Krach und Geschrei }
+    603: DS.OptMusic := Ord(DS.OptMusic = 0);              { Schalmeienklaenge (MIDI not played) }
+    610..612: DS.OptResolution := Id - 610;
+    701..708:                                   { Berichte: the reports at turn start }
+      if DS.Game.GameState = 1 then
+        with FSave.Players[DS.Game.CurrentPlayer] do
+          ReportFlags := ReportFlags xor (1 shl (Id - 701));
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);
