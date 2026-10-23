@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs, Rules, Actions, Annals;
+  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel;
 
 type
   TLclUI = class(TGameUI)
@@ -113,6 +113,7 @@ var
   Data: TBytes;
   FN: string;
   S: TFileStream;
+  F: TKaiserDialog;
 begin
   Result := 0;
   { the ported menu actions the turn calls }
@@ -124,6 +125,17 @@ begin
     Do_Gebaeude(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
   else if Name = 'Do_HandelMitGuetern' then
     Do_HandelMitGuetern(Args[0].P, PPlayer(Args[1].P)^)
+  else if Name = 'Do_TruppenAufstellen' then
+    Troops.Do_TruppenAufstellen(Args[0].P, PPlayer(Args[1].P)^, Byte(Args[2].V))
+  else if Name = 'Do_Geheimdienst' then
+    Intel.Do_Geheimdienst(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V),
+      Word(Args[4].V))
+  else if (Name = 'TroopDlg_DrawHeer') or (Name = 'TroopDlg_DrawGarde') then
+  begin
+    F := FormOf(FindDialog(Args[1].P));
+    if F is TLogicDialog then
+      TLogicDialog(F).DrawTroops;
+  end
   else if Name = 'Victory' then
     Annals.Victory(Args[0].P, Players^)
   else if Name = 'Annals_Load' then

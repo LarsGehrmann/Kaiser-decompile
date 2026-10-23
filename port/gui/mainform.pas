@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals;
+  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel;
 
 type
   TKaiserForm = class(TForm)
@@ -304,6 +304,25 @@ begin
       if DS.Game.GameState = 1 then
         with FSave.Players[DS.Game.CurrentPlayer] do
           ReportFlags := ReportFlags xor (1 shl (Id - 701));
+    211:                                        { CmTruppenAufstellen 1000:18bf }
+      if DS.Game.GameState = 1 then
+      begin
+        Troops.Do_TruppenAufstellen(Self, FSave.Players[DS.Game.CurrentPlayer], 0);
+        Invalidate;
+      end;
+    221:                                        { CmEntwicklungshilfe 1000:17bb }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_Entwicklungshilfe(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
+        Invalidate;
+      end;
+    305:                                        { CmGeheimdienst 1000:1c04 }
+      if DS.Game.GameState = 1 then
+      begin
+        Intel.Do_Geheimdienst(Self, FSave.Players, DS.Game.NumPlayers, DS.Game.CurrentPlayer,
+          DS.Game.Year);
+        Invalidate;
+      end;
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);

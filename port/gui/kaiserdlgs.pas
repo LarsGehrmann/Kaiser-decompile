@@ -12,7 +12,7 @@ interface
 
 uses
   SysUtils, Classes, Controls, StdCtrls, ExtCtrls, Forms, Graphics, Strings, NERes,
-  KaiserTypes, KaiserDS, KaiserUI, KaiserLCL;
+  KaiserTypes, KaiserDS, KaiserUI, KaiserLCL, Troops;
 
 type
   TKaiserDialog = class(TTemplateForm)
@@ -147,7 +147,19 @@ type
   TLogicDialog = class(TKaiserDialog)
   private
     FControls: TFormControls;
+    FHeer, FGarde: TImage;          { ANORDNENDLG: the painted grids }
+    FTimer: TTimer;                 { REKRUTDLG: WMTimer every 400 ms }
+    procedure GridMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure TimerTick(Sender: TObject);
   public
+    { TroopDlg_DrawHeer / DrawGarde (1038:84a1 / 8699): the grids of the
+      Heer (65 x 161) and the Garde (113 x 113, in walls) with the unit
+      icons (sprites 1100+type / 1200+type, a hero 1150+picture), the
+      selected cells red }
+    procedure DrawTroops;
     destructor Destroy; override;
     function Logic: TDialogLogic;
     procedure SetupWindow; override;
@@ -885,7 +897,121 @@ begin
   FControls := TFormControls.Create;
   FControls.F := Self;
   Logic.C := FControls;
+  { the window size, as KaiserDlg.SetupWindow leaves it at +0x2a / +0x2c
+    (dialogs with painted areas scale their positions with it) }
+  PSmallInt(@D.Data[$2A])^ := Width;
+  PSmallInt(@D.Data[$2C])^ := Height;
+  OnMouseDown := @FormMouseDown;
+  OnMouseMove := @FormMouseMove;
   Logic.SetupWindow;
+  if D.Name = 'TroopDlg' then
+    DrawTroops;
+  if D.Name = 'RecruitDlg' then
+  begin
+    FTimer := TTimer.Create(Self);
+    FTimer.Interval := 400;
+    FTimer.OnTimer := @TimerTick;
+  end;
+end;
+
+procedure TLogicDialog.TimerTick(Sender: TObject);
+begin
+  if Logic is TRecruitDlg then
+    TRecruitDlg(Logic).Timer;
+end;
+
+procedure TLogicDialog.FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  if Button = mbLeft then
+    Logic.Mouse(X, Y);
+end;
+
+procedure TLogicDialog.FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+begin
+  Logic.MouseMove(X, Y);
+end;
+
+procedure TLogicDialog.GridMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  if Button = mbLeft then
+    Logic.Mouse(TControl(Sender).Left + X, TControl(Sender).Top + Y);
+end;
+
+procedure TLogicDialog.GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+begin
+  Logic.MouseMove(TControl(Sender).Left + X, TControl(Sender).Top + Y);
+end;
+
+procedure TLogicDialog.DrawTroops;
+var
+  P: PPlayer;
+
+  function Grid(var Img: TImage; X, Y, W, H: Integer): TCanvas;
+  begin
+    if Img = nil then
+    begin
+      Img := TImage.Create(Self);
+      Img.Parent := Self;
+      Img.OnMouseDown := @GridMouseDown;
+      Img.OnMouseMove := @GridMouseMove;
+    end;
+    Img.SetBounds(X, Y, W, H);
+    Img.Picture.Bitmap.SetSize(W, H);
+    Result := Img.Picture.Bitmap.Canvas;
+    Result.Brush.Color := clWhite;
+    Result.Pen.Color := clBlack;
+    Result.Rectangle(0, 0, W, H);
+  end;
+
+  procedure Icon(Cv: TCanvas; const U: TUnit; Base, X, Y: Integer; Selected: Boolean);
+  var
+    B: TBitmap;
+    N: Integer;
+  begin
+    if Selected then
+    begin
+      Cv.Brush.Color := clRed;
+      Cv.Pen.Color := clBlack;
+      Cv.Rectangle(X, Y, X + 32, Y + 32);
+    end;
+    if U.UnitType = 9 then
+      N := Base + 50 + PByte(@U)[$1A]                 { a hero: his picture }
+    else
+      N := Base + U.UnitType;
+    B := Sprite(N);
+    if B <> nil then
+      Cv.Draw(X, Y, B);
+  end;
+
+var
+  Cv: TCanvas;
+  I: Integer;
+  Wall: TBitmap;
+begin
+  P := PPlayer(@D.Data[$34]);
+  Cv := Grid(FHeer, PSmallInt(@D.Data[$710])^, PSmallInt(@D.Data[$712])^, 65, 161);
+  for I := 1 to P^.Army1Count do
+    if I <= 8 then
+      Icon(Cv, P^.Army1[I], 1100, DS.TroopHeerX[I] * 32, DS.TroopHeerY[I] * 32,
+        (D.Data[$70A] = I) or (D.Data[$70B] = I));
+  Cv := Grid(FGarde, PSmallInt(@D.Data[$714])^, PSmallInt(@D.Data[$716])^, 113, 113);
+  Wall := ResBitmap('MAUER');
+  if Wall <> nil then
+  begin
+    Cv.Brush.Bitmap := Wall;
+    Cv.FillRect(0, 0, 8, 113);
+    Cv.FillRect(105, 0, 113, 113);
+    Cv.FillRect(0, 105, 113, 113);
+    Cv.FillRect(0, 0, 40, 8);
+    Cv.FillRect(72, 0, 113, 8);
+    Cv.Brush.Bitmap := nil;
+  end;
+  for I := 1 to P^.Army2Count do
+    if I <= 9 then
+      Icon(Cv, P^.Army2[I], 1200, DS.TroopGardeX[I] * 32 + 8, DS.TroopGardeY[I] * 32 + 8,
+        (D.Data[$70C] = I) or (D.Data[$70D] = I));
 end;
 
 function TLogicDialog.CanClose: Boolean;
