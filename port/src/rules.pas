@@ -2373,6 +2373,14 @@ begin
   if Len = 0 then
     Exit;
   OutLen := PSmallInt(@PByte(@DS)[$42F0 + 2 * Len])^;  { length with separators }
+  if Len >= 10 then
+  begin
+    { the table ends at 9 digits: the original writes the digits 11520 bytes
+      away (a stray write) and keeps the empty string }
+    if V < 0 then
+      StrCat(Dest, DSText($4305));
+    Exit;
+  end;
   Count := 0;
   I := Len - 1;
   K := OutLen - 1;

@@ -200,6 +200,16 @@ their templates:
 `port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
 `Do_HandelMitGuetern` with the Prokurist (100), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each). Segment 9 frames are zeroed like the logic segments.
 
+Original bugs found by the dialog tests (the specs keep the inputs out of their range):
+
+- KORNDLG: with fewer than 20 inhabitants the need rounds to 0 and the gauge (1040:9081)
+  divides by it (runtime error 200).
+- GUETERHANDELDLG: labels go into an 11-byte buffer next to the loop counter; a number below
+  −999,999,999 overwrites the counter (endless loop).
+- `FormatThousands` (1068:6b58, Wirtschaft and other statistics): its length table ends at 9
+  digits; a 10-digit number makes it write the digits 11,520 bytes off its buffer and show an
+  empty string. The port shows the same and skips the stray write.
+
 ## The headless simulator
 
 `ksrsim` is the game without a window: the human players do nothing but end their turn

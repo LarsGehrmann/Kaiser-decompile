@@ -460,6 +460,17 @@ SPECS = {
     'Do_ManoeverAbhalten': ('1040:4ede', ['Wnd', 'P', 'W:0:0'], 'none',
                             ['initiative', 'army1_count', 'army_away', 'taler', 'spell',
                              'h.initiative_enabled', 'u.experience', 'u.level', 'u.type']),
+    'CmWirtschaft': ('1000:1cf0', ['NIL', 'SELF'], 'none',
+                     ['total_grain_trade', 'total_goods_sales', 'building_balance', 'taler'],
+                     # FormatThousands (1068:6b58) has lengths up to 9 digits only:
+                     # 10-digit numbers make it write 11520 bytes off its buffer
+                     {'total_grain_trade': (-99999999, 99999999),
+                      'total_goods_sales': (-99999999, 99999999),
+                      'building_balance': (-99999999, 99999999)}),
+    'CmMilitaer': ('1000:1c91', ['NIL', 'SELF'], 'none',
+                   ['attacks_won', 'attacks_lost', 'defences_won', 'defences_lost',
+                    'raider_fights_won', 'raider_fights_lost', 'own_units_killed',
+                    'deserted_units', 'manoeuvres_held']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -917,6 +928,8 @@ def header_newgame(rng, header, players, p, num):
 
 # per function: header mutations after the random ones
 HEADER_PRESETS = {
+    'CmWirtschaft': header_turn,
+    'CmMilitaer': header_turn,
     'NextPlayer': header_turn,
     'CmBeenden': header_turn,
     'CmNeuesSpiel': header_newgame,
@@ -1161,6 +1174,8 @@ DIALOG_TESTS = {
     'Do_Finanzhaushalt': ['HAUSHALTSDLG'],
     'Do_InternationalerVergleich': ['RANGLISTENDLG'],
     'Do_Karriereberatung': ['KARRIEREDLG'],
+    'CmWirtschaft': ['WIRTSTATDLG'],
+    'CmMilitaer': ['MILSTATDLG'],
 }
 
 

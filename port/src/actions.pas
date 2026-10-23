@@ -41,6 +41,10 @@ procedure Do_Karriereberatung(Parent: Pointer; P: TPlayer);
 { Manoever abhalten (1040:4ede): costs money (and an initiative point),
   every unit of the Heer gains 1..5 experience }
 procedure Do_ManoeverAbhalten(Parent: Pointer; var P: TPlayer; Unused: Word);
+{ Wirtschaft (CmWirtschaft 1000:1cf0): WIRTSTATDLG, the running totals }
+procedure Do_Wirtschaft(Parent: Pointer; const P: TPlayer);
+{ Militaer (CmMilitaer 1000:1c91): MILSTATDLG, battles and losses }
+procedure Do_Militaer(Parent: Pointer; const P: TPlayer; Year: Word);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -142,6 +146,20 @@ type
     check boxes 101..107 population, happiness, land, army, palace,
     cathedral, Taler }
   TCareerDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+  end;
+
+  { WIRTSTATDLG (VMT DS:1b64, 1040:2997): the player at +0x2e; statics
+    101..119 }
+  TEconomyStatsDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+  end;
+
+  { MILSTATDLG (VMT DS:1b10, 1040:2e64): the year +0x703, the player at
+    +0x2e; statics 101..118 }
+  TMilitaryStatsDlg = class(TDialogLogic)
   public
     procedure SetupWindow; override;
   end;
@@ -1037,6 +1055,106 @@ begin
   UI.Done(D, 1);
 end;
 
+{ -- Wirtschaft, Militaer --------------------------------------------------- }
+
+procedure Do_Wirtschaft(Parent: Pointer; const P: TPlayer);
+var
+  D: TDialog;
+begin
+  D := UI.Dialog('EconomyStatsDlg', $1B64, [APtr(Parent), AStr(DSText($0454))]);
+  Move(P, D.Data[$2E], SizeOf(TPlayer));
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+procedure Do_Militaer(Parent: Pointer; const P: TPlayer; Year: Word);
+var
+  D: TDialog;
+begin
+  D := UI.Dialog('MilitaryStatsDlg', $1B10, [APtr(Parent), AStr(DSText($0448))]);
+  Move(P, D.Data[$2E], SizeOf(TPlayer));
+  PWord(@D.Data[$703])^ := Year;
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+procedure SetThousands(C: TDlgControls; Id: SmallInt; V: LongInt);
+var
+  Buf: array[0..255] of Char;
+begin
+  FormatThousands(Buf, V);
+  C.SetText(Id, Buf);
+end;
+
+procedure TEconomyStatsDlg.SetupWindow;
+var
+  Base: PByte;
+  G1, G2, G3, Total: LongInt;
+  K: Integer;
+
+  { a running total at player offset Off }
+  function T(Off: Integer): LongInt;
+  begin
+    Result := PLongInt(@Base[Off])^;
+  end;
+
+begin
+  Base := @D.Data[$2E];
+  G1 := LongInt(T($8B) + T($8F) + T($93) + T($9B));
+  G2 := LongInt(T($9F) + T($A3) + T($A7) + T($AB));
+  G3 := LongInt(T($AF) + T($B3) + T($B7) + T($BB));
+  Total := LongInt(G1 + G3 + G2 + T($BF) + T($C3) + T($97));
+  for K := 0 to 13 do
+    if K < 3 then
+      SetThousands(C, 101 + K, T($8B + 4 * K))
+    else
+      SetThousands(C, 101 + K, T($9B + 4 * (K - 3)));
+  SetThousands(C, 115, Total);
+  SetThousands(C, 116, G1);
+  SetThousands(C, 117, G3);
+  SetThousands(C, 118, G2);
+  SetThousands(C, 119, T($97));
+end;
+
+procedure TMilitaryStatsDlg.SetupWindow;
+var
+  P: PPlayer;
+  Buf: array[0..255] of Char;
+  W, L: SmallInt;
+  Year: PWord;
+
+  procedure Line(Id: SmallInt; Won, Lost: SmallInt);
+  begin
+    SetNumber(C, Id, Won);
+    SetNumber(C, Id + 1, Lost);
+    FormatPercent(Buf, Won, SmallInt(Won + Lost));
+    C.SetText(Id + 2, Buf);
+  end;
+
+begin
+  P := PPlayer(@D.Data[$2E]);
+  Line(101, P^.AttacksWon, P^.AttacksLost);
+  Line(104, P^.DefencesWon, P^.DefencesLost);
+  Line(107, P^.RaiderFightsWon, P^.RaiderFightsLost);
+  W := SmallInt(P^.AttacksWon + P^.DefencesWon + P^.RaiderFightsWon);
+  L := SmallInt(P^.AttacksLost + P^.DefencesLost + P^.RaiderFightsLost);
+  SetNumber(C, 110, W);
+  SetNumber(C, 111, L);
+  FormatPercent(Buf, W, LongInt(W) + L);
+  C.SetText(112, Buf);
+  SetNumber(C, 113, SmallInt(P^.OwnUnitsKilled + P^.DesertedUnits + P^.UnitsGivenOrDismissed));
+  SetNumber(C, 114, P^.OwnUnitsKilled);
+  SetNumber(C, 115, P^.DesertedUnits);
+  SetNumber(C, 116, P^.UnitsGivenOrDismissed);
+  SetNumber(C, 117, P^.EnemyUnitsKilled);
+  { manoeuvres per year }
+  Year := PWord(@D.Data[$703]);
+  if Year^ = 0 then
+    Year^ := 1;
+  StrPCopy(Buf, R48Str(R48Div(R48FromLong(P^.ManoeuvresHeld), R48FromLong(Year^)), 4, 2));
+  C.SetText(118, Buf);
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1211,4 +1329,6 @@ initialization
   RegisterDialogLogic('BudgetDlg', TBudgetDlg);
   RegisterDialogLogic('RankingDlg', TRankingDlg);
   RegisterDialogLogic('CareerDlg', TCareerDlg);
+  RegisterDialogLogic('EconomyStatsDlg', TEconomyStatsDlg);
+  RegisterDialogLogic('MilitaryStatsDlg', TMilitaryStatsDlg);
 end.
