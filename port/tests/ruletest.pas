@@ -394,6 +394,7 @@ begin
           'SabotageEnd': begin SabotageEnd(Window, Players, ArgI(0), ArgI(1)); Got := '-'; end;
           'ShowStartTurnDialog': Got := B2S(ShowStartTurnDialog(Window, Pl^, ArgI(0), ArgI(1)));
           'OfferUnitsAtTurnStart': begin OfferUnitsAtTurnStart(Window, Pl^); Got := '-'; end;
+          'Report_Gossip': begin Report_Gossip(Window, Players, ArgI(0)); Got := '-'; end;
           'RollYearlyEvent':
             begin
               RollYearlyEvent(Window, Players, ArgI(0), ArgI(1), ArgI(2));

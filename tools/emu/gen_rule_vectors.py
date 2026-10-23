@@ -281,6 +281,8 @@ SPECS = {
                         {'army1_count': (0, 8), 'army2_count': (0, 8), 'fame': (0, 100),
                          'markets': (0, 1000), 'mills': (0, 1000), 'granaries': (0, 1000),
                          'warehouses': (0, 1000)}),
+    'Report_Gossip': ('n1010:1bf0', ['Wnd', 'A', 'I'], 'none',
+                      ['title', 'is_female', 'spell', 'country']),
     'Bankruptcy': ('n1010:4f9f', ['Wnd', 'P'], 'none',
                    BUILD + ['taler', 'taler', 'title'],
                    dict({'taler': (-3000000, 100000)},
@@ -358,8 +360,22 @@ def preset_sabotage_log(rng, players, p, num):
     return m
 
 
+def preset_news(rng, players, p, num):
+    """Random news entries for the test player."""
+    n = rng.randint(0, 10)
+    m = set_field(players, p, 'news_count', n)
+    off, _ = field_info(ks.PLAYER, 'news')
+    news = b''.join(bytes([rng.randrange(num), rng.randrange(num), rng.randint(0, 17)])
+                    for _ in range(10))
+    a = p * PSIZE + off
+    players[a:a + 30] = news
+    m.append((a, news))
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
+    'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'SabotageEnd': preset_sabotage_log,
 }

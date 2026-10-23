@@ -32,6 +32,7 @@ function ShowStartTurnDialog(Parent: Pointer; var P: TPlayer; Me: Byte; Year: Wo
 procedure OfferUnitsAtTurnStart(Parent: Pointer; var P: TPlayer);  { 1010:22d4 }
 procedure RollYearlyEvent(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
   Year: Word);                                              { 1010:2ce5 }
+procedure Report_Gossip(Parent: Pointer; var Players: TPlayers; Me: Byte);  { 1010:1bf0 }
 
 implementation
 
@@ -871,6 +872,82 @@ begin
     UI.Done(D, 1);
   end;
   P^.Event := E;
+end;
+
+procedure Report_Gossip(Parent: Pointer; var Players: TPlayers; Me: Byte);
+var
+  P: PPlayer;
+  I, Last, Actor, Target, Kind: Byte;
+  Country: array[0..79] of Char;
+  Title: array[0..79] of Char;
+  D: TDialog;
+
+  procedure Msg(NameOfs: Word);
+  begin
+    D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText(NameOfs)), AStr(Country)]);
+  end;
+
+  procedure Msg2(NameOfs: Word);
+  begin
+    D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText(NameOfs)), AStr(Country),
+      AStr(Title)]);
+  end;
+
+begin
+  { "Klatsch und Tratsch": the news of the year }
+  P := @Players[Me];
+  if P^.NewsCount = 0 then
+    Exit;
+  Last := P^.NewsCount;
+  for I := 1 to Last do
+  begin
+    Actor := P^.News[3 * I - 3];
+    Target := P^.News[3 * I - 2];
+    Kind := P^.News[3 * I - 1];
+    StrCopy(Country, DS.CountryNamesRt[Players[Actor].Country]);
+    FormatPlayerTitle(Players[Actor], Title, 0, 0);
+    D := nil;
+    case Kind of
+      1: Msg($07D2);                                   { KLATSCHSABODLG }
+      2: Msg($07E1);                                   { KLATSCHPALBRANDDLG }
+      3: Msg($07F4);                                   { KLATSCHVULKANDLG }
+      4: Msg($0805);                                   { KLATSCHPESTDLG }
+      5, 6:
+        begin
+          StrCat(Country, DSText($0814));              { ' und ' }
+          StrCat(Country, DS.CountryNamesRt[Players[Target].Country]);
+          if Kind = 5 then
+            Msg($081A)                                 { KLATSCHPEACEDLG }
+          else
+            Msg($082A);                                { KLATSCHTRADEDLG }
+        end;
+      7: Msg($083A);                                   { KLATSCHMARODLG }
+      8, 9:
+        begin
+          FormatPlayerTitle(Players[Target], Title, 0, 0);
+          if Kind = 8 then
+            Msg2($0849)                                { KLATSCHWARWONDLG }
+          else
+            Msg2($085A);                               { KLATSCHWARLOSTDLG }
+        end;
+      $0B: Msg($086C);                                 { KLATSCHANADLG }
+      $0C: Msg($087A);                                 { KLATSCHUNRUHEDLG }
+      $0D:
+        if Players[Actor].IsFemale = 0 then
+          Msg2($088B)                                  { KLATSCHKINGDLG }
+        else
+          Msg2($089A);                                 { KLATSCHQUEENDLG }
+      $0E: Msg($08AA);                                 { KLATSCHPALDLG }
+      $0F: Msg($08B8);                                 { KLATSCHKATDLG }
+      $10: Msg2($08C6);                                { KLATSCHDEMISSIONDLG }
+    end;
+    if D <> nil then
+    begin
+      UI.Execute(D);
+      UI.Done(D, 1);
+    end;
+  end;
+  P^.NewsCount := 0;
 end;
 
 end.
