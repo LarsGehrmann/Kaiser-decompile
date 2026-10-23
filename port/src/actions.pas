@@ -17,6 +17,9 @@ uses
 { Land handeln (1040:7e4b): LANDDLG on a copy of all players; on OK the
   copy is taken over and buildings that no longer fit are lost }
 procedure Do_LandHandeln(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+{ Gebaeude (1040:6cff): INVESTDLG on a copy of the player; a palace or
+  cathedral finished (or lost) changes the fame, finishing one is news }
+procedure Do_Gebaeude(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -35,6 +38,22 @@ type
     procedure UpdateLabels;
     procedure Buy(N: LongInt);
     procedure Sell(N: LongInt);
+    function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { INVESTDLG (VMT DS:2986, 1040:6e6d, a HelpDlg): the player at +0x62,
+    buy mode +0x737 (0 = sell), the step +0x738 (1 or -1), the prices
+    +0x73c; buttons 201..209 buy or sell markets, mills, a palace part, a
+    cathedral part, granaries, warehouses, a university part, taverns,
+    smithies; 501 switches the mode }
+  TInvestDlg = class(TDialogLogic)
+  public
+    function Me: PPlayer;
+    function Step: LongInt;
+    function Price(K: Integer): LongInt;
+    procedure SetupWindow; override;
+    procedure Update;
+    procedure Pay(K: Integer);
     function Handle(Id: SmallInt): Boolean; override;
   end;
 
@@ -171,6 +190,215 @@ begin
   else
     Result := False;
   end;
+end;
+
+{ -- Do_Gebaeude ------------------------------------------------------------ }
+
+procedure Do_Gebaeude(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  D: TDialog;
+  Q: PPlayer;
+begin
+  D := UI.Dialog('InvestDlg', $2986, [APtr(Parent), AStr(DSText($2B04))]);
+  Move(Players[Me], D.Data[$62], SizeOf(TPlayer));
+  D.Data[$737] := 1;
+  if UI.Execute(D) = 1 then
+  begin
+    Q := PPlayer(@D.Data[$62]);
+    if (Q^.PalaceParts = 12) and (Players[Me].PalaceParts < 12) then
+    begin
+      GainFame(Q^.Fame, 10);
+      AddNews(Players, NumPlayers, Me, Me, $0E);
+    end;
+    if (Q^.CathedralParts = 12) and (Players[Me].CathedralParts < 12) then
+    begin
+      GainFame(Q^.Fame, 20);
+      AddNews(Players, NumPlayers, Me, Me, $0F);
+    end;
+    if (Q^.PalaceParts < 12) and (Players[Me].PalaceParts = 12) then
+      LoseFame(Q^.Fame, 10);
+    if (Q^.CathedralParts < 12) and (Players[Me].CathedralParts = 12) then
+      LoseFame(Q^.Fame, 20);
+    Move(Q^, Players[Me], SizeOf(TPlayer));
+  end;
+  UI.Done(D, 1);
+end;
+
+{ -- INVESTDLG ------------------------------------------------------------- }
+
+function TInvestDlg.Me: PPlayer;
+begin
+  Result := PPlayer(@D.Data[$62]);
+end;
+
+function TInvestDlg.Step: LongInt;
+begin
+  Result := PLongInt(@D.Data[$738])^;
+end;
+
+function TInvestDlg.Price(K: Integer): LongInt;
+begin
+  Result := PLongInt(@D.Data[$73C + 4 * K])^;
+end;
+
+procedure TInvestDlg.SetupWindow;
+begin
+  SetNumber(C, 402, LongInt(Me^.Land - Me^.LandUsed));
+  Update;
+end;
+
+procedure TInvestDlg.Update;
+var
+  K: Integer;
+  V, Farm: LongInt;
+  Buf: array[0..23] of Char;
+  P: PPlayer;
+
+  { room for one more: a building per 1000 Hufen of farmland }
+  function Room(N: LongInt): Boolean;
+  begin
+    Result := LongInt(Farm - LongInt(Int64(N) * 1000)) >= 1000;
+  end;
+
+begin
+  P := Me;
+  for K := 0 to 8 do
+  begin
+    if D.Data[$737] = 0 then
+    begin
+      C.SetItemCaption(201 + K, DSText($2B2D));
+      V := DS.BuildingPrices[K] div 4;
+    end
+    else
+    begin
+      C.SetItemCaption(201 + K, DSText($2B0E));
+      V := DS.BuildingPrices[K];
+      if P^.Spell = 6 then                             { Ferengicharme }
+        V := LongInt(Int64(V) * 3) div 4;
+    end;
+    PLongInt(@D.Data[$73C + 4 * K])^ := V;
+    IntToPChar(Buf, V);
+    StrCat(Buf, DSText($2B19));
+    C.SetText(301 + K, Buf);
+  end;
+  if D.Data[$737] = 0 then
+  begin
+    PLongInt(@D.Data[$738])^ := -1;
+    C.SetItemCaption(501, DSText($2B3B));
+  end
+  else
+  begin
+    PLongInt(@D.Data[$738])^ := 1;
+    C.SetItemCaption(501, DSText($2B20));
+  end;
+  SetNumber(C, 101, P^.Markets);
+  SetNumber(C, 102, P^.Mills);
+  SetNumber(C, 103, P^.PalaceParts);
+  SetNumber(C, 104, P^.CathedralParts);
+  SetNumber(C, 105, P^.Granaries);
+  SetNumber(C, 106, P^.Warehouses);
+  SetNumber(C, 107, P^.UniversityParts);
+  SetNumber(C, 108, P^.Taverns);
+  SetNumber(C, 109, P^.Smithies);
+  SetNumber(C, 401, P^.Taler);
+  if D.Data[$737] = 0 then
+  begin
+    C.Enable(201, P^.Markets > 0);
+    C.Enable(202, P^.Mills > 0);
+    C.Enable(203, P^.PalaceParts <> 0);
+    C.Enable(204, P^.CathedralParts <> 0);
+    C.Enable(205, P^.Granaries > 0);
+    C.Enable(206, (DS.Game.GoodsTradeEnabled <> 0) and (P^.Warehouses > 0));
+    C.Enable(207, P^.UniversityParts <> 0);
+    C.Enable(208, P^.Taverns > 0);
+    C.Enable(209, P^.Smithies > 0);
+    Exit;
+  end;
+  Farm := LongInt(P^.Land - P^.LandUsed);
+  C.Enable(201, Room(P^.Markets));
+  C.Enable(202, Room(P^.Mills));
+  C.Enable(203, (P^.PalaceBuiltThisTurn = 0) and (P^.PalaceParts < 12) and Room(P^.PalaceParts));
+  C.Enable(204, (P^.Title = 9) and (P^.CathedralBuiltThisTurn = 0) and (P^.CathedralParts < 12) and
+    Room(P^.CathedralParts));
+  C.Enable(205, Room(P^.Granaries));
+  C.Enable(206, (DS.Game.GoodsTradeEnabled <> 0) and (P^.Warehouses <= 29) and Room(P^.Warehouses));
+  C.Enable(207, (P^.UniversityBuiltThisTurn = 0) and (P^.UniversityParts < 12) and
+    Room(P^.UniversityParts));
+  C.Enable(208, Room(P^.Taverns));
+  C.Enable(209, Room(P^.Smithies));
+end;
+
+{ the price of K times the step (negative: a sale) }
+procedure TInvestDlg.Pay(K: Integer);
+var
+  Cost: LongInt;
+begin
+  Cost := LongInt(Int64(Price(K)) * Step);
+  Me^.Taler := LongInt(Me^.Taler - Cost);
+  Me^.BuildingBalance := LongInt(Me^.BuildingBalance - Cost);
+end;
+
+function TInvestDlg.Handle(Id: SmallInt): Boolean;
+var
+  P: PPlayer;
+  Buying: Boolean;
+begin
+  P := Me;
+  Buying := D.Data[$737] <> 0;
+  Result := True;
+  if (Id >= 201) and (Id <= 209) then
+    UI.Call('PlaySound', [AWord($0A), AWord(1)]);
+  case Id of
+    201: begin P^.Markets := LongInt(P^.Markets + Step); Pay(0); end;
+    202: begin P^.Mills := LongInt(P^.Mills + Step); Pay(1); end;
+    203:
+      begin
+        P^.PalaceParts := Byte(P^.PalaceParts + Byte(Step));
+        Pay(2);
+        if Buying then
+          P^.PalaceBuiltThisTurn := 1;
+      end;
+    204:
+      begin
+        P^.CathedralParts := Byte(P^.CathedralParts + Byte(Step));
+        Pay(3);
+        if Buying then
+          P^.CathedralBuiltThisTurn := 1;
+      end;
+    205:
+      begin
+        if Buying then
+          P^.Granaries := LongInt(P^.Granaries + 1)
+        else
+          RemoveGranaries(P^, 1);
+        Pay(4);
+      end;
+    206:
+      begin
+        if Buying then
+          P^.Warehouses := LongInt(P^.Warehouses + 1)
+        else
+          RemoveWarehouses(P^, 1);
+        Pay(5);
+      end;
+    207:
+      begin
+        P^.UniversityParts := Byte(P^.UniversityParts + Byte(Step));
+        Pay(6);
+        if Buying then
+          P^.UniversityBuiltThisTurn := 1;
+      end;
+    208: begin P^.Taverns := LongInt(P^.Taverns + Step); Pay(7); end;
+    209: begin P^.Smithies := LongInt(P^.Smithies + Step); Pay(8); end;
+    501:
+      begin
+        D.Data[$737] := Ord(D.Data[$737] = 0);
+        PLongInt(@D.Data[$738])^ := LongInt(Int64(Step) * -1);
+      end;
+  else
+    Exit(False);
+  end;
+  Update;
 end;
 
 { -- Do_KornVerteilen ------------------------------------------------------ }
@@ -339,4 +567,5 @@ end;
 initialization
   RegisterDialogLogic('LandDlg', TLandDlg);
   RegisterDialogLogic('GrainDlg', TGrainDlg);
+  RegisterDialogLogic('InvestDlg', TInvestDlg);
 end.

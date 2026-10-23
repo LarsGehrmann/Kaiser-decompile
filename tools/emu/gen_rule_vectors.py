@@ -429,6 +429,11 @@ SPECS = {
     # segments 8 and 9: the menu actions with their dialog types (DIALOG_TESTS)
     'Do_LandHandeln': ('1040:7e4b', ['Wnd', 'A', 'I', 'N'], 'none',
                        ['taler', 'land', 'land_used', 'land_price', 'J.land']),
+    'Do_Gebaeude': ('1040:6cff', ['Wnd', 'A', 'I', 'N'], 'none',
+                    ['taler', 'markets', 'mills', 'palace_parts', 'palace_built_this_turn',
+                     'cathedral_parts', 'cathedral_built_this_turn', 'granaries', 'warehouses',
+                     'university_parts', 'university_built_this_turn', 'taverns', 'smithies',
+                     'spell', 'title', 'fame', 'grain', 'salt', 'h.goods_trade_enabled']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -767,6 +772,19 @@ def preset_goods(rng, players, p, num):
     return m
 
 
+def preset_invest(rng, players, p, num):
+    """Farmland for some buildings, palace / cathedral parts near completion."""
+    off, _ = field_info(ks.PLAYER, 'land_used')
+    used = struct.unpack_from('<i', players, p * PSIZE + off)[0]
+    m = set_field(players, p, 'land', used + rng.choice([0, rng.randint(0, 5000), rng.randint(0, 60000)]))
+    for f in ('palace_parts', 'cathedral_parts'):
+        if rng.random() < 0.5:
+            m += set_field(players, p, f, rng.choice([11, 12]))
+    if rng.random() < 0.3:
+        m += set_field(players, p, 'title', 9)
+    return m
+
+
 def preset_round(rng, players, p, num):
     """Human p ends the turn; the others are mostly computer players with
     their messages, attitudes and treaties."""
@@ -820,6 +838,7 @@ def preset_battle(rng, players, p, num):
 
 
 PRESETS = {
+    'Do_Gebaeude': preset_invest,
     **{f: preset_battle for f in SPECS if f.startswith('Battle_')},
     **{f: preset_battle for f in ('Battle_OtherSide', 'Battle_IsInCity',
                                   'Battle_IsThreatened', 'Battle_HeroShouldFlee',
@@ -1109,6 +1128,7 @@ HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
 DIALOG_TESTS = {
     'Do_LandHandeln': ['LANDDLG'],
     'Do_KornVerteilen': ['KORNDLG'],
+    'Do_Gebaeude': ['INVESTDLG'],
 }
 
 

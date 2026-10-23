@@ -129,6 +129,7 @@ type
     procedure Enable(Id: SmallInt; On: Boolean); override;
     procedure Show(Id: SmallInt; Cmd: SmallInt); override;
     procedure SetCaption(S: PChar); override;
+    procedure SetItemCaption(Id: SmallInt; S: PChar); override;
     procedure SetCheck(Id: SmallInt; V: Word); override;
     function GetCheck(Id: SmallInt): Word; override;
     procedure SetRange(Id: SmallInt; Lo, Hi: SmallInt); override;
@@ -786,6 +787,11 @@ end;
 procedure TFormControls.SetCaption(S: PChar);
 begin
   F.Caption := Utf8(S);
+end;
+
+procedure TFormControls.SetItemCaption(Id: SmallInt; S: PChar);
+begin
+  F.SetText(Id, S);
 end;
 
 procedure TFormControls.SetCheck(Id: SmallInt; V: Word);

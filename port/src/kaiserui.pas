@@ -51,6 +51,8 @@ type
     procedure Enable(Id: SmallInt; On: Boolean); virtual; abstract;
     procedure Show(Id: SmallInt; Cmd: SmallInt); virtual; abstract;
     procedure SetCaption(S: PChar); virtual; abstract;
+    { TWindow.SetCaption on a control (a button's text) }
+    procedure SetItemCaption(Id: SmallInt; S: PChar); virtual; abstract;
     procedure SetCheck(Id: SmallInt; V: Word); virtual; abstract;
     function GetCheck(Id: SmallInt): Word; virtual; abstract;
     procedure SetRange(Id: SmallInt; Lo, Hi: SmallInt); virtual; abstract;

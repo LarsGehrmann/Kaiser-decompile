@@ -48,11 +48,21 @@ const
 procedure TKaiserForm.AutoStart(Sender: TObject);
 var
   T: Integer;
+  Cmds: TStringList;
 begin
-  { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game, TURNS turns }
+  { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game, the menu
+    commands of KAISER_AUTOMENU (e.g. 201,203), TURNS turns }
   TTimer(Sender).Enabled := False;
   CmNeuesSpiel;
   Invalidate;
+  Cmds := TStringList.Create;
+  try
+    Cmds.CommaText := GetEnvironmentVariable('KAISER_AUTOMENU');
+    for T := 0 to Cmds.Count - 1 do
+      Command(StrToIntDef(Cmds[T], 0));
+  finally
+    Cmds.Free;
+  end;
   for T := 1 to StrToIntDef(GetEnvironmentVariable('KAISER_AUTOGAME'), 0) do
     if DS.Game.GameState = 1 then
       CmBeenden;
@@ -173,7 +183,16 @@ begin
       end;
     202:                                        { CmLandHandeln 1000:15d7 }
       if DS.Game.GameState = 1 then
+      begin
         Do_LandHandeln(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
+        Invalidate;
+      end;
+    203:                                        { CmGebaeude 1000:1611 }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_Gebaeude(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
+        Invalidate;
+      end;
     CmdExit: Close;
     CmdInfo:
       begin

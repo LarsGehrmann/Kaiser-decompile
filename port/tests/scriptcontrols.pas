@@ -43,6 +43,7 @@ type
     procedure Enable(Id: SmallInt; On: Boolean); override;
     procedure Show(Id: SmallInt; Cmd: SmallInt); override;
     procedure SetCaption(S: PChar); override;
+    procedure SetItemCaption(Id: SmallInt; S: PChar); override;
     procedure SetCheck(Id: SmallInt; V: Word); override;
     function GetCheck(Id: SmallInt): Word; override;
     procedure SetRange(Id: SmallInt; Lo, Hi: SmallInt); override;
@@ -164,6 +165,12 @@ end;
 procedure TScriptControls.SetCaption(S: PChar);
 begin
   UI.Note(Format('SetCaption(O%d,s:%s)', [FDlgIndex, Hex(S)]));
+end;
+
+procedure TScriptControls.SetItemCaption(Id: SmallInt; S: PChar);
+begin
+  UI.Note(Format('SetCaption(c%d,s:%s)', [Id, Hex(S)]));
+  Ctl(Id).Text := S;
 end;
 
 procedure TScriptControls.SetCheck(Id: SmallInt; V: Word);
