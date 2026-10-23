@@ -202,11 +202,13 @@ class UILayer:
             size = emu.ds_word(vmt)                   # instance size from the VMT
             if (words[0], words[1]) != (0, 0):        # an object constructed in place
                 obj = (words[1], words[0])
+                emu.write(obj[0], obj[1], bytes(size))
             else:
                 if k >= 0xFE00 // OBJ_SIZE:
                     raise RuntimeError('too many dialogs')
                 obj = (emu.scratch_para + OBJ_SEG, k * OBJ_SIZE)
-            emu.write(obj[0], obj[1], bytes(size))
+                # all of it: GetText (+0x100) lies beyond most instance sizes
+                emu.write(obj[0], obj[1], bytes(OBJ_SIZE))
             emu.write(obj[0], obj[1], struct.pack('<H', FAKE_VMT))
             self.objects.append(obj)
             self.sizes.append(size)

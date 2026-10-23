@@ -51,6 +51,7 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   OB:n   pointer to an n-byte out record (zeroed), reported as hex
 #   PJ     pointer to another player J != test player (J shown)
 #   Wnd    the parent window pointer (UI calls log it as W)
+#   Y      a year: 0 (the first turn) in a quarter of the cases, else 1..300
 #   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
 # An address 'nSEG:OFF' is a near procedure. Functions that open dialogs
@@ -283,6 +284,14 @@ SPECS = {
                          'warehouses': (0, 1000)}),
     'Report_Gossip': ('n1010:1bf0', ['Wnd', 'A', 'I'], 'none',
                       ['title', 'is_female', 'spell', 'country']),
+    'PlayerTurnStart': ('1010:37b6', ['Wnd', 'W:0:65535', 'A', 'I', 'N', 'Y'], 'byte',
+                        ECON + POP + ARMY + ['cpu_level', 'army_away', 'lifetime', 'report_flags',
+                                             'report_flags', 'event', 'event', 'initiative',
+                                             'maximize_taxes', 'h.immortality', 'h.email_game_q',
+                                             'h.goods_trade_enabled', 'h.goods_trade_enabled'],
+                        {'army1_count': (0, 8), 'army2_count': (0, 8), 'fame': (0, 100),
+                         'markets': (0, 1000), 'mills': (0, 1000), 'granaries': (0, 1000),
+                         'warehouses': (0, 1000), 'title': (0, 10)}),
     'DiplomacyTurnStart': ('n1010:00e5', ['Wnd', 'A', 'I', 'N', 'W:0:300'], 'none',
                            ['fame', 'lifetime', 'taler', 'land', 'land_used', 'population',
                             'immigrants', 'emigrants', 'total_tribute', 'J.fame', 'J.taler',
@@ -307,6 +316,9 @@ UI_SCRIPTS = {
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'PlayerTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
+                        ('Email_AskPassword(', lambda rng: (rng.choice([0, 1, 1, 1]), {})),
+                        ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
     'GrantFirstHero': [('Execute(', lambda rng: (1, {0x49: bytes([rng.choice([0, 0, 1])]),
                                                     0x100: rng.choice([b'Testheld', b'', b'Ab'])
                                                     + b'\0'}))],
@@ -425,6 +437,7 @@ def preset_mailbox(rng, players, p, num):
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
     'DiplomacyTurnStart': preset_mailbox,
+    'PlayerTurnStart': preset_mailbox,
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'SabotageEnd': preset_sabotage_log,
@@ -681,6 +694,10 @@ def main():
                 elif kind == 'G':
                     v = int(10 ** rng.uniform(0, int(rest))) * rng.choice([1, 1, 1, -1])
                     call_args.append(('long', v & 0xFFFFFFFF))
+                    shown.append(str(v))
+                elif kind == 'Y':                     # a year, often the first
+                    v = 0 if rng.random() < 0.25 else rng.randint(1, 300)
+                    call_args.append(('word', v))
                     shown.append(str(v))
                 elif kind in ('B', 'W', 'L'):
                     lo, hi = (int(x) for x in rest.split(':'))

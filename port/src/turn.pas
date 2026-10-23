@@ -43,6 +43,8 @@ procedure Msg_TributeDemand(Parent: Pointer; var Players: TPlayers; Me, Sender: 
   Data: LongInt);                                           { 1010:0ead }
 procedure Msg_TributeAnswer(Parent: Pointer; var Players: TPlayers; Me, Sender, Sub: Byte;
   Data: LongInt; Paid: Byte);                               { 1010:17c6 }
+function PlayerTurnStart(Parent: Pointer; HWnd: Word; var Players: TPlayers;
+  Me, NumPlayers: Byte; Year: Word): Boolean;               { 1010:37b6 }
 
 implementation
 
@@ -1299,6 +1301,213 @@ begin
       5..$0B: Msg_Negotiation(Parent, Players, Me, I, NumPlayers, S^.Kind, Year);
     end;
   end;
+end;
+
+function PlayerTurnStart(Parent: Pointer; HWnd: Word; var Players: TPlayers;
+  Me, NumPlayers: Byte; Year: Word): Boolean;
+var
+  P: PPlayer;
+  WarehousesFull: Boolean;
+  XP, I, Last: Byte;
+  Gains: THeroGains;
+  GrainLoss, R: TReal48;
+  Rent, Cap: LongInt;
+begin
+  { the start of a human player's year (BeginHumanTurn); HWnd is unused.
+    False: the e-mail password was wrong }
+  FillChar(Gains, SizeOf(Gains), 0);
+  P := @Players[Me];
+  WarehousesFull := False;
+  UpdateInitiative(P^);
+  Dec(P^.Lifetime);
+  if not ShowStartTurnDialog(Parent, P^, Me, Year) then
+    Exit(False);
+  if Year = 0 then
+  begin
+    { the very first turn: no economy yet }
+    DiplomacyTurnStart(Parent, Players, Me, NumPlayers, Year);
+    UpdateMarketPrices(Players, Me, NumPlayers, Year);
+    MarriageDowry(Parent, P^);
+    if not HasHero(P^) then
+      GrantFirstHero(Parent, P^);
+    WitchChoosesSpell(Parent, P^);
+    if P^.Spell = 9 then
+    begin
+      { Heldentum: all troops gain ranks, the fame is gone }
+      P^.Fame := 0;
+      Last := P^.Army1Count;
+      for I := 1 to Last do
+        if UnitGainExperience(P^.Army1[I], Gains, 10, P^.Spell) then
+          UI.Call('ShowHeroLevelUp', [APtr(Parent), ARec(@Gains, SizeOf(Gains))]);
+    end;
+  end
+  else
+  begin
+    P^.EventMoney := 0;
+    P^.Immigrants := 0;
+    P^.Emigrants := 0;
+    P^.PalaceBuiltThisTurn := 0;
+    P^.CathedralBuiltThisTurn := 0;
+    P^.UniversityBuiltThisTurn := 0;
+    P^.YearFactorQ := R48Add(R48Mul(RandomReal, RC($0081, 0, $4000)), RC($0080, 0, 0));
+    if (P^.Title >= 2) or (P^.Spell = 12) then
+      OfferUnitsAtTurnStart(Parent, P^);
+    SabotageEnd(Parent, Players, Me, NumPlayers);
+    DiplomacyTurnStart(Parent, Players, Me, NumPlayers, Year);
+    if TestBit(P^.ReportFlags, 0) then
+      Report_Gossip(Parent, Players, Me);
+    RollYearlyEvent(Parent, Players, Me, NumPlayers, Year);
+    if (DS.Game.Immortality = 0) and (P^.Lifetime < 1) and Chance(25) then
+      RulerFallsIll(Parent);
+    if P^.Event = $11 then                             { raiders }
+    begin
+      if Byte(UI.Call('FightRaiders', [APtr(Parent), APtr(P), AByte(Me), AByte(1)])) = 1 then
+        RaiderVictoryReward(P^, 1)
+      else
+        AddNews(Players, NumPlayers, Me, Me, 7);
+    end;
+    if P^.Event = $13 then
+      if Byte(UI.Call('FightRaiders', [APtr(Parent), APtr(P), AByte(Me), AByte(2)])) = 1 then
+        RaiderVictoryReward(P^, 2);
+    if P^.MaximizeTaxes <> 0 then
+      MaximizeTaxes(P^);
+
+    { population }
+    UpdateBirthDeathRates(P^);
+    UpdateHappiness(P^);
+    P^.Births := R48Round(R48Mul(R48FromLong(P^.Population), P^.BirthRate));
+    P^.Deaths := R48Round(R48Mul(R48FromLong(P^.Population), P^.DeathRate));
+    P^.Immigrants := LongInt(P^.Immigrants +
+      R48Round(R48Mul(ImmigrationRate(P^), R48FromLong(P^.Population))));
+    P^.Emigrants := LongInt(P^.Emigrants +
+      R48Round(R48Mul(EmigrationRate(P^), R48FromLong(P^.Population))));
+    P^.Population := LongInt(P^.Population + P^.Births - P^.Deaths + P^.Immigrants - P^.Emigrants);
+    if P^.Population < 50 then
+      P^.Population := 50;
+
+    { budget }
+    P^.IncomeBuildings := IncomeFromBuildings(P^);
+    P^.TradeIncome := TradeAgreementIncome(Players, Me, NumPlayers);
+    P^.TaxIncome := Rules.TaxIncome(P^);
+    P^.JusticeIncome := Rules.JusticeIncome(P^);
+    P^.ArmyPay := Rules.ArmyPay(P^);
+    Rent := WarehouseRent(P^);
+    P^.RentAndInterest := LongInt(Rent + Interest(P^));
+    { the money side of this year's event (docs/rules/events.md) }
+    case P^.Event of
+      5: P^.EventMoney := LongInt(P^.EventMoney + (Random(5000) + 1000));
+      $0C: P^.EventMoney := LongInt(P^.EventMoney - P^.Population * 3);
+      $0F:
+        begin
+          R := R48Add(RandomReal, RC($0080, 0, 0));
+          P^.EventMoney := LongInt(P^.EventMoney + R48Round(R48Mul(R48Mul(
+            R48Add(P^.Justice, RC($717A, $0A3D, $23D7)), R), RC($0090, 0, $4350))));
+        end;
+      $0D: P^.EventMoney := LongInt(P^.EventMoney - SmallInt(P^.Title * 1000));
+      $11:
+        begin
+          Rent := Random(1000) + 500;
+          P^.EventMoney := LongInt(P^.EventMoney - Word(P^.Title * Rent));   { 16-bit MUL }
+        end;
+    end;
+    P^.NetIncome := LongInt(P^.IncomeBuildings + P^.TradeIncome + P^.TaxIncome + P^.JusticeIncome
+      - P^.ArmyPay + P^.RentAndInterest + P^.EventMoney);
+    P^.Taler := LongInt(P^.Taler + P^.NetIncome);
+    P^.BuildingBalance := LongInt(P^.BuildingBalance + P^.IncomeBuildings);
+    P^.TotalTaxJustice := LongInt(P^.TotalTaxJustice + (P^.TaxIncome + P^.JusticeIncome));
+    P^.TotalTradeIncome := LongInt(P^.TotalTradeIncome + P^.TradeIncome);
+    P^.TotalArmyPay := LongInt(P^.TotalArmyPay - P^.ArmyPay);
+    P^.TotalRentInterest := LongInt(P^.TotalRentInterest + P^.RentAndInterest);
+    P^.TotalEventMoney := LongInt(P^.TotalEventMoney + P^.EventMoney);
+
+    { harvest and goods }
+    if P^.Spell = 7 then                               { Gaias Segen }
+      P^.HarvestQuality := Random(3) + 3
+    else
+      P^.HarvestQuality := Random(5) + 1;
+    P^.Harvest := ComputeHarvest(P^, P^.HarvestQuality);
+    UpdateGrainPrice(P^, P^.HarvestQuality);
+    P^.Grain := MaxLong(0, LongInt(P^.Grain - P^.GrainDistributed));
+    ProduceGoods(P^);
+    UpdateMarketPrices(Players, Me, NumPlayers, Year);
+    if DS.Game.GoodsTradeEnabled <> 0 then
+    begin
+      Prokurist(P^);
+      WarehousesFull := (WarehouseFreeSpace(P^) = 0) and (P^.Warehouses > 0);
+    end;
+    { 5..15 % of the grain stock rots }
+    GrainLoss := R48Add(R48Div(RandomReal, RC($0084, 0, $2000)), RC($CD7C, $CCCC, $4CCC));
+    P^.Grain := LongInt(P^.Grain - R48Round(R48Mul(R48FromLong(P^.Grain), GrainLoss)));
+    if P^.Flags5bdQ and $0800 <> 0 then
+      P^.Grain := P^.Grain div 2;
+    if P^.Event = $10 then
+      P^.Grain := P^.Harvest
+    else
+      P^.Grain := LongInt(P^.Grain + P^.Harvest);
+    Cap := GrainCapacity(P^);
+    if P^.Grain > Cap then
+      P^.Grain := Cap;
+    P^.Grain := P^.Grain div 100 * 100;
+    if DS.Game.GoodsTradeEnabled <> 0 then
+      if Random(Word(20 - P^.Fame div 10)) = 0 then
+        UI.Call('TradeCaravan', [APtr(Parent), APtr(P), AWord(Year)]);
+    if P^.Initiative >= 0 then
+      P^.ArmyAway := 0;
+
+    { the troops gain experience (Feldmarschall: double) }
+    if Army1HasAbility(P^, $18) then
+      XP := 2
+    else
+      XP := 1;
+    Last := P^.Army1Count;
+    for I := 1 to Last do
+    begin
+      if P^.Army1[I].UnitType = 9 then
+      begin
+        if UnitGainExperience(P^.Army1[I], Gains, 1, P^.Spell) then
+          UI.Call('ShowHeroLevelUp', [APtr(Parent), ARec(@Gains, SizeOf(Gains))]);
+      end
+      else
+        UnitGainExperience(P^.Army1[I], Gains, XP, P^.Spell);
+      P^.Army1[I].UnconsciousRounds := 1;
+    end;
+    Last := P^.Army2Count;
+    for I := 1 to Last do
+    begin
+      if P^.Army2[I].UnitType = 9 then
+      begin
+        if UnitGainExperience(P^.Army2[I], Gains, 1, P^.Spell) then
+          UI.Call('ShowHeroLevelUp', [APtr(Parent), ARec(@Gains, SizeOf(Gains))]);
+      end
+      else
+        UnitGainExperience(P^.Army2[I], Gains, XP, P^.Spell);
+      P^.Army2[I].UnconsciousRounds := 1;
+    end;
+    if Chance(50) and Army1HasAbility(P^, $15) then
+      GainFame(P^.Fame, 1);
+
+    { the reports chosen in the menu "Berichte" }
+    if TestBit(P^.ReportFlags, 1) then
+      Report_Population(Parent, P^);
+    if TestBit(P^.ReportFlags, 2) then
+      Report_Budget(Parent, Players, Me, NumPlayers);
+    if TestBit(P^.ReportFlags, 3) then
+      UI.Call('Do_Geheimdienst', [APtr(Parent), APtr(@Players), AByte(NumPlayers), AByte(Me),
+        AWord(Year)]);
+    HarvestReport(Parent, P^, GrainLoss);
+  end;
+  if DS.Game.GoodsTradeEnabled <> 0 then
+    if (P^.Warehouses > 0) and TestBit(P^.ReportFlags, 4) then
+      UI.Call('Do_HandelMitGuetern', [APtr(Parent), APtr(P)])
+    else if WarehousesFull then
+      UI.Call('AskWarehousesFull', [APtr(Parent), APtr(@Players), AByte(Me), AByte(NumPlayers)]);
+  if TestBit(P^.ReportFlags, 5) then
+    UI.Call('Do_KornVerteilen', [APtr(Parent), APtr(P), AByte(1)]);
+  if TestBit(P^.ReportFlags, 6) then
+    UI.Call('Do_LandHandeln', [APtr(Parent), APtr(@Players), AByte(Me), AByte(NumPlayers)]);
+  if TestBit(P^.ReportFlags, 7) then
+    UI.Call('Do_Gebaeude', [APtr(Parent), APtr(@Players), AByte(Me), AByte(NumPlayers)]);
+  Result := True;
 end;
 
 end.

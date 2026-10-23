@@ -395,6 +395,8 @@ begin
           'ShowStartTurnDialog': Got := B2S(ShowStartTurnDialog(Window, Pl^, ArgI(0), ArgI(1)));
           'OfferUnitsAtTurnStart': begin OfferUnitsAtTurnStart(Window, Pl^); Got := '-'; end;
           'Report_Gossip': begin Report_Gossip(Window, Players, ArgI(0)); Got := '-'; end;
+          'PlayerTurnStart':
+            Got := B2S(PlayerTurnStart(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3)));
           'DiplomacyTurnStart':
             begin
               DiplomacyTurnStart(Window, Players, ArgI(0), ArgI(1), ArgI(2));

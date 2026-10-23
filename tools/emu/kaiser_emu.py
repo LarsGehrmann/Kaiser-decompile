@@ -16,7 +16,7 @@ import os
 import struct
 import sys
 
-from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_CODE
+from unicorn import Uc, UcError, UC_ARCH_X86, UC_MODE_16, UC_HOOK_CODE, UC_HOOK_INTR
 from unicorn.x86_const import (UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX,
                                UC_X86_REG_DX, UC_X86_REG_SI, UC_X86_REG_DI,
                                UC_X86_REG_BP, UC_X86_REG_SP, UC_X86_REG_CS,
@@ -35,6 +35,11 @@ STACK_SIZE = 0x8000
 REGS = {'ax': UC_X86_REG_AX, 'bx': UC_X86_REG_BX, 'cx': UC_X86_REG_CX,
         'dx': UC_X86_REG_DX, 'si': UC_X86_REG_SI, 'di': UC_X86_REG_DI,
         'bp': UC_X86_REG_BP, 'es': UC_X86_REG_ES}
+
+
+# segments with game logic (the others hold UI code, which tests stub out,
+# and the runtime); their ENTER frames get zeroed locals
+LOGIC_SEGMENTS = (2, 3, 4, 6, 7, 13, 14)
 
 
 def ghidra_seg(addr):
@@ -94,6 +99,48 @@ class KaiserEmu:
         # far return target: a HLT instruction in the stub segment
         self.return_ip = 0xFF00
         self.uc.mem_write(self.lin(self.stub_para, self.return_ip), b'\xf4')
+        self._zero_locals()
+
+    def _zero_locals(self):
+        """Every ENTER n,0 frame in the logic segments starts with zeroed locals.
+
+        Locals the original leaves uninitialised (e.g. unit records that
+        RecruitUnit copies into the army) would otherwise carry whatever
+        earlier calls left on the stack; the port's locals start at 0.
+        The ENTER is replaced by INT3 and emulated in an interrupt hook."""
+        import csv
+        path = os.path.join(ROOT, 'ghidra_out', 'functions.csv')
+        if not os.path.exists(path):
+            return
+        self._enter_at = {}
+        for row in csv.DictReader(open(path)):
+            try:
+                si, off = ghidra_seg(row['address'])
+            except (ValueError, KeyError):
+                continue
+            if si not in LOGIC_SEGMENTS:
+                continue
+            b = bytes(self.read(self.para[si], off, 4))
+            n = b[1] | b[2] << 8
+            if b[0] == 0xC8 and b[3] == 0 and n:
+                self._enter_at[self.lin(self.para[si], off)] = n
+                self.write(self.para[si], off, b'\xcc')
+
+        def on_int(uc, intno, user):
+            cs = uc.reg_read(UC_X86_REG_CS)
+            ip = uc.reg_read(UC_X86_REG_IP)
+            n = self._enter_at.get(self.lin(cs, ip - 1)) if intno == 3 else None
+            if n is None:
+                uc.emu_stop()
+                return
+            ss = uc.reg_read(UC_X86_REG_SS)
+            sp = (uc.reg_read(UC_X86_REG_SP) - 2) & 0xFFFF
+            uc.mem_write(self.lin(ss, sp), struct.pack('<H', uc.reg_read(UC_X86_REG_BP)))
+            uc.mem_write(self.lin(ss, sp - n), bytes(n))
+            uc.reg_write(UC_X86_REG_BP, sp)
+            uc.reg_write(UC_X86_REG_SP, sp - n)
+            uc.reg_write(UC_X86_REG_IP, ip + 3)
+        self.uc.hook_add(UC_HOOK_INTR, on_int)
 
     # -- memory helpers --------------------------------------------------
     @staticmethod
