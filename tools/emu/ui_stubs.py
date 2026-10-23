@@ -44,7 +44,7 @@ CTORS = {
 # virtual methods of the fake objects: VMT slot -> (name, arg kinds after Self,
 # returns a value)
 METHODS = {
-    0x08: ('Done', ['w'], False),
+    0x08: ('Done', ['b'], False),            # a Boolean pushed as a word (AH is garbage)
     0x38: ('ExecDialog', ['p'], True),       # on the application object (DS:5bde)
     0x4c: ('Execute', [], True),
     0x58: ('GetText', [], 'ptr'),            # HeroNameDlg: the entered name (at +0x100)
@@ -66,6 +66,7 @@ FUNCS = {
     'AskWarehousesFull': ('1040:081e', True, ['p', 'p', 'b', 'b'], False),
     'Do_LandHandeln': ('1040:7e4b', True, ['p', 'p', 'b', 'b'], False),
     'Do_Gebaeude': ('1040:6cff', True, ['p', 'p', 'b', 'b'], False),
+    'FreeMem': ('10c8:0147', True, ['p', 'w'], False),   # a dialog freed without Done
 }
 # segments that may only run through the stubs above (UI, OWL, battle view)
 GUARDED_SEGMENTS = [1, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24]

@@ -226,7 +226,7 @@ procedure TReplayUI.Done(D: TDialog; Flag: Word);
 var
   Entry: string;
 begin
-  Entry := Format('Done(O%d,%d)', [D.Index, Flag]);
+  Entry := Format('Done(O%d,%d)', [D.Index, Byte(Flag)]);
   if Take(Entry) = '!' then
     Entry := Entry + '!';
   FLog.Add(Entry);

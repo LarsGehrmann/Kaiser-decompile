@@ -23,6 +23,10 @@ procedure SkipTurnCheck(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: 
 procedure RevolutionCheck(Parent: Pointer; var P: TPlayer); { 1010:55bb }
 procedure GrainShortageWarning(Parent: Pointer; var P: TPlayer);  { 1010:47b1 }
 procedure MarriageDowry(Parent: Pointer; var P: TPlayer);   { 1010:2924 }
+procedure Bankruptcy(Parent: Pointer; var P: TPlayer);      { 1010:4f9f }
+procedure FormatPlayerTitle(const P: TPlayer; Dest: PChar; WithPrefix, WithEpithet: Byte);  { 1060:03d9 }
+procedure PromotionCheck(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);                                              { 1010:48fc }
 
 implementation
 
@@ -283,6 +287,228 @@ begin
       begin
         P.Granaries := P.Granaries + 1;
         P.Taler := P.Taler + 500;
+      end;
+  end;
+end;
+
+procedure Bankruptcy(Parent: Pointer; var P: TPlayer);
+var
+  Credit, Debt, Orig: LongInt;
+  L: TLandLoss;
+  D: TDialog;
+
+  { seize buildings of one kind, a fifth of the price each, while debt is left }
+  function Seize(Count: LongInt; Price: Byte): LongInt;
+  begin
+    Result := 1;
+    while (Result <= Count) and (Debt > 0) do
+    begin
+      Inc(Result);
+      Debt := Debt - DS.BuildingPrices[Price] div 5;
+    end;
+    Dec(Result);
+  end;
+
+begin
+  Credit := CreditLimit(P);
+  if P.Taler < 0 then
+    LoseFame(P.Fame, 1);
+  if LongInt(-Credit) < P.Taler then
+    Exit;
+  if Random(2) = 0 then
+  begin
+    { the bank waits another year }
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($0A06))]);
+    UI.Execute(D);
+    UI.Done(D, 0);
+    Exit;
+  end;
+  FillChar(L, SizeOf(L), 0);
+  Debt := LongInt(Abs(P.Taler) - Credit);
+  Orig := Debt;
+  L.Markets := Seize(P.Markets, 0);
+  L.Mills := Seize(P.Mills, 1);
+  L.Granaries := Seize(P.Granaries, 4);
+  L.Warehouses := Seize(P.Warehouses, 5);
+  L.Taverns := Seize(P.Taverns, 7);
+  L.Smithies := Seize(P.Smithies, 8);
+  L.UniversityParts := Seize(P.UniversityParts, 6);
+  L.PalaceParts := Seize(P.PalaceParts, 2);
+  L.CathedralParts := Seize(P.CathedralParts, 3);
+  if (L.Markets = 0) and (L.Mills = 0) and (L.PalaceParts = 0) and (L.CathedralParts = 0) and
+     (L.Granaries = 0) and (L.Warehouses = 0) then
+  begin
+    { nothing (that counts) to seize }
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($0A06))]);
+    UI.Execute(D);
+    UI.Done(D, 0);
+    Exit;
+  end;
+  P.Markets := P.Markets - L.Markets;
+  P.Mills := P.Mills - L.Mills;
+  if L.PalaceParts > 0 then
+  begin
+    if P.PalaceParts = 12 then
+      LoseFame(P.Fame, 10);
+    P.PalaceParts := Byte(P.PalaceParts - Byte(L.PalaceParts));
+  end;
+  if L.CathedralParts > 0 then
+  begin
+    if P.CathedralParts = 12 then
+      LoseFame(P.Fame, 20);
+    P.CathedralParts := Byte(P.CathedralParts - Byte(L.CathedralParts));
+  end;
+  RemoveGranaries(P, L.Granaries);
+  RemoveWarehouses(P, L.Warehouses);
+  P.UniversityParts := Byte(P.UniversityParts - Byte(L.UniversityParts));
+  P.Taverns := P.Taverns - L.Taverns;
+  P.Smithies := P.Smithies - L.Smithies;
+  P.Taler := LongInt(-Credit) - Debt;
+  L.Total := Orig - Debt;
+  P.BuildingBalance := P.BuildingBalance + L.Total;
+  UI.Call('ShowBuildingLossDlg', [APtr(Parent), AStr(DSText($0A14)), ARec(@L, SizeOf(L)), AByte(1)]);
+  LoseFame(P.Fame, 7);
+end;
+
+procedure FormatPlayerTitle(const P: TPlayer; Dest: PChar; WithPrefix, WithEpithet: Byte);
+var
+  Sp: array[0..1] of Char;
+begin
+  { "[Kaiser - ]<title> <name>[ genannt "<epithet>"] von <country>" }
+  StrCopy(Sp, DSText($4166));                          { ' ' }
+  if WithPrefix <> 0 then
+    StrCopy(Dest, DSText($4168))                       { 'Kaiser - ' }
+  else
+    StrCopy(Dest, DSText($4167));                      { '' }
+  if P.IsFemale = 0 then
+    StrCat(Dest, DS.TitleNames[P.Title])
+  else
+    StrCat(Dest, DS.FemaleTitleNames[P.Title]);
+  StrCat(Dest, Sp);
+  StrCat(Dest, P.Name);
+  if (WithEpithet <> 0) and (P.Spell <> 0) then
+  begin
+    StrCat(Dest, DSText($4172));                       { ' genannt "' }
+    if P.IsFemale = 0 then
+      StrCat(Dest, DSText($3EDA + 25 * P.Spell))
+    else
+      StrCat(Dest, DSText($4020 + 25 * P.Spell));
+    StrCat(Dest, DSText($417B));                       { '"' }
+  end;
+  StrCat(Dest, DSText($417D));                         { ' von ' }
+  StrCat(Dest, DS.CountryNamesRt[P.Country]);
+end;
+
+procedure PromotionCheck(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);
+var
+  P: PPlayer;
+  T, I, K, R: Byte;
+  D: TDialog;
+  Buf: array[0..80] of Char;
+  NewU: TUnit;
+  Gains: THeroGains;
+  Hero: PUnit;
+
+  procedure AddToArmy;
+  begin
+    if (P^.Army1Count < 8) and (P^.ArmyAway = 0) then
+      AddUnitToArmy(P^, 1, NewU)
+    else
+      AddUnitToArmy(P^, 2, NewU);
+  end;
+
+begin
+  FillChar(NewU, SizeOf(NewU), 0);
+  FillChar(Gains, SizeOf(Gains), 0);
+  P := @Players[Me];
+  T := Byte(P^.Title + 1);
+  if not CanBePromoted(P^) then
+    Exit;
+  Inc(P^.Lifetime);
+  if T = 10 then
+  begin
+    P^.Title := T;                                     { Kaiser: the game is won }
+    Exit;
+  end;
+  UI.Call('PlaySound', [AWord(1), AWord(1)]);
+  if P^.IsFemale = 0 then
+    D := UI.Dialog('PromotionDlg', $05F0, [APtr(Parent), AStr(DSText($09CE))])     { BEFDLG }
+  else
+    D := UI.Dialog('PromotionDlg', $05F0, [APtr(Parent), AStr(DSText($09D5))]);    { FEMBEFDLG }
+  PWord(@D.Data[$7F])^ := Year;
+  D.Data[$81] := P^.Title;
+  D.Data[$82] := P^.IsFemale;
+  FormatPlayerTitle(P^, Buf, 0, 0);
+  StrCopy(PChar(@D.Data[$2E]), Buf);
+  UI.ExecDialog(D);
+  P^.Title := T;
+  GainFame(P^.Fame, 10);
+  if (P^.Title <> 9) or (P^.FirstKingBonus <> 0) then
+    Exit;
+  { Koenig for the first time }
+  AddNews(Players, NumPlayers, Me, Me, $0D);
+  P^.FirstKingBonus := 1;
+  if not IsFirstKing(Players, Me, NumPlayers) then
+    Exit;
+  D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($09DF))]);         { FIRSTKINGDLG }
+  UI.Execute(D);
+  UI.Call('FreeMem', [APtr(D), AWord($2E)]);
+  if not HasHero(P^) then
+  begin
+    { a hero; as in the original the three level-ups go to the last unit of
+      the Heer, not to the new hero }
+    D := UI.Dialog('HeroNameDlg', $351E, [APtr(Parent), AStr(DSText($09EC)), AWord(0)]);
+    UI.Execute(D);
+    CreateHero(NewU, UI.GetText(D));
+    for I := 0 to 2 do
+      UnitGainExperience(P^.Army1[P^.Army1Count], Gains, I * 2 + 10, P^.Spell);
+    AddToArmy;
+    UI.Done(D, 1);
+    UI.Call('Do_TruppenAufstellen', [APtr(Parent), APtr(P), AByte(0)]);
+    Exit;
+  end;
+  K := Random(3);
+  case K of
+    0:
+      if FindHero(P^, Hero, 1) then
+      begin
+        Inc(Hero^.Attack);
+        Inc(Hero^.MaxHp);
+        Inc(Hero^.Defence);
+        ShowKaiserDlg(Parent, ResId(K + 600));
+      end;
+    1:
+      begin
+        { half pay for everyone }
+        for I := 1 to P^.Army1Count do
+        begin
+          P^.Army1[I].BasePay := P^.Army1[I].BasePay div 2;
+          P^.Army1[I].Pay := P^.Army1[I].Pay div 2;
+        end;
+        for I := 1 to P^.Army2Count do
+        begin
+          P^.Army2[I].BasePay := P^.Army2[I].BasePay div 2;
+          P^.Army2[I].Pay := P^.Army2[I].Pay div 2;
+        end;
+        ShowKaiserDlg(Parent, ResId(K + 600));
+      end;
+    2:
+      begin
+        { a free unit of one of five types }
+        R := Random(5);
+        InitUnit(P^, NewU, PByte(@DS)[$09C2 + R], PByte(@DS)[$09C8 + R]);
+        NewU.Pay := 0;
+        D := UI.Dialog('UnitInfoDlg', $35E6, [APtr(Parent), AStr(DSText($09FA)),
+          ARec(@NewU, SizeOf(NewU)), AByte($66), AWord(PByte(@DS)[$09C2 + R] + 200)]);
+        if UI.Execute(D) = 1 then
+        begin
+          UI.Done(D, 1);
+          AddToArmy;
+          UI.Call('Do_TruppenAufstellen', [APtr(Parent), APtr(P), AByte(0)]);
+        end
+        else
+          UI.Done(D, 1);
       end;
   end;
 end;

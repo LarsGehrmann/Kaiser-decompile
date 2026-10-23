@@ -262,6 +262,17 @@ SPECS = {
                              ['population', 'grain', 'grain_distributed']),
     'MarriageDowry': ('n1010:2924', ['Wnd', 'P'], 'none', ARMY + ['is_female'],
                       {'army1_count': (0, 5)}),
+    'FormatPlayerTitle': ('1060:03d9', ['P', 'OB:120', 'B:0:1', 'B:0:1'], 'none',
+                          ['title', 'is_female', 'spell', 'country']),
+    'PromotionCheck': ('n1010:48fc', ['Wnd', 'A', 'I', 'N', 'W:0:300'], 'none',
+                       POP + ECON + ARMY + ['first_king_bonus', 'army_away',
+                                            'maximize_taxes', 'lifetime'],
+                       {'army1_count': (0, 7), 'army2_count': (0, 7)}),
+    'Bankruptcy': ('n1010:4f9f', ['Wnd', 'P'], 'none',
+                   BUILD + ['taler', 'taler', 'title'],
+                   dict({'taler': (-3000000, 100000)},
+                        **{b: (0, 400) for b in ('markets', 'mills', 'granaries',
+                                                 'warehouses', 'taverns', 'smithies')})),
 }
 
 
@@ -272,9 +283,56 @@ UI_SCRIPTS = {
     'WitchChoosesSpell': [('Execute(', lambda rng: (1, {0x38: bytes([rng.randint(0, 12)])}))],
     # 0x49 = 1: the Lindwurm instead of a hero; the name is GetText (+0x100)
     'GrainShortageWarning': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
+                                                 {0x100: b'Neuheld\0'}))],
     'GrantFirstHero': [('Execute(', lambda rng: (1, {0x49: bytes([rng.choice([0, 0, 1])]),
                                                     0x100: rng.choice([b'Testheld', b'', b'Ab'])
                                                     + b'\0'}))],
+}
+
+
+def set_field(players, idx, name, value):
+    off, typ = field_info(ks.PLAYER, name)
+    if typ == 'real':
+        b = r48(value)
+    else:
+        fmt = {'u8': '<B', 's8': '<b', 's16': '<h', 'u16': '<H', 's32': '<i'}[typ]
+        b = struct.pack(fmt, value)
+    players[idx * PSIZE + off:idx * PSIZE + off + len(b)] = b
+    return [(idx * PSIZE + off, b)]
+
+
+def preset_promotion(rng, players, p, num):
+    """Half of the cases: the player meets the next title's requirements,
+    often the step to Koenig (title 9)."""
+    if rng.random() < 0.5:
+        return []
+    m = []
+    title = rng.choice([8, 8, 8, rng.randint(0, 8)])
+    for name, v in (('title', title), ('land', 120000), ('taler', 1500000),
+                    ('population', 20000), ('palace_parts', 12),
+                    ('cathedral_parts', 12), ('happiness', 1.0), ('spell', 0),
+                    ('tax_rate', 0.0), ('justice', 0.0), ('asylum_law', 1.0), ('fame', 100),
+                    ('grain_distributed', 200000), ('event', 0), ('flags_5bd_q', 0),
+                    ('maximize_taxes', 0), ('first_king_bonus', rng.randint(0, 1) if rng.random() < 0.2 else 0),
+                    ('army1_count', rng.randint(4, 7)), ('army2_count', rng.randint(0, 3))):
+        m += set_field(players, p, name, v)
+    for i in range(1, 8):                     # strong units, sometimes a hero
+        base = p * PSIZE + ARMY_BASE[1] + i * ks.UNIT_SIZE
+        unit_type = 9 if (i == 1 and rng.random() < 0.5) else rng.randint(1, 8)
+        u = bytes([unit_type]) + bytes(1) + bytes([20, 20])
+        players[base + 0x19:base + 0x19 + 4] = u
+        m.append((base + 0x19, u))
+    for j in range(num):                      # nobody else is Koenig yet (mostly)
+        if j != p and rng.random() < 0.9:
+            m += set_field(players, j, 'title', rng.randint(0, 8))
+            m += set_field(players, j, 'first_king_bonus', 0)
+    return m
+
+
+# per function: called after the random mutations, returns more mutations
+PRESETS = {
+    'PromotionCheck': preset_promotion,
 }
 
 
@@ -442,6 +500,8 @@ def main():
             muts, hmuts = make_mutations(rng, fields, p, uidx, j)
             for off, val in muts:
                 players[off:off + len(val)] = val
+            if func in PRESETS:
+                muts += PRESETS[func](rng, players, p, num)
             for fname, (lo, hi) in clamps.items():
                 owner = p
                 if fname.startswith('U.'):
@@ -452,11 +512,14 @@ def main():
                     owner = j
                 else:
                     off, typ = field_info(ks.PLAYER, fname)
-                v = players[owner * PSIZE + off]
+                fmt = {'u8': '<B', 's8': '<b', 's16': '<h', 'u16': '<H', 's32': '<i'}[typ]
+                n = struct.calcsize(fmt)
+                a = owner * PSIZE + off
+                v, = struct.unpack(fmt, bytes(players[a:a + n]))
                 if not lo <= v <= hi:
-                    val = bytes([rng.randint(lo, hi)])
-                    muts.append((owner * PSIZE + off, val))
-                    players[owner * PSIZE + off:owner * PSIZE + off + 1] = val
+                    val = struct.pack(fmt, rng.randint(lo, hi))
+                    muts.append((a, val))
+                    players[a:a + n] = val
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
@@ -472,6 +535,8 @@ def main():
                 emu.write(emu.ds_para, 0x6696 + 25 * c,
                           emu.read(emu.ds_para, 0x477e + 25 * (10 + c), 25))
                 emu.write(emu.ds_para, 0x64a2 + 25 * c,
+                          emu.read(emu.ds_para, 0x477e + 25 * c, 25))
+                emu.write(emu.ds_para, 0x63a8 + 25 * c,       # runtime country names
                           emu.read(emu.ds_para, 0x477e + 25 * c, 25))
             emu.rand_seed(seed)
             call_args, shown, outs = [], [], []

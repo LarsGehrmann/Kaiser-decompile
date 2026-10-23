@@ -196,6 +196,7 @@ begin
     begin
       DS.CountryAdjectives[K] := DS.CountryNames[10 + K];
       DS.CpuRulerNames[K] := DS.CountryNames[K];
+      DS.CountryNamesRt[K] := DS.CountryNames[K];
     end;
     try
       with Save do
@@ -389,6 +390,18 @@ begin
           'RevolutionCheck': begin RevolutionCheck(Window, Pl^); Got := '-'; end;
           'GrainShortageWarning': begin GrainShortageWarning(Window, Pl^); Got := '-'; end;
           'MarriageDowry': begin MarriageDowry(Window, Pl^); Got := '-'; end;
+          'Bankruptcy': begin Bankruptcy(Window, Pl^); Got := '-'; end;
+          'FormatPlayerTitle':
+            begin
+              OutSize := 120;
+              FormatPlayerTitle(Pl^, @OutBuf, ArgI(0), ArgI(1));
+              Got := '-';
+            end;
+          'PromotionCheck':
+            begin
+              PromotionCheck(Window, Players, ArgI(0), ArgI(1), ArgI(2));
+              Got := '-';
+            end;
           'SabotageYearsToNextOp':
             begin
               B1 := PIdx;
