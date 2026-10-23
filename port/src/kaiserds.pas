@@ -16,7 +16,9 @@ type
   { The original data segment (segment 27): tables and globals at their
     original offsets, e.g. DS.Game = DS:6108. Offsets in the comments. }
   TDataSegment = packed record
-    Pad000: array[0..11243] of Byte;
+    Pad000: array[0..3679] of Byte;
+    AiMaxUnits: array[0..35] of Byte;  { +0xe60 computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9) }
+    PadE84: array[0..7527] of Byte;
     UnitAttackSound: array[0..35] of Byte;  { +0x2bec battle sound per unit type }
     UnitMoveSound: array[0..35] of Byte;  { +0x2c10 }
     UnitDeathSound: array[0..35] of Byte;  { +0x2c34 }

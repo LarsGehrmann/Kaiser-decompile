@@ -191,7 +191,7 @@ type
     Immortality: Byte;  { +0x012 new-game option Unsterblichkeit: no death by age, no fortune teller, no high score }
     GoodsTradeEnabled: Byte;  { +0x013 DS:611b: goods production, Prokurist, caravans, warehouses at start }
     InitiativeEnabled: Byte;  { +0x014 initiative points (and their costs for attacks/manoeuvres) only when set; battles are always tactical }
-    Pad015: array[0..60] of Byte;
+    Avenger: TUnit;  { +0x015 Der Raecher: joins the weaker side of a battle (AvengerJoinsWeaker 1068:56bc); computer auto-battles give him experience }
     ScenarioTitle: array[0..39] of Char;  { +0x052 scenario editor }
     Pad07A: array[0..0] of Byte;
     ScenarioAuthor: array[0..23] of Char;  { +0x07b scenario editor }

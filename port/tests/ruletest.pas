@@ -7,7 +7,7 @@ program RuleTest;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn,
+  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai,
   ReplayUI;
 
 type
@@ -395,6 +395,27 @@ begin
           'ShowStartTurnDialog': Got := B2S(ShowStartTurnDialog(Window, Pl^, ArgI(0), ArgI(1)));
           'OfferUnitsAtTurnStart': begin OfferUnitsAtTurnStart(Window, Pl^); Got := '-'; end;
           'Report_Gossip': begin Report_Gossip(Window, Players, ArgI(0)); Got := '-'; end;
+          'Ai_FarmlandPerCapita': Got := IntToStr(Ai_FarmlandPerCapita(Pl^));
+          'Ai_LandPriceMargin': Got := IntToStr(Ai_LandPriceMargin(Players, ArgI(0), ArgI(1)));
+          'Ai_SurplusLand': Got := IntToStr(Ai_SurplusLand(Pl^));
+          'Ai_LandToSellForPromotion': Got := IntToStr(Ai_LandToSellForPromotion(Pl^));
+          'Ai_IsMuchRicher': Got := B2S(Ai_IsMuchRicher(Pl^, Players[ArgI(0)]));
+          'Ai_RevolutionRoll': Got := IntToStr(Ai_RevolutionRoll(Pl^));
+          'Ai_SetSabotageBudgets':
+            begin
+              Ai_SetSabotageBudgets(Players, ArgI(0), ArgI(1));
+              Got := '-';
+            end;
+          'Ai_CanRecruitType': Got := B2S(Ai_CanRecruitType(Pl^, ArgI(0)));
+          'Ai_KnightSquires': begin Ai_KnightSquires(Pl^); Got := '-'; end;
+          'Ai_DropWeakestHeerUnit': begin Ai_DropWeakestHeerUnit(Pl^); Got := '-'; end;
+          'Ai_StrengthRatio': Got := HexOf(Ai_StrengthRatio(Pl^, Players[ArgI(0)]));
+          'Ai_AutoBattleRating': Got := IntToStr(Ai_AutoBattleRating(Pl^, ArgI(0)));
+          'Ai_AutoBattleLosses': begin Ai_AutoBattleLosses(Pl^, ArgI(0)); Got := '-'; end;
+          'Ai_UnitValue': Got := IntToStr(Ai_UnitValue(UnitArg(0)^));
+          'Ai_ArrangeArmies': begin Ai_ArrangeArmies(Pl^, ArgI(0)); Got := '-'; end;
+          'Ai_BanditBattle': Got := IntToStr(Ai_BanditBattle(Pl^));
+          'Ai_AutoBattle': Got := IntToStr(Ai_AutoBattle(Pl^, Players[ArgI(0)]));
           'PlayerTurnStart':
             Got := B2S(PlayerTurnStart(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3)));
           'PlayerTurnEnd':
@@ -437,6 +458,7 @@ begin
         end;
     except
       on E: ERealError do Got := 'E' + IntToStr(E.Code);
+      on E: EDivByZero do Got := 'E200';
     end;
     { out parameters written before a runtime error count too }
     if OutCount = 2 then

@@ -52,6 +52,8 @@ def size_of(typ):
         return SIZES[typ]
     if typ == 'header':
         return ks.HEADER_SIZE
+    if typ == 'unit':
+        return ks.UNIT_SIZE
     return int(re.sub(r'\D', '', typ))
 
 
@@ -66,6 +68,8 @@ def pascal_type(name, typ):
         return PASCAL[typ]
     if typ == 'header':
         return 'TGameHeader'
+    if typ == 'unit':
+        return 'TUnit'
     n = size_of(typ)
     if typ.startswith('cstr'):
         return f'array[0..{n - 1}] of Char'

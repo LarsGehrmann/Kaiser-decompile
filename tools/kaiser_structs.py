@@ -36,6 +36,8 @@ HEADER = [
      'DS:611b: goods production, Prokurist, caravans, warehouses at start'),
     (0x14, 'u8', 'initiative_enabled',
      'initiative points (and their costs for attacks/manoeuvres) only when set; battles are always tactical'),
+    (0x15, 'unit', 'avenger',
+     'Der Raecher: joins the weaker side of a battle (AvengerJoinsWeaker 1068:56bc); computer auto-battles give him experience'),
     (0x52, 'cstr40', 'scenario_title', 'scenario editor'),
     (0x7b, 'cstr24', 'scenario_author', 'scenario editor'),
     (0x94, 'raw513', 'scenario_description', 'char[512] text, ends at the header size 0x295'),
@@ -230,6 +232,7 @@ UNIT_SIZE = 0x3d
 # 'header' = the global game record (HEADER). Unit tables are indexed by unit type
 # 0..35 (docs/rules/military.md), promotion tables by the next title 1..10.
 DS = [
+    (0x0e60, 'u8[0..35]', 'ai_max_units', 'computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9)'),
     (0x2bec, 'u8[0..35]', 'unit_attack_sound', 'battle sound per unit type'),
     (0x2c10, 'u8[0..35]', 'unit_move_sound', ''),
     (0x2c34, 'u8[0..35]', 'unit_death_sound', ''),

@@ -284,6 +284,45 @@ SPECS = {
                          'warehouses': (0, 1000)}),
     'Report_Gossip': ('n1010:1bf0', ['Wnd', 'A', 'I'], 'none',
                       ['title', 'is_female', 'spell', 'country']),
+    # segment 7: AI helpers
+    'Ai_FarmlandPerCapita': ('1030:0002', ['P'], 'byte',
+                             ['land', 'land_used', 'population', 'population']),
+    'Ai_LandPriceMargin': ('1030:00c7', ['A', 'I', 'N'], 'byte',
+                           BUILD + ['land_price', 'land_price', 'J.land']),
+    'Ai_SurplusLand': ('1030:01de', ['P'], 'long', BUILD),
+    'Ai_LandToSellForPromotion': ('1030:0301', ['P'], 'long',
+                                  BUILD + POP + ARMY + ['taler', 'land_price', 'title'],
+                                  {'army1_count': (0, 8), 'army2_count': (0, 8),
+                                   'land_price': (-200, 400)}),
+    'Ai_IsMuchRicher': ('1030:04ab', ['P', 'PJ'], 'byte', ['land', 'taler', 'J.land', 'J.taler']),
+    'Ai_RevolutionRoll': ('1030:059b', ['P'], 'byte', ['happiness', 'happiness']),
+    'Ai_SetSabotageBudgets': ('1030:060f', ['A', 'I', 'N'], 'none',
+                              ['ai_aggression_q', 'title', 'attitude_q', 'attitude_q',
+                               'sabotage_budget']),
+    'Ai_CanRecruitType': ('1030:06d9', ['P', 'B:0:35'], 'byte',
+                          ARMY + ['title', 'title', 'weapons'],
+                          {'army1_count': (0, 8), 'army2_count': (0, 8)}),
+    'Ai_KnightSquires': ('1030:075a', ['P'], 'none', ARMY + ['u.type'] * 3,
+                         {'army1_count': (0, 7), 'army2_count': (0, 7)}),
+    'Ai_DropWeakestHeerUnit': ('1030:0844', ['P'], 'none', ARMY + ['u.kills'],
+                               {'army1_count': (1, 8), 'army2_count': (0, 8)}),
+    'Ai_StrengthRatio': ('1030:08ba', ['P', 'PJ'], 'real',
+                         ARMY + ['J.army1_count', 'J.army2_count', 'J.army_away'],
+                         {'army1_count': (0, 8), 'army2_count': (0, 8),
+                          'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
+    'Ai_AutoBattleRating': ('1030:09f2', ['P', 'B:0:1'], 'long', ARMY + ['population'],
+                            {'army1_count': (0, 8), 'army2_count': (0, 8)}),
+    'Ai_AutoBattleLosses': ('1030:0bda', ['P', 'B:0:5'], 'none', ARMY,
+                            {'army1_count': (0, 8), 'army2_count': (0, 8)}),
+    'Ai_UnitValue': ('n1030:0cc0', ['U'], 'sword', UNITF),
+    'Ai_ArrangeArmies': ('1030:0d02', ['P', 'B:0:2'], 'none', ARMY + ['army_away'],
+                         {'army1_count': (0, 8), 'army2_count': (0, 8)}),
+    'Ai_BanditBattle': ('1030:0fe9', ['P'], 'byte', ARMY + ['population', 'initiative'],
+                        {'army1_count': (0, 8), 'army2_count': (0, 8)}),
+    'Ai_AutoBattle': ('1030:1062', ['P', 'PJ'], 'byte',
+                      ARMY + ['population', 'J.population', 'J.army1_count', 'J.army2_count'],
+                      {'army1_count': (0, 8), 'army2_count': (0, 8),
+                       'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
     'PlayerTurnStart': ('1010:37b6', ['Wnd', 'W:0:65535', 'A', 'I', 'N', 'Y'], 'byte',
                         ECON + POP + ARMY + ['cpu_level', 'army_away', 'lifetime', 'report_flags',
                                              'report_flags', 'event', 'event', 'initiative',
@@ -441,6 +480,20 @@ def preset_mailbox(rng, players, p, num):
     return m
 
 
+def preset_knights(rng, players, p, num):
+    """Knights (type $22) in both armies, sometimes spell 3."""
+    m = []
+    for army in (1, 2):
+        for i in range(1, 9):
+            if rng.random() < 0.4:
+                a = p * PSIZE + ARMY_BASE[army] + i * ks.UNIT_SIZE + 0x19
+                players[a:a + 1] = b'\x22'
+                m.append((a, b'\x22'))
+    if rng.random() < 0.5:
+        m += set_field(players, p, 'spell', 3)
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
     'DiplomacyTurnStart': preset_mailbox,
@@ -448,6 +501,8 @@ PRESETS = {
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'PlayerTurnEnd': preset_promotion,
+    'Ai_LandToSellForPromotion': preset_promotion,
+    'Ai_KnightSquires': preset_knights,
     'SabotageEnd': preset_sabotage_log,
 }
 
