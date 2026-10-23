@@ -44,6 +44,11 @@ CTORS = {
     'ComputerCountDlg': ('1040:234c', ['p', 's']),
     'PlayerDataDlg': ('1040:2569', ['p', 's', 'p', 'b']),
     'TButton': ('1098:04e8', ['p', 'w', 's', 'w', 'w', 'w', 'w', 'b']),
+    'ButtonChoiceDlg': ('1058:0da7', ['p', 's', 'w', 'r5']),   # KAMPFOPTDLG: enabled buttons
+    'HelpChoice2Dlg': ('1058:043e', ['p', 's', 's', 's', 'w']),   # KRIEGSER*DLG
+    'MassacreDlg': ('1028:0461', ['p', 's']),
+    'PlunderResultDlg': ('1028:0c00', ['p', 's']),
+    'PlunderChoiceDlg': ('1028:1290', ['p', 's']),
 }
 # virtual methods of the fake objects: VMT slot -> (name, arg kinds after Self,
 # returns a value)
@@ -88,6 +93,7 @@ FUNCS = {
     'Battle_EnableButtons': ('1048:0daa', True, ['p'], False),
     'Battle_DisableButtons': ('1048:0dde', True, ['p'], False),
     'Battle_End': ('1048:8ff5', True, ['b', 'p'], False),   # EndDlg(code)
+    'DisableButton2': ('1058:0591', True, ['p'], False),
 }
 # DrawUnitStatus(DC, side, unit, panel, Self) draws, but first recomputes the
 # unit's motivation (ComputeMotivation(unit, side, Self), if the unit exists):
@@ -153,6 +159,9 @@ BATTLE_LOGIC = [
     ('1048:986a', 0x41),    # StopTimer
     ('1048:98ab', 0x86),    # CmWarten
     ('1048:9931', 0x36),    # CmFertig
+    ('1048:9967', 0xf0),    # CmAufgeben
+    ('1048:8c92', 0x276),    # CombatOptionsMenu
+    ('1048:900d', 0x1a1),    # WMLButtonDown
 ]
 # code in guarded segments that is plain logic and may run
 ALLOWED = BATTLE_LOGIC + [('1060:03d9', 0x14e),           # FormatPlayerTitle

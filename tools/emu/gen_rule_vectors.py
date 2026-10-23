@@ -396,6 +396,36 @@ SPECS = {
     'Battle_AiStep': ('1048:65a8', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
     'Battle_WMTimer': ('1048:96d1', ['NIL', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
     'Battle_Play': ('1048:96d1', ['BW'], 'word', BW_FIELDS, BW_CLAMPS),
+    'Battle_EndAction': ('1048:631a', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_CmWarten': ('1048:98ab', ['NIL', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_CmFertig': ('1048:9931', ['NIL', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_CmAufgeben': ('1048:9967', ['NIL', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_CombatOptionsMenu': ('1048:8c92', ['B:1:8', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_WMLButtonDown': ('1048:900d', ['MSG', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    # segment 6: after the battle
+    'War_AskBattlefield': ('1028:0002', ['Wnd', 'P', 'PJ', 'I', 'J'], 'byte', BW_FIELDS),
+    'War_RetreatLosses': ('1028:011c', ['Wnd', 'P'], 'none', ARMY + ['spell']),
+    'War_Massacre': ('n1028:020a', ['Wnd', 'P', 'PJ', 'RES', 'B:0:1'], 'none', ['population', 'J.population']),
+    'War_ShowMassacre': ('1028:038e', ['Wnd', 'P', 'PJ', 'RES'], 'none', ['cpu_level', 'J.cpu_level', 'is_female', 'country']),
+    'War_BurnBuildings': ('n1028:057e', ['Wnd', 'P', 'PJ', 'RES', 'B:0:1'], 'none', BUILD + ['J.markets', 'J.mills', 'J.population']),
+    'War_ShowBurnResult': ('1028:0996', ['Wnd', 'P', 'PJ', 'RES'], 'none', ['cpu_level', 'J.cpu_level']),
+    'War_PlunderTalerAndLand': ('n1028:09c8', ['Wnd', 'P', 'PJ', 'RES', 'B:0:1'], 'none',
+                                ['taler', 'J.taler', 'land', 'J.land', 'country', 'J.country']),
+    'War_ShowPlunderResult': ('1028:0b6b', ['Wnd', 'P', 'PJ', 'RES'], 'none', ['cpu_level', 'J.cpu_level']),
+    'War_Ai_PlunderChoice': ('1028:0d46', ['Wnd', 'P', 'PJ', 'RES', 'B:0:1'], 'none',
+                             BUILD + ['J.taler', 'J.land', 'J.country', 'J.cpu_level', 'J.population']),
+    'War_PlunderDialog': ('1028:0eaf', ['Wnd', 'P', 'PJ', 'RES', 'B:0:1'], 'none',
+                          BUILD + ['J.taler', 'J.land', 'J.country', 'J.cpu_level', 'J.population',
+                                   'J.markets', 'J.mills', 'J.granaries', 'J.warehouses']),
+    # segment 4: around the battle (the test player attacks J)
+    'War_BattleSetup': ('n1018:0225', ['Wnd', 'P', 'PJ', 'INFO', 'I', 'J', 'B:0:1'], 'none',
+                        ARMY + ['J.army1_count', 'J.army2_count', 'J.cpu_level', 'cpu_level',
+                                'J.army_away', 'trade_agreement']),
+    'War_BattleFameAndXp': ('n1018:094a', ['Wnd', 'P', 'PJ', 'INFO', 'B:10:13'], 'none',
+                            ARMY + ['title', 'J.title', 'fame', 'J.fame', 'cpu_level', 'J.cpu_level']),
+    'War_BattleAftermath': ('n1018:0664', ['Wnd', 'P', 'PJ', 'INFO', 'RES', 'B:10:13'], 'none',
+                            BUILD + ['cpu_level', 'J.cpu_level', 'initiative', 'J.army1_count',
+                                     'J.army2_count', 'J.population', 'J.taler']),
     # segment 1: the turn loop, a whole round of computer players
     'CmNeuesSpiel': ('1000:0ce6', ['NIL', 'SELF'], 'none',
                      ['h.immortality', 'h.goods_trade_enabled', 'h.initiative_enabled']),
@@ -483,6 +513,11 @@ SPECS = {
 # for Execute / ExecDialog / whole UI functions; the default answers 1 (OK)
 # for dialogs and 0 for functions
 UI_SCRIPTS = {
+    **{f: [('Execute(', lambda rng: (rng.choice([1, 2, 10, 11, 12, 13]), {}))]
+       for f in ('War_AskBattlefield', 'War_PlunderDialog', 'War_BattleSetup',
+                 'War_BattleAftermath')},
+    'Battle_CombatOptionsMenu': [('Execute(', lambda rng: (rng.randint(0x65, 0x6a), {}))],
+    'Battle_CmAufgeben': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'WitchChoosesSpell': [('Execute(', lambda rng: (1, {0x38: bytes([rng.randint(0, 12)])}))],
     # 0x49 = 1: the Lindwurm instead of a hero; the name is GetText (+0x100)
     'GrainShortageWarning': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
@@ -1056,6 +1091,10 @@ def advance_battle(emu, ui, sp, rng):
         emu.write(sp, BW_AREA + 0xe2b, bytes(human))
 
 
+HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
+                      'Battle_CmAufgeben', 'Battle_CombatOptionsMenu', 'Battle_WMLButtonDown')
+
+
 def kind_bw(args):
     return any(a == 'BW' for a in args)
 
@@ -1138,6 +1177,8 @@ def main():
                                            ('word', 0), ('word', city), ('word', 0x2d2c),
                                            ('ptr', (sp, BW_AREA))])
                 advance_battle(emu, ui, sp, rng)
+                if func in HUMAN_BATTLE_FUNCS:            # a human's turn
+                    emu.write(sp, BW_AREA + 0xe2b + emu.read(sp, BW_AREA + 0xf7f, 1)[0], b'\1')
                 ui.reset()
                 ui.chooser = make_chooser(func, rng, num)
                 emu.rand_seed(seed)
@@ -1198,6 +1239,35 @@ def main():
                     for v in (ux + rng.randint(-2, 2), uy + rng.randint(-2, 2)):
                         call_args.append(('word', v & 0xFFFF))
                         shown.append(str(v))
+                elif kind in ('INFO', 'RES'):
+                    # a battle info block (0x192) / results block (0x37),
+                    # random but plausible; shown as hex, reported in out=
+                    if kind == 'INFO':
+                        blk = bytearray(0x192)
+                        blk[0], blk[1], blk[2] = rng.randint(0, 1), rng.choice([0, 0, 1]), rng.choice([0, 0, 0, 1])
+                        struct.pack_into('<ii', blk, 5, rng.randint(0, 400), rng.randint(0, 400))
+                        blk[0xd], blk[0xe] = p, j
+                        off = OUT_AREA + 0x200
+                    else:
+                        blk = bytearray(0x37)
+                        struct.pack_into('<11i', blk, 0, *([rng.randint(0, 300)] + [rng.randint(0, 2000)] +
+                                                          [rng.choice([0, 0, rng.randint(0, 4)]) for _ in range(9)]))
+                        blk[0x35], blk[0x36] = rng.randint(0, 8), rng.randint(0, 8)
+                        off = OUT_AREA + 0x400
+                    emu.write(sp, off, bytes(blk))
+                    outs.append((len(blk), off))
+                    call_args.append(('ptr', (sp, off)))
+                    shown.append(bytes(blk).hex())
+                elif kind == 'MSG':
+                    # a mouse message (TMessage: LParam = x, y in pixels) on
+                    # or next to the current unit
+                    u = 0x12a + bw[0xf7f] * 0x6d5 + bw[0xf80] * 0x3d
+                    ux, uy = struct.unpack_from('<hh', bw, u + 0x39)
+                    px = max(0, (ux + rng.randint(-1, 1)) * 32 + rng.randint(0, 31))
+                    py = max(0, (uy + rng.randint(-1, 1)) * 32 + rng.randint(0, 31))
+                    emu.write(sp, OUT_AREA + 0x300, struct.pack('<6H', 0, 0x201, 0, px, py, 0))
+                    call_args.append(('ptr', (sp, OUT_AREA + 0x300)))
+                    shown += [str(px), str(py)]
                 elif kind == 'BA':
                     # an attacker (side, unit) and the cell of a unit of the
                     # other side

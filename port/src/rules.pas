@@ -745,11 +745,11 @@ var
 begin
   N := 0;
   for I := 1 to P.Army1Count do
-    if DS.UnitCanDesert[ShortInt(P.Army1[I].UnitType)] <> 0 then
+    if PByte(@DS.UnitCanDesert)[ShortInt(P.Army1[I].UnitType)] <> 0 then
       Inc(N);
   if WithArmy2 <> 0 then
     for I := 1 to P.Army2Count do
-      if DS.UnitCanDesert[ShortInt(P.Army2[I].UnitType)] <> 0 then
+      if PByte(@DS.UnitCanDesert)[ShortInt(P.Army2[I].UnitType)] <> 0 then
         Inc(N);
   Result := N > 0;
 end;
@@ -2212,7 +2212,7 @@ begin
           { a random unit deserts (6: to the attacker's Garde) }
           repeat
             I := Random(T^.Army1Count) + 1;
-          until DS.UnitCanDesert[ShortInt(T^.Army1[I].UnitType)] <> 0;
+          until PByte(@DS.UnitCanDesert)[ShortInt(T^.Army1[I].UnitType)] <> 0;
           Amount := ShortInt(T^.Army1[I].UnitType);
           if Kind = 6 then
           begin

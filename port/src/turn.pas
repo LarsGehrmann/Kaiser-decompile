@@ -783,7 +783,7 @@ begin
         { a unit deserts }
         I := Random(P^.Army1Count) + 1;
         if (Random(F * 2) = 0) and (P^.Army1Count > 2) and (P^.Spell <> 9) and
-           (DS.UnitCanDesert[ShortInt(P^.Army1[I].UnitType)] <> 0) then
+           (PByte(@DS.UnitCanDesert)[ShortInt(P^.Army1[I].UnitType)] <> 0) then
         begin
           RemoveArmy1Unit(P^, I);
           Inc(P^.DesertedUnits);

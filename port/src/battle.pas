@@ -80,6 +80,19 @@ procedure StartTimer(var B: TBattleWnd);                         { 1048:983f }
 procedure StopTimer(var B: TBattleWnd);                          { 1048:986a }
 procedure WMTimer(var B: TBattleWnd);                            { 1048:96d1 }
 procedure AiStep(var B: TBattleWnd);                             { 1048:65a8 }
+procedure GetResults(var B: TBattleWnd; var Attacker, Defender: TPlayer; var Results);  { 1048:0e12 }
+procedure NextSide(var B: TBattleWnd);   { the other side's turn (AiStep, EndAction) }
+{ the human side }
+procedure EndAction(var B: TBattleWnd);                          { 1048:631a }
+procedure CmWarten(var B: TBattleWnd);                           { 1048:98ab }
+procedure CmFertig(var B: TBattleWnd);                           { 1048:9931 }
+procedure CmAufgeben(var B: TBattleWnd);                         { 1048:9967 }
+procedure CombatOptionsMenu(var B: TBattleWnd; I: Byte);         { 1048:8c92 }
+{ a click at pixel (PX, PY) of the window }
+procedure WMLButtonDown(var B: TBattleWnd; PX, PY: Word);        { 1048:900d }
+{ a right click: the WinHelp topic (0: none) or the combat options of an
+  own unit }
+function WMRButtonDown(var B: TBattleWnd; PX, PY: Word): LongInt;  { 1048:9525 }
 function AiChooseAggressive(var B: TBattleWnd): Boolean;    { 1048:68fe }
 function AiEnemyOutguns(var B: TBattleWnd): Boolean;        { 1048:69d4 }
 procedure StartSideTurn(var B: TBattleWnd; S: Byte);        { 1048:85e0 }
@@ -89,6 +102,9 @@ var
   BattleEndCode: Byte;      { the code of the last EndBattle, 0 while it runs }
 
 implementation
+
+type
+  PReal48 = ^TReal48;
 
 function BattleUnit(var B: TBattleWnd; S, I: Byte): PUnit;
 begin
@@ -271,7 +287,7 @@ begin
   for K := 1 to Last do
   begin
     E := BattleUnit(B, Enemy, K);
-    if (DS.UnitMelee[ShortInt(E^.UnitType)] <> 0) and
+    if (PByte(@DS.UnitMelee)[ShortInt(E^.UnitType)] <> 0) and
        (Distance(U^.PosX, U^.PosY, E^.PosX, E^.PosY) = 1) then
       Inc(Result);
   end;
@@ -337,8 +353,8 @@ begin
     PayTerm := R48Sub(R48Div(FromLong(U.Pay), FromLong(U.BasePay)), RC($0081, 0, 0))
   else
     PayTerm := R48Zero;
-  FearTerm := R48Mul(B.Fear[S], FromLong(DS.UnitFearful[ShortInt(U.UnitType)]));
-  TypeBonus := DS.UnitMotivationBonus[ShortInt(U.UnitType)];
+  FearTerm := R48Mul(B.Fear[S], FromLong(PByte(@DS.UnitFearful)[ShortInt(U.UnitType)]));
+  TypeBonus := PReal48(@DS.UnitMotivationBonus)[ShortInt(U.UnitType)];
   LevelTerm := R48Div(FromLong(U.Level), RC($0084, 0, $2000));
   Balance := StrengthBalance(B, S);
   M := R48Add(B.SideMorale[S], Balance);
@@ -377,10 +393,10 @@ var
 begin
   U := BattleUnit(B, B.SideToMove, B.UnitToMove);
   if (Code = 8) or (Code = 9) then
-    Result := DS.UnitRoughTerrain[ShortInt(U^.UnitType)] <> 0
+    Result := PByte(@DS.UnitRoughTerrain)[ShortInt(U^.UnitType)] <> 0
   else if (Code >= $33) and (Code <= $40) then
     Result := (B.Winter <> 0) or (U^.Ability = $17) or
-      (DS.UnitRoughTerrain[ShortInt(U^.UnitType)] <> 0)
+      (PByte(@DS.UnitRoughTerrain)[ShortInt(U^.UnitType)] <> 0)
   else
     Result := False;
 end;
@@ -427,7 +443,7 @@ begin
   begin
     if B.SideToMove = 1 then
       if Adjacent then
-        Result := DS.UnitMelee[ShortInt(U^.UnitType)] <> 0
+        Result := PByte(@DS.UnitMelee)[ShortInt(U^.UnitType)] <> 0
       else
         Result := Shot;
   end
@@ -443,7 +459,7 @@ begin
           ((Code >= $79) and (Code <= $80) and (B.SideToMove = 1)) then
   begin
     if Adjacent then
-      Result := (DS.UnitMelee[ShortInt(U^.UnitType)] <> 0) or (U^.Ammo > 0)
+      Result := (PByte(@DS.UnitMelee)[ShortInt(U^.UnitType)] <> 0) or (U^.Ammo > 0)
     else
       Result := Shot;
   end;
@@ -555,9 +571,9 @@ begin
     Atk := R48Div(Atk, Two);
   if (A.Ability = $0E) and (ShortInt(A.Hp) < ShortInt(A.MaxHp)) then   { Raserei }
     Atk := R48Mul(Atk, Two);
-  if (D.Ability = $10) and (DS.UnitCharmable[ShortInt(A.UnitType)] <> 0) then  { Charme }
+  if (D.Ability = $10) and (PByte(@DS.UnitCharmable)[ShortInt(A.UnitType)] <> 0) then  { Charme }
     Atk := R48Div(Atk, Two);
-  if (A.Ability = $13) and (DS.UnitChristian[ShortInt(D.UnitType)] = 0) then  { Heilige Lanze }
+  if (A.Ability = $13) and (PByte(@DS.UnitChristian)[ShortInt(D.UnitType)] = 0) then  { Heilige Lanze }
     Atk := R48Mul(Atk, RC($0081, 0, $4000));
   if Surrounded then
     Def := R48Div(Def, Two);
@@ -574,10 +590,10 @@ begin
     RollA := Byte(RollA * 2);
   if (A.Ability = 8) and (Dist > 1) then
     PlaySound(6)
-  else if (A.Range > 1) and (Dist = 1) and (DS.UnitMelee[ShortInt(A.UnitType)] <> 0) then
+  else if (A.Range > 1) and (Dist = 1) and (PByte(@DS.UnitMelee)[ShortInt(A.UnitType)] <> 0) then
     PlaySound($12)
   else
-    PlaySound(DS.UnitAttackSound[ShortInt(A.UnitType)]);
+    PlaySound(PByte(@DS.UnitAttackSound)[ShortInt(A.UnitType)]);
   if RollA >= RollD then
   begin
     PlaySound(4);
@@ -665,7 +681,7 @@ begin
   DrawCell(B, A^.PosX, A^.PosY, Byte(I + Frame));
   D := BattleUnit(B, Enemy, EI);
   Surrounded := CountAdjacentEnemies(B, Enemy, EI) > 3;
-  Knappen := (DS.UnitKnight[ShortInt(A^.UnitType)] <> 0) and HasAdjacentFriendOfType(B, S, I, $22);
+  Knappen := (PByte(@DS.UnitKnight)[ShortInt(A^.UnitType)] <> 0) and HasAdjacentFriendOfType(B, S, I, $22);
   Duel(B, A^, D^, EnPassant, Surrounded, Knappen);
   RedrawUnit(B, B.SideToMove, B.UnitToMove);
   if ShortInt(D^.Hp) > 0 then
@@ -697,7 +713,7 @@ begin
   else
   begin
     DrawCell(B, TX, TY, $0A);
-    PlaySound(DS.UnitDeathSound[ShortInt(D^.UnitType)]);
+    PlaySound(PByte(@DS.UnitDeathSound)[ShortInt(D^.UnitType)]);
     DrawCell(B, TX, TY, B.Terrain[Cell(TX, TY)]);
     B.Grid[Cell(TX, TY)] := B.Terrain[Cell(TX, TY)];
   end;
@@ -736,7 +752,7 @@ begin
   else if (U^.Range > 1) and (Dist = 1) then
     PlaySound($12)
   else
-    PlaySound(DS.UnitAttackSound[ShortInt(U^.UnitType)]);
+    PlaySound(PByte(@DS.UnitAttackSound)[ShortInt(U^.UnitType)]);
   Roll := Byte(Random(U^.Attack));
   if U^.BlindRounds > 0 then
     Roll := Roll shr 1;
@@ -833,7 +849,7 @@ begin
         EI := Byte(Code - EnemyBase);
         E := BattleUnit(B, OtherSide(B), EI);
         Strike := (E^.Stance = 0) and (E^.UnconsciousRounds = 0) and
-          (DS.UnitMelee[ShortInt(E^.UnitType)] <> 0);
+          (PByte(@DS.UnitMelee)[ShortInt(E^.UnitType)] <> 0);
         if Strike and (U^.Ability = $1B) then                  { Duckmaeuser }
           Strike := Chance(50);
         if Strike then
@@ -860,10 +876,10 @@ begin
   if Mirror then
   begin
     DrawCell(B, OX, OY, Byte(B.UnitToMove + FrameBase));
-    PlaySound(DS.UnitMoveSound[ShortInt(U^.UnitType)]);
+    PlaySound(PByte(@DS.UnitMoveSound)[ShortInt(U^.UnitType)]);
     DrawCell(B, OX, OY, B.Terrain[Cell(OX, OY)]);
     DrawCell(B, X, Y, Byte(B.UnitToMove + FrameBase));
-    PlaySound(DS.UnitMoveSound[ShortInt(U^.UnitType)]);
+    PlaySound(PByte(@DS.UnitMoveSound)[ShortInt(U^.UnitType)]);
     if U^.Ability <> $1D then
       DrawCell(B, X, Y, Byte(B.UnitToMove + OwnBase))
     else
@@ -874,7 +890,7 @@ begin
     DrawCell(B, OX, OY, B.Terrain[Cell(OX, OY)]);
     if U^.Ability <> $1D then
       DrawCell(B, X, Y, Byte(B.UnitToMove + OwnBase));
-    PlaySound(DS.UnitMoveSound[ShortInt(U^.UnitType)]);
+    PlaySound(PByte(@DS.UnitMoveSound)[ShortInt(U^.UnitType)]);
   end;
   B.Grid[Cell(X, Y)] := Byte(B.UnitToMove + OwnBase);
   B.Grid[Cell(OX, OY)] := B.Terrain[Cell(OX, OY)];
@@ -896,7 +912,7 @@ begin
     motivation; to the enemy if it has room (UEBERLAUFDLG), else it leaves
     (DESERTDLG) }
   U := BattleUnit(B, B.SideToMove, B.UnitToMove);
-  if DS.UnitCanDesert[ShortInt(U^.UnitType)] = 0 then
+  if PByte(@DS.UnitCanDesert)[ShortInt(U^.UnitType)] = 0 then
     Exit;
   if R48Cmp(R48Mul(RandomReal, RC($9A80, $9999, $1999)), U^.Motivation) <= 0 then
     Exit;
@@ -1399,7 +1415,7 @@ begin
     Exit;
   OX := U^.PosX;
   OY := U^.PosY;
-  if (DS.UnitMelee[ShortInt(U^.UnitType)] <> 0) or
+  if (PByte(@DS.UnitMelee)[ShortInt(U^.UnitType)] <> 0) or
      ((U^.Ammo > 0) and (CountAdjacentEnemies(B, B.SideToMove, B.UnitToMove) = 0)) then
   begin
     AiChooseTarget(B, TX, TY);
@@ -1426,7 +1442,6 @@ end;
 procedure AiStep(var B: TBattleWnd);
 var
   U: PUnit;
-  Done: Boolean;
 begin
   { one action of the computer's current unit (a timer tick) }
   if B.Human[B.SideToMove] <> 0 then
@@ -1468,22 +1483,7 @@ begin
   end;
   B.UnitToMove := NextUnit(B);
   if B.UnitToMove = 0 then
-    repeat
-      { the other side's turn; a side without a unit able to act passes }
-      Done := False;
-      B.SideToMove := OtherSide(B);
-      B.UnitToMove := 1;
-      if B.Human[B.SideToMove] = 0 then
-        B.AiAggressive := Ord(AiChooseAggressive(B));
-      StartSideTurn(B, B.SideToMove);
-      repeat
-        U := BattleUnit(B, B.SideToMove, B.UnitToMove);
-        if (U^.Stance = 0) and (U^.UnconsciousRounds = 0) then
-          Done := True
-        else
-          B.UnitToMove := NextUnit(B);
-      until Done or (B.UnitToMove = 0);
-    until Done;
+    NextSide(B);
   if B.Human[B.SideToMove] <> 0 then
     EnableButtons(B)                         { and the focus to Warten }
   else
@@ -1558,6 +1558,250 @@ begin
     AiStep(B);
 end;
 
+{ the next side whose turn it is (AiStep, EndAction): a side without a
+  unit able to act passes }
+procedure NextSide(var B: TBattleWnd);
+var
+  U: PUnit;
+  Done: Boolean;
+begin
+  repeat
+    Done := False;
+    B.SideToMove := OtherSide(B);
+    B.UnitToMove := 1;
+    if B.Human[B.SideToMove] = 0 then
+      B.AiAggressive := Ord(AiChooseAggressive(B));
+    StartSideTurn(B, B.SideToMove);
+    repeat
+      U := BattleUnit(B, B.SideToMove, B.UnitToMove);
+      if (U^.Stance = 0) and (U^.UnconsciousRounds = 0) then
+        Done := True
+      else
+        B.UnitToMove := NextUnit(B);
+    until Done or (B.UnitToMove = 0);
+  until Done;
+end;
+
+procedure GetResults(var B: TBattleWnd; var Attacker, Defender: TPlayer; var Results);
+var
+  Civilians: PLongInt;
+begin
+  { after a city battle 2 % of the people die per defender unit lost (at
+    most all but 50); the results (0x37 bytes) and both players, healed,
+    go back }
+  if B.City <> 0 then
+  begin
+    Civilians := ResultCounter(B, 4);
+    Civilians^ := MinLong(B.Side[0].Population - 50,
+      LongInt(Int64(B.Results[$35]) * B.Side[0].Population) div 50);
+    B.Side[0].Population := B.Side[0].Population - Civilians^;
+  end;
+  Move(B.Results, Results, SizeOf(B.Results));
+  ResetSide(B, 1);
+  ResetSide(B, 0);
+  Attacker := B.Side[1];
+  Defender := B.Side[0];
+end;
+
+procedure EndAction(var B: TBattleWnd);
+begin
+  { after a human action: the end of the battle, of the unit's activation
+    (desertion, next unit), of the side's turn }
+  DrawUnitStatus(B, 0, B.SideToMove, B.UnitToMove, 1);
+  if B.Side[1].Army1Count = 0 then
+    EndBattle(B, 10);
+  if B.Side[0].Army1Count = 0 then
+    EndBattle(B, 11);
+  if BattleUnit(B, B.SideToMove, B.UnitToMove)^.Steps > 0 then
+    Exit;
+  DesertionCheck(B);
+  if B.CursorShown = 0 then
+    WMTimer(B);
+  RedrawUnit(B, B.SideToMove, B.UnitToMove);
+  B.UnitToMove := NextUnit(B);
+  if B.UnitToMove = 0 then
+  begin
+    if (DS.Game.EmailGameQ <> 0) and (B.Side[1].CpuLevel = 0) and (B.Side[0].CpuLevel = 0) then
+    begin
+      { an e-mail game between two humans: hand over }
+      B.SideToMove := OtherSide(B);
+      StartSideTurn(B, B.SideToMove);
+      EndBattle(B, 14);
+      Exit;
+    end;
+    NextSide(B);
+  end;
+  DrawUnitStatus(B, 0, B.SideToMove, B.UnitToMove, 1);
+  ClearTargetPanel(B);
+  if B.Human[B.SideToMove] = 0 then
+  begin
+    DisableButtons(B);
+    B.AiAggressive := Ord(AiChooseAggressive(B));
+  end;
+  B.BlinkTicks := 1;                            { (SetFocus: Warten) }
+end;
+
+procedure CmWarten(var B: TBattleWnd);
+begin
+  { the next ready unit; this one keeps its steps }
+  if B.CursorShown = 0 then
+    WMTimer(B);
+  RedrawUnit(B, B.SideToMove, B.UnitToMove);
+  B.UnitToMove := NextUnit(B);
+  DrawUnitStatus(B, 0, B.SideToMove, B.UnitToMove, 1);
+end;
+
+procedure CmFertig(var B: TBattleWnd);
+begin
+  BattleUnit(B, B.SideToMove, B.UnitToMove)^.Steps := 0;
+  EndAction(B);
+end;
+
+procedure CmAufgeben(var B: TBattleWnd);
+var
+  D: TDialog;
+begin
+  { retreat (RUECKZUGDLG) or, for the defender of a city, capitulate
+    (KAPDLG) }
+  if B.SideToMove = 1 then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(@B), AStr(DSText($2F62))]);
+    if UI.Execute(D) = 1 then
+      EndBattle(B, 12);                    { (else InvalidateRect: repaint) }
+    UI.Done(D, 1);
+    Exit;
+  end;
+  if B.City <> 0 then
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(@B), AStr(DSText($2F6E))])
+  else
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(@B), AStr(DSText($2F62))]);
+  if UI.Execute(D) = 1 then
+    EndBattle(B, 13);                      { (else InvalidateRect: repaint) }
+  UI.Done(D, 1);
+end;
+
+procedure CombatOptionsMenu(var B: TBattleWnd; I: Byte);
+var
+  U: PUnit;
+  Enabled: array[0..4] of Byte;
+  Stances: Boolean;
+  D: TDialog;
+  R: SmallInt;
+begin
+  { KAMPFOPTDLG: Eingraben, Heilen (an active unit with steps, when more
+    than one unit of the side is active), Aktivieren, Warten, Fertig (the
+    current unit) }
+  U := BattleUnit(B, B.SideToMove, I);
+  Stances := (U^.Stance = 0) and (U^.Steps > 0) and MoreThanOneActive(B);
+  Enabled[0] := Ord(Stances);
+  Enabled[1] := Ord(Stances);
+  Enabled[2] := Ord(U^.Stance <> 0);
+  Enabled[3] := Ord((U^.Stance = 0) and (I = B.UnitToMove));
+  Enabled[4] := Enabled[3];
+  D := UI.Dialog('ButtonChoiceDlg', $36EA, [APtr(@B), AStr(DSText($2F4A)), AWord(5),
+    ARec(@Enabled, SizeOf(Enabled))]);
+  R := UI.Execute(D);
+  UI.Done(D, 1);
+  case R of
+    $65, $66:
+      begin
+        U^.Stance := R - $64;               { 1 Eingraben, 2 Heilen }
+        U^.Steps := 0;
+        RedrawUnit(B, B.SideToMove, I);
+        if I = B.UnitToMove then
+          EndAction(B);
+      end;
+    $67:
+      begin
+        U^.Stance := 0;
+        RedrawUnit(B, B.SideToMove, I);
+      end;
+    $68: CmWarten(B);
+    $69: CmFertig(B);
+  end;
+end;
+
+procedure WMLButtonDown(var B: TBattleWnd; PX, PY: Word);
+var
+  X, Y: SmallInt;
+  U: PUnit;
+  Attack: Boolean;
+  Code: Byte;
+begin
+  { the human's current unit moves, heals or attacks the clicked cell }
+  if B.Human[B.SideToMove] = 0 then
+    Exit;
+  X := PX shr 5;
+  Y := PY shr 5;
+  if (X > 14) or (Y > 10) then
+    Exit;
+  U := BattleUnit(B, B.SideToMove, B.UnitToMove);
+  if CanMoveTo(B, X, Y) then
+  begin
+    MoveUnit(B, X, Y);
+    EndAction(B);
+  end
+  else if CanHeal(B, X, Y) then
+  begin
+    DoHeal(B, U^.PosX, U^.PosY, X, Y);
+    EndAction(B);
+  end
+  else
+  begin
+    Attack := CanAttack(B, X, Y);
+    Code := B.Grid[Cell(X, Y)];
+    if Attack and ((((Code >= 2) and (Code <= 7)) or ((Code >= $0B) and (Code <= $0D))) or
+       ((Code >= $5B) and (Code <= $63))) then
+    begin
+      AttackObject(B, X, Y);
+      EndAction(B);
+    end
+    else if Attack then
+    begin
+      { (a tree that Demontage may attack ends up here: the victim index
+        lies far beyond the battle window, see battle.md) }
+      AttackUnit(B, B.SideToMove, B.UnitToMove, X, Y, False);
+      EndAction(B);
+    end;
+  end;
+end;
+
+function WMRButtonDown(var B: TBattleWnd; PX, PY: Word): LongInt;
+var
+  X, Y: SmallInt;
+  Code: Byte;
+begin
+  Result := 0;
+  if PY > $160 then
+  begin
+    { below the map: the two status panels }
+    if (PX > 0) and (PX < $C8) then
+      Result := 10
+    else if (PX > $118) and (PX < $1E0) then
+      Result := 11;
+    Exit;
+  end;
+  X := PX shr 5;
+  Y := PY shr 5;
+  Code := B.Grid[Cell(X, Y)];
+  if (Code >= 1) and (Code <= 9) then
+    Result := $190 + Code
+  else if (Code >= $33) and (Code <= $40) then
+    Result := $19A
+  else if (Code >= $6F) and (Code <= $76) then
+  begin
+    if (B.SideToMove = 1) and (B.Side[B.SideToMove].CpuLevel = 0) and
+       (BattleUnit(B, B.SideToMove, Byte(Code - $6E))^.UnconsciousRounds = 0) then
+      CombatOptionsMenu(B, Byte(Code - $6E));
+  end
+  else if (Code >= $79) and (Code <= $80) then
+  begin
+    if (B.SideToMove = 0) and (B.Side[B.SideToMove].CpuLevel = 0) and
+       (BattleUnit(B, B.SideToMove, Byte(Code - $78))^.UnconsciousRounds = 0) then
+      CombatOptionsMenu(B, Byte(Code - $78));
+  end;
+end;
+
 function MoreThanOneActive(var B: TBattleWnd): Boolean;
 var
   I, Last, N: Byte;
@@ -1608,7 +1852,7 @@ begin
   for I := 1 to NMe do
   begin
     U := BattleUnit(B, B.SideToMove, I);
-    if (U^.Ammo > 0) or (DS.UnitMelee[ShortInt(U^.UnitType)] <> 0) then
+    if (U^.Ammo > 0) or (PByte(@DS.UnitMelee)[ShortInt(U^.UnitType)] <> 0) then
     begin
       NThem := B.Side[OtherSide(B)].Army1Count;
       for K := 1 to NThem do
@@ -1623,7 +1867,7 @@ begin
   for I := 1 to NThem do
   begin
     E := BattleUnit(B, OtherSide(B), I);
-    if (E^.Ammo > 0) or (DS.UnitMelee[ShortInt(E^.UnitType)] <> 0) then
+    if (E^.Ammo > 0) or (PByte(@DS.UnitMelee)[ShortInt(E^.UnitType)] <> 0) then
     begin
       NMe := B.Side[B.SideToMove].Army1Count;
       for K := 1 to NMe do
@@ -1695,7 +1939,7 @@ begin
     end;
     { steps: one less in winter (not for rough-terrain types, Samuraischwert,
       Kampfstab) }
-    if (B.Winter <> 0) and (DS.UnitRoughTerrain[ShortInt(U^.UnitType)] = 0) and
+    if (B.Winter <> 0) and (PByte(@DS.UnitRoughTerrain)[ShortInt(U^.UnitType)] = 0) and
        (U^.Ability <> 6) and (U^.Ability <> 11) then
       U^.Steps := Byte(MaxLong(1, SmallInt(U^.MaxSteps - 1)))
     else

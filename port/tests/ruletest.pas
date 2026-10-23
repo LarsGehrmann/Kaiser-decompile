@@ -8,7 +8,7 @@ program RuleTest;
 
 uses
   SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
-  Battle, ReplayUI;
+  Battle, War, ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -118,6 +118,9 @@ var
   BWBefore, BWAfter: TBytes;
   HasBW: Boolean;
   BWText: string;
+  WInfo: TBattleInfo;
+  WRes: TBattleResults;
+  Hx: TBytes;
 
 const
   BWLo = $2E;                      { compared part, as BW_CMP in gen_rule_vectors.py }
@@ -536,6 +539,60 @@ begin
               end;
               Got := IntToStr(K);
             end;
+          'Battle_EndAction': begin EndAction(BW); Got := '-'; end;
+          'Battle_CmWarten': begin CmWarten(BW); Got := '-'; end;
+          'Battle_CmFertig': begin CmFertig(BW); Got := '-'; end;
+          'Battle_CmAufgeben': begin CmAufgeben(BW); Got := '-'; end;
+          'Battle_CombatOptionsMenu': begin CombatOptionsMenu(BW, ArgI(0)); Got := '-'; end;
+          'Battle_WMLButtonDown': begin WMLButtonDown(BW, ArgI(0), ArgI(1)); Got := '-'; end;
+          'War_AskBattlefield':
+            Got := B2S(AskBattlefield(Window, Pl^, Save.Players[ArgI(0)], ArgI(1), ArgI(2)));
+          'War_RetreatLosses': begin RetreatLosses(Window, Pl^); Got := '-'; end;
+          'War_Massacre', 'War_ShowMassacre', 'War_BurnBuildings', 'War_ShowBurnResult',
+          'War_PlunderTalerAndLand', 'War_ShowPlunderResult', 'War_Ai_PlunderChoice',
+          'War_PlunderDialog':
+            begin
+              Hx := HexBytes(Args[1]);
+              Move(Hx[0], WRes, SizeOf(WRes));
+              case Func of
+                'War_Massacre': Massacre(Window, Pl^, Save.Players[ArgI(0)], WRes, ArgI(2));
+                'War_ShowMassacre': ShowMassacre(Window, Pl^, Save.Players[ArgI(0)], WRes);
+                'War_BurnBuildings': BurnBuildings(Window, Pl^, Save.Players[ArgI(0)], WRes, ArgI(2));
+                'War_ShowBurnResult': ShowBurnResult(Window, Pl^, Save.Players[ArgI(0)], WRes);
+                'War_PlunderTalerAndLand':
+                  PlunderTalerAndLand(Window, Pl^, Save.Players[ArgI(0)], WRes, ArgI(2));
+                'War_ShowPlunderResult': ShowPlunderResult(Window, Pl^, Save.Players[ArgI(0)], WRes);
+                'War_Ai_PlunderChoice': Ai_PlunderChoice(Window, Pl^, Save.Players[ArgI(0)], WRes, ArgI(2));
+                'War_PlunderDialog': PlunderDialog(Window, Pl^, Save.Players[ArgI(0)], WRes, ArgI(2));
+              end;
+              Got := '-';
+              Move(WRes, OutBuf, SizeOf(WRes));
+              OutSize := SizeOf(WRes);
+            end;
+          'War_BattleSetup', 'War_BattleFameAndXp':
+            begin
+              Hx := HexBytes(Args[1]);
+              Move(Hx[0], WInfo, SizeOf(WInfo));
+              if Func = 'War_BattleSetup' then
+                BattleSetup(Window, Pl^, Save.Players[ArgI(0)], WInfo, ArgI(2), ArgI(3), ArgI(4))
+              else
+                BattleFameAndXp(Window, Pl^, Save.Players[ArgI(0)], WInfo, ArgI(2));
+              Got := '-';
+              Move(WInfo, OutBuf, SizeOf(WInfo));
+              OutSize := SizeOf(WInfo);
+            end;
+          'War_BattleAftermath':
+            begin
+              Hx := HexBytes(Args[1]);
+              Move(Hx[0], WInfo, SizeOf(WInfo));
+              Hx := HexBytes(Args[2]);
+              Move(Hx[0], WRes, SizeOf(WRes));
+              BattleAftermath(Window, Pl^, Save.Players[ArgI(0)], WInfo, WRes, ArgI(3));
+              Got := '-';
+              Move(WInfo, OutBuf, SizeOf(WInfo));
+              Move(WRes, OutBuf[SizeOf(WInfo)], SizeOf(WRes));
+              OutSize := -1;                            { two records }
+            end;
           'BattleInit':
             begin
               BattleInit(BW, Window, nil, Pl^, Save.Players[ArgI(0)], ArgI(1), ArgI(2));
@@ -652,6 +709,9 @@ begin
       Outs := HexOf(Snapshot(Loss, SizeOf(Loss)));
     if OutSize > 0 then
       Outs := HexOf(Snapshot(OutBuf, OutSize));
+    if OutSize = -1 then                           { BattleAftermath: info, results }
+      Outs := HexOf(Snapshot(OutBuf, SizeOf(TBattleInfo))) + ',' +
+        HexOf(Snapshot(OutBuf[SizeOf(TBattleInfo)], SizeOf(TBattleResults)));
     After := Snapshot(Save.Players[0], Num * PlayerSize);
     HAfter := Snapshot(DS.Game, HeaderSize);
     Got := 'ret=' + Got + ' out=' + Outs + ' seedout=' + IntToStr(RandSeed) +

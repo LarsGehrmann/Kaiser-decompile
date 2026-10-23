@@ -810,7 +810,7 @@ begin
   begin
     Last := P^.Army2Count;
     for I := 1 to Last do
-      if Chance(50) and (DS.UnitKnight[ShortInt(P^.Army2[I].UnitType)] <> 0) and
+      if Chance(50) and (PByte(@DS.UnitKnight)[ShortInt(P^.Army2[I].UnitType)] <> 0) and
          (ShortInt(P^.Army2[I].UnitType) >= 8) and (P^.Army2[I].Level = 2) and
          (P^.Army2[I].Pay > 0) and (Ai_SurplusLand(P^) > 3000) and
          (LongInt(P^.LandUsed + 3000) < P^.Land div 20) then
