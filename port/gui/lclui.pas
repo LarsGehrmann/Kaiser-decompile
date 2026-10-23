@@ -201,6 +201,24 @@ begin
     Reports.TradeCaravan(Args[0].P, PPlayer(Args[1].P)^, Word(Args[2].V))
   else if Name = 'ShowHeroLevelUp' then
     Reports.ShowHeroLevelUp(Args[0].P, THeroGains(Args[1].P^))
+  else if Name = 'TroopDlg_DrawUnitInfo' then
+  begin
+    F := FormOf(FindDialog(Args[1].P));
+    if F is TLogicDialog then
+      TLogicDialog(F).DrawUnitInfo;
+  end
+  else if Name = 'UnitLookDlg_DrawUnitPicture' then
+  begin
+    F := FormOf(FindDialog(Args[1].P));
+    if F is TLogicDialog then
+      TLogicDialog(F).DrawUnitLook(Byte(Args[0].V));
+  end
+  else if Name = 'RecruitDlg_DrawUnitPicture' then
+  begin
+    F := FormOf(FindDialog(Args[1].P));
+    if F is TLogicDialog then
+      TLogicDialog(F).DrawRecruitPicture(Byte(Args[0].V));
+  end
   else if Name = 'UnitInfoDlg_DrawPortrait' then
   begin
     F := FormOf(FindDialog(Args[1].P));

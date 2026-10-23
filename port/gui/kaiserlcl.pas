@@ -59,6 +59,8 @@ type
     procedure Command(Id: SmallInt); virtual;
     { a check box, radio button or scroll bar was used (OWL IdCtlNNN) }
     procedure Notify(Id: SmallInt); virtual;
+    { the autopilot moves the mouse to (X, Y) before its snapshot }
+    procedure AutoMouse(X, Y: Integer); virtual;
     function Run: SmallInt;
     { EndDlg(code) }
     procedure EndWith(Code: SmallInt);
@@ -158,6 +160,7 @@ end;
 
 var
   SpriteCache: TStringList;
+  AutoSeen: TStringList;            { KAISER_AUTOANSWER: how often each dialog came }
 
 function Sprite(Id: Word): TBitmap;
 var
@@ -567,6 +570,10 @@ procedure TTemplateForm.Notify(Id: SmallInt);
 begin
 end;
 
+procedure TTemplateForm.AutoMouse(X, Y: Integer);
+begin
+end;
+
 procedure TTemplateForm.ButtonClick(Sender: TObject);
 begin
   Command(TComponent(Sender).Tag);
@@ -583,6 +590,7 @@ var
 
 procedure TTemplateForm.AutoTick(Sender: TObject);
 var
+  Answer: string;
   B: TBitmap;
   P: TPortableNetworkGraphic;
   I: Integer;
@@ -592,6 +600,19 @@ begin
     its default button (else OK) }
   FAutoTimer.Enabled := False;
   Inc(AutoCount);
+  { KAISER_AUTOMOUSE=NAME=X:Y,...: the mouse at (X, Y) of dialog NAME first }
+  with TStringList.Create do
+  try
+    CommaText := GetEnvironmentVariable('KAISER_AUTOMOUSE');
+    if IndexOfName(FTemplate.Name) >= 0 then
+    begin
+      Answer := Values[FTemplate.Name];
+      AutoMouse(StrToIntDef(Copy(Answer, 1, Pos(':', Answer) - 1), 0),
+        StrToIntDef(Copy(Answer, Pos(':', Answer) + 1, 9), 0));
+    end;
+  finally
+    Free;
+  end;
   B := GetFormImage;
   P := TPortableNetworkGraphic.Create;
   try
@@ -606,12 +627,19 @@ begin
   for I := 0 to High(FTemplate.Items) do
     if (FTemplate.Items[I].ClassName = 'BUTTON') and (FTemplate.Items[I].Style and $F = 1) then
       Def := FTemplate.Items[I].Id;
-  { KAISER_AUTOANSWER=NAME=ID,...: press button ID in dialog NAME instead }
+  { KAISER_AUTOANSWER=NAME=ID,...: press button ID in dialog NAME instead;
+    NAME=ID/N only the first N times NAME appears }
+  AutoSeen.Values[FTemplate.Name] := IntToStr(StrToIntDef(AutoSeen.Values[FTemplate.Name], 0) + 1);
   with TStringList.Create do
   try
     CommaText := GetEnvironmentVariable('KAISER_AUTOANSWER');
     if IndexOfName(FTemplate.Name) >= 0 then
-      Def := StrToIntDef(Values[FTemplate.Name], Def);
+    begin
+      Answer := Values[FTemplate.Name];
+      if (Pos('/', Answer) = 0) or
+         (StrToInt(AutoSeen.Values[FTemplate.Name]) <= StrToIntDef(Copy(Answer, Pos('/', Answer) + 1, 9), 0)) then
+        Def := StrToIntDef(Copy(Answer, 1, Pos('/', Answer + '/') - 1), Def);
+    end;
   finally
     Free;
   end;
@@ -639,6 +667,7 @@ begin
 end;
 
 initialization
+  AutoSeen := TStringList.Create;
   SpriteCache := TStringList.Create;
   BitmapCache := TStringList.Create;
   BitmapCache.CaseSensitive := True;

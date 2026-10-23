@@ -72,7 +72,8 @@ var
   Shots, LoadFile: string;
 begin
   { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game, the menu
-    commands of KAISER_AUTOMENU (e.g. 201,203), TURNS turns.
+    commands of KAISER_AUTOMENU (e.g. 201,203; war:A:D, raid:P:M; look:ARMY:SLOT
+    for the unit look of the right click), TURNS turns.
     KAISER_LOAD=FILE (or a savegame as the first argument, like the
     original's LoadFromCommandLine 1000:1136) loads it instead.
     KAISER_MAINSHOT=DIR saves the main window as DIR/title_WxH.png before
@@ -106,6 +107,9 @@ begin
       for T := 0 to Cmds.Count - 1 do
         if (Copy(Cmds[T], 1, 4) = 'war:') or (Copy(Cmds[T], 1, 5) = 'raid:') then
           AutoWar(Cmds[T])
+        else if Copy(Cmds[T], 1, 5) = 'look:' then             { look:ARMY:SLOT }
+          ShowUnitLookDlg(Self, FSave.Players[DS.Game.CurrentPlayer],
+            StrToIntDef(Copy(Cmds[T], 6, 1), 1), StrToIntDef(Copy(Cmds[T], 8, 2), 1))
         else
           Command(StrToIntDef(Cmds[T], 0));
     finally

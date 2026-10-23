@@ -74,6 +74,8 @@ type
     FTimer: TTimer;                 { the type's WMTimer (TDialogLogic.TimerInterval) }
     FPortrait: TImage;              { UnitInfoDlg's portrait }
     FMap: TImage;                   { GEGNERDLG: the map of the countries }
+    FPicture: TImage;               { UnitLookDlg / RecruitDlg: the unit; the crown }
+    FInfo: TImage;                  { ANORDNENDLG: the card of the unit under the mouse }
     procedure GridMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -95,6 +97,26 @@ type
       with initiative on), green: affordable, red: the attack costs more
       initiative than one has }
     procedure DrawTargetMap;
+    { UnitLookDlg.DrawUnitPicture (1040:367b): 64 x 64 at (8, 8), the LAND
+      pattern in a black frame, the sprite 1100 + type (1300 + type
+      blinking; a hero 1150 / 1350 + picture) at (16, 16) }
+    procedure DrawUnitLook(Blink: Byte);
+    { RecruitDlg.DrawUnitPicture (1040:55b5): the sprite 1100 + type (1300 +
+      type blinking) on the dialog's background at (12, 8) of a 237 x 254
+      window, both scaled with the width (the original's y uses it too) }
+    procedure DrawRecruitPicture(Blink: Byte);
+    { CoronationDlg.WMPaint (1040:4d8c): KLEINEKRONE, 120 x 115 of it at
+      (88, 118) of a 296 x 354 window, scaled }
+    procedure DrawCrown;
+    { TroopDlg.DrawUnitInfo (1038:8921): the card of the unit under the
+      mouse at (+0x718, +0x71a), 355 x 64 scaled with +0x71d: the name; the
+      rank stars (12 x 12, 6030 + kind) and the ability right-aligned; the
+      attribute icons 6000.. with attack, defence, hits, range, steps (and
+      salvos), the ranged kind 6010..; victories and pay (6020, 6021). A
+      Garde unit's card starts at 178 (ranged: 140) }
+    procedure DrawUnitInfo;
+    procedure AutoMouse(X, Y: Integer); override;
+    function PictureImage(X, Y, W, H: Integer): TImage;
     destructor Destroy; override;
     function Logic: TDialogLogic;
     procedure SetupWindow; override;
@@ -418,6 +440,8 @@ begin
     DrawTroops;
   if D.Name = 'GegnerDlg' then
     DrawTargetMap;
+  if D.Name = 'CoronationDlg' then
+    DrawCrown;
   if Logic.TimerInterval > 0 then
   begin
     FTimer := TTimer.Create(Self);
@@ -638,6 +662,234 @@ begin
   finally
     B.Free;
   end;
+end;
+
+function TLogicDialog.PictureImage(X, Y, W, H: Integer): TImage;
+begin
+  if FPicture = nil then
+  begin
+    FPicture := TImage.Create(Self);
+    FPicture.Parent := Self;
+  end;
+  FPicture.SetBounds(X, Y, W, H);
+  Result := FPicture;
+end;
+
+procedure TLogicDialog.DrawUnitLook(Blink: Byte);
+var
+  B, S, Land: TBitmap;
+  N: Integer;
+begin
+  B := TBitmap.Create;
+  try
+    B.SetSize(64, 64);
+    Land := ResBitmap('LAND');
+    if Land <> nil then
+      B.Canvas.Brush.Bitmap := Land
+    else
+      B.Canvas.Brush.Color := clGreen;
+    B.Canvas.Pen.Color := clBlack;
+    B.Canvas.Rectangle(0, 0, 64, 64);
+    B.Canvas.Brush.Bitmap := nil;
+    if Blink <> 0 then
+      N := 1300
+    else
+      N := 1100;
+    if D.Data[$4D] = 9 then
+      Inc(N, 50 + D.Data[$4E])
+    else
+      Inc(N, ShortInt(D.Data[$4D]));
+    S := Sprite(N);
+    if S <> nil then
+      B.Canvas.Draw(16, 16, S);
+    PictureImage(8, 8, 64, 64).Picture.Assign(B);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TLogicDialog.DrawRecruitPicture(Blink: Byte);
+var
+  B, S: TBitmap;
+  SX: Double;
+  N: Integer;
+begin
+  SX := 1;
+  if PSmallInt(@D.Data[$2A])^ > 0 then
+    SX := PSmallInt(@D.Data[$2A])^ / 237;
+  B := TBitmap.Create;
+  try
+    B.SetSize(32, 32);
+    B.Canvas.Brush.Color := DialogBackground;
+    B.Canvas.FillRect(0, 0, 32, 32);
+    if Blink <> 0 then
+      N := 1300
+    else
+      N := 1100;
+    S := Sprite(N + D.Data[$70E]);
+    if S <> nil then
+      B.Canvas.Draw(0, 0, S);
+    PictureImage(Trunc(12 * SX + 0.5), Trunc(8 * SX + 0.5), 32, 32).Picture.Assign(B);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TLogicDialog.DrawCrown;
+var
+  B, Crown: TBitmap;
+  SX, SY: Double;
+  W, H: Integer;
+begin
+  SX := 1;
+  SY := 1;
+  if PSmallInt(@D.Data[$2A])^ > 0 then
+    SX := PSmallInt(@D.Data[$2A])^ / 296;
+  if PSmallInt(@D.Data[$2C])^ > 0 then
+    SY := PSmallInt(@D.Data[$2C])^ / 354;
+  Crown := ResBitmap('KLEINEKRONE');
+  if Crown = nil then
+    Exit;
+  W := Trunc(120 * SX + 0.5);
+  H := Trunc(115 * SY + 0.5);
+  B := TBitmap.Create;
+  try
+    B.SetSize(W, H);
+    B.Canvas.Brush.Color := clBlack;               { (outside the bitmap) }
+    B.Canvas.FillRect(0, 0, W, H);
+    B.Canvas.Draw(0, 0, Crown);                    { Bmp_Draw: BitBlt, not stretched }
+    PictureImage(Trunc(88 * SX + 0.5), Trunc(118 * SY + 0.5), W, H).Picture.Assign(B);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TLogicDialog.DrawUnitInfo;
+var
+  B: TBitmap;
+  Cv: TCanvas;
+  U: TUnit;
+  W, X0, I, Kind, Count: Integer;
+  Ranged: Boolean;
+  Scale: TReal48;
+
+  procedure Icon(Id, X, Y: Integer);
+  var
+    S: TBitmap;
+  begin
+    S := Sprite(Id);
+    if S <> nil then
+      Cv.Draw(X, Y, S);
+  end;
+
+  procedure Text(X, Y: Integer; const T: RawByteString);
+  begin
+    Cv.TextOut(X, Y, Utf8(T));
+  end;
+
+  function Scaled(V: LongInt): Integer;
+  begin
+    Result := R48Round(R48Mul(R48FromLong(V), Scale));
+  end;
+
+begin
+  Move(D.Data[$71D], Scale, SizeOf(Scale));
+  W := Scaled(355);
+  B := TBitmap.Create;
+  try
+    B.SetSize(W - 1, 64);
+    Cv := B.Canvas;
+    Cv.Brush.Color := DialogBackground;
+    Cv.FillRect(0, 0, B.Width, B.Height);
+    { LOGFONT DS:606c: Comic Sans MS, -12, bold; black, transparent }
+    Cv.Font.Name := 'Comic Sans MS';
+    Cv.Font.Height := -12;
+    Cv.Font.Style := [fsBold];
+    Cv.Font.Color := clBlack;
+    Cv.Brush.Style := bsClear;
+    if D.Data[$70F] <> 0 then
+    begin
+      if D.Data[$70E] = 1 then
+        Move(D.Data[$130 + D.Data[$70F] * $3D], U, SizeOf(U))
+      else
+        Move(D.Data[$355 + D.Data[$70F] * $3D], U, SizeOf(U));
+      Ranged := (U.Range >= 2) or (U.Ability = $11);
+      if D.Data[$70E] = 1 then
+        X0 := 0
+      else if Ranged then
+        X0 := Scaled(140)
+      else
+        X0 := Scaled(178);
+      Text(X0, 0, PChar(@U.Name));
+      { the rank: 1-3 stars of three kinds, from level 6 on one and +n }
+      Count := 0;
+      Kind := 0;
+      if U.Level < 3 then
+        Count := U.Level
+      else if U.Level <= 5 then
+      begin
+        Count := U.Level - 3;
+        Kind := 1;
+      end
+      else
+        Kind := 2;
+      for I := 0 to Count do
+        Icon(6030 + Kind, X0 + I * 12, 16);
+      if U.Level > 6 then
+        Text(X0 + Count * 12 + 16, 16, '+' + IntToStr(U.Level - 6));
+      for I := 0 to 4 do
+        Icon(6000 + I, X0 + I * 36, 32);
+      if Ranged then
+      begin
+        case U.UnitType of
+          26: Kind := 0;
+          9: Kind := Ord(U.Ability = $11);
+          4, 6: Kind := 2;
+          22: Kind := 3;
+          21: Kind := 1;
+        else
+          Kind := 4;
+        end;
+        Icon(6010 + Kind, X0 + 180, 32);
+      end;
+      Icon(6020, X0, 48);
+      Icon(6021, X0 + 36, 48);
+      Text(X0 + 14, 32, IntToStr(U.Attack));
+      Text(X0 + 50, 32, IntToStr(U.Defence));
+      Text(X0 + 86, 32, IntToStr(ShortInt(U.MaxHp)));
+      Text(X0 + 122, 32, IntToStr(U.Range));
+      Text(X0 + 158, 32, IntToStr(U.MaxSteps));
+      if Ranged then
+        Text(X0 + 194, 32, IntToStr(U.MaxAmmo));
+      Text(X0 + 14, 48, IntToStr(U.Kills));
+      Text(X0 + 50, 48, IntToStr(U.Pay));
+      { SETTEXTALIGN TA_RIGHT: the ability ends at 200 (ranged) / 166 }
+      if U.Ability <> 0 then
+      begin
+        if Ranged then
+          I := X0 + 200
+        else
+          I := X0 + 166;
+        Cv.TextOut(I - Cv.TextWidth(Utf8(DSText($53D8 + U.Ability * 25))), 16,
+          Utf8(DSText($53D8 + U.Ability * 25)));
+      end;
+    end;
+    if FInfo = nil then
+    begin
+      FInfo := TImage.Create(Self);
+      FInfo.Parent := Self;
+      FInfo.OnMouseMove := @GridMouseMove;
+    end;
+    FInfo.SetBounds(PSmallInt(@D.Data[$718])^, PSmallInt(@D.Data[$71A])^, W - 1, 64);
+    FInfo.Picture.Assign(B);
+  finally
+    B.Free;
+  end;
+end;
+
+procedure TLogicDialog.AutoMouse(X, Y: Integer);
+begin
+  Logic.MouseMove(X, Y);
 end;
 
 function TLogicDialog.CanClose: Boolean;
