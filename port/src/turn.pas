@@ -30,6 +30,8 @@ procedure PromotionCheck(Parent: Pointer; var Players: TPlayers; Me, NumPlayers:
 procedure SabotageEnd(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);  { 1010:192f }
 function ShowStartTurnDialog(Parent: Pointer; var P: TPlayer; Me: Byte; Year: Word): Boolean;  { 1010:0002 }
 procedure OfferUnitsAtTurnStart(Parent: Pointer; var P: TPlayer);  { 1010:22d4 }
+procedure RollYearlyEvent(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);                                              { 1010:2ce5 }
 
 implementation
 
@@ -686,6 +688,189 @@ begin
   end
   else
     AddUnitToArmy(P, 1, NewU);                       { (even into a full Heer) }
+end;
+
+procedure RollYearlyEvent(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);
+var
+  P: PPlayer;
+  E, F, G, I: Byte;
+  A, U, K: LongInt;
+  R: LongInt;
+  Hero: PUnit;
+  D: TDialog;
+begin
+  { this year's event (docs/rules/events.md); bad events are rarer with
+    Karma (F = 2, G = 1) }
+  P := @Players[Me];
+  P^.Event := 0;
+  if P^.Spell = $0A then
+  begin
+    F := 2;
+    G := 1;
+  end
+  else
+  begin
+    F := 1;
+    G := 0;
+  end;
+  if (P^.Population > 100000) and (Random(4) = 0) then
+    E := 6                                             { plague in big countries }
+  else
+    E := Random(23) + 1;
+  case E of
+    2:
+      if P^.Population < 50000 then
+        if Random(F * 3) <> 0 then
+          E := 0;
+    3:
+      if Random(3 - G) = 0 then
+      begin
+        { land gained }
+        A := Random(Word((P^.Title + 1) * 1000)) + 500;
+        U := UnclaimedLand(Players, NumPlayers);
+        if A > U then
+          A := U;
+        if A = 0 then
+          E := 0
+        else
+          P^.Land := P^.Land + A;
+      end
+      else
+        E := 0;
+    4:
+      if (Random(F * 2) = 0) and (P^.Mills > 0) then
+        P^.Mills := P^.Mills - 1
+      else
+        E := 0;
+    5:
+      if Random(3 - G) <> 0 then
+        E := 0;
+    6:
+      if (P^.Population < 50000) and (Random(F * 10) <> 0) then
+        E := 0
+      else
+      begin
+        P^.Lifetime := P^.Lifetime - Random(2);
+        AddNews(Players, NumPlayers, Me, Me, 4);
+      end;
+    7:
+      begin
+        { new markets on free land }
+        K := LongInt(P^.Land - P^.LandUsed) div 1000 - P^.Markets;
+        if (K > 0) and (Random(4 - G) = 0) then
+          P^.Markets := P^.Markets + MinLong(K, Random(Word(P^.Fame div 10)) + 2)
+        else
+          E := 0;
+      end;
+    8:
+      begin
+        { a unit deserts }
+        I := Random(P^.Army1Count) + 1;
+        if (Random(F * 2) = 0) and (P^.Army1Count > 2) and (P^.Spell <> 9) and
+           (DS.UnitCanDesert[ShortInt(P^.Army1[I].UnitType)] <> 0) then
+        begin
+          RemoveArmy1Unit(P^, I);
+          Inc(P^.DesertedUnits);
+        end
+        else
+          E := 0;
+      end;
+    9:
+      if Random(2 - G) = 0 then
+        E := 0
+      else
+        Inc(P^.Lifetime);
+    $0A:
+      if Random(F * 8) = 0 then
+      begin
+        { fire }
+        AddNews(Players, NumPlayers, Me, Me, 3);
+        P^.Markets := P^.Markets - Random(Word(P^.Markets div 2));
+        P^.Mills := P^.Mills - Random(Word(P^.Mills div 2));
+        R := Random(P^.PalaceParts shr 1);
+        if (R > 0) and (P^.PalaceParts = 12) then
+          LoseFame(P^.Fame, 10);
+        P^.PalaceParts := Byte(P^.PalaceParts - Byte(R));
+        R := Random(P^.CathedralParts shr 1);
+        if (R > 0) and (P^.CathedralParts = 12) then
+          LoseFame(P^.Fame, 20);
+        P^.CathedralParts := Byte(P^.CathedralParts - Byte(R));
+        R := Random(Word(P^.Granaries div 2));
+        RemoveGranaries(P^, R);
+        R := Random(Word(P^.Warehouses div 2));
+        RemoveWarehouses(P^, R);
+        P^.Lifetime := P^.Lifetime - Random(2);
+      end
+      else
+        E := 0;
+    $0B:
+      if Random(4) <> 0 then
+        E := 0;
+    $0C:
+      if Random(F * 6) <> 0 then
+        E := 0;
+    $0D:
+      if (Random(F * 5) <> 0) or (P^.Spell = $0B) then
+        E := 0;
+    $0E:
+      begin
+        { new mills on free land }
+        K := LongInt(P^.Land - P^.LandUsed) div 1000 - P^.Mills;
+        if (K > 0) and (Random(4 - G) = 0) then
+          P^.Mills := P^.Mills + MinLong(K, Random(Word(P^.Fame div 10)) + 2)
+        else
+          E := 0;
+      end;
+    $0F:
+      if Random(4 - G) <> 0 then
+        E := 0;
+    $10:
+      if Random(F * 2) <> 0 then
+        E := 0;
+    $11:
+      if Random(2) = 0 then
+        E := 0;
+    $12:
+      if (Random(F * 2) = 0) and (P^.Granaries > 1) then
+        RemoveGranaries(P^, 1)
+      else
+        E := 0;
+    $13:
+      if Random(100) > 0 then
+        E := 0;
+    $14:
+      if (P^.Warehouses > 0) and (Random(F * 3) = 0) and (P^.Warehouses > 0) then
+        RemoveWarehouses(P^, 1)
+      else
+        E := 0;
+    $15, $16:
+      { the fortune teller: only after year 39 and without immortality }
+      if (DS.Game.Immortality = 0) and (Year > $27) then
+      begin
+        if P^.Lifetime >= 5 then
+          E := $15
+        else
+          E := $16;
+      end
+      else
+        E := 0;
+    $17:
+      if (P^.ArmyAway <> 0) and FindHero(P^, Hero, 0) then
+      begin
+        Hero^.Experience := SmallInt(Hero^.Experience + Hero^.Level * 2 + 10);
+        GainFame(P^.Fame, 8);
+      end
+      else
+        E := 0;
+  end;
+  if (P^.CpuLevel = 0) and (E <> 0) then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(ResId(E + 300))]);
+    UI.Execute(D);
+    UI.Done(D, 1);
+  end;
+  P^.Event := E;
 end;
 
 end.
