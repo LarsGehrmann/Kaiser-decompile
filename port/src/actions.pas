@@ -50,6 +50,13 @@ procedure Do_Militaer(Parent: Pointer; const P: TPlayer; Year: Word);
 procedure Do_Laendernamen(Parent: Pointer);
 { Spiel (CmSpiel 1000:1d4b): the scenario's title, author and description }
 procedure Do_Spiel(Parent: Pointer);
+{ the player to deal with (1038:1a12): Mode 1 gift, 5 treaty, 2 tribute,
+  -1 sabotage; -1 when cancelled or when that player has a message from Me
+  waiting (NOAUSWAHLDLG, not for sabotage) }
+function ChooseDiplomacyTarget(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Mode: ShortInt): SmallInt;
+{ Abkommen (1038:1e35): offer peace for 5..50 years, offer or cancel trade }
+procedure Do_Abkommen(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -182,6 +189,39 @@ type
   TScenarioInfoDlg = class(TDialogLogic)
   public
     procedure SetupWindow; override;
+  end;
+
+  { SPENDE/TRADE/TRIBUT/SABOAUSWAHLDLG (VMT DS:357a, 1058:06d2): combo box
+    101 of the players but Exclude; the chosen player +0x32, the number of
+    players +0x33, Exclude +0x34, the entries' players +0x35, their names
+    +0x3f (0x33 bytes each). Args: Parent, Name, @Players, Num, Exclude }
+  TPlayerSelectDlg = class(TDialogLogic)
+  public
+    procedure Init; override;
+    procedure SetupWindow; override;
+    function CanClose: Boolean; override;
+  end;
+
+  { ABFRAGETALER/LAND/SKLAVEN/ZEITDLG (VMT DS:0ffa, 1038:1b8c): the player
+    at +0x2e, scroll bar 101, static 102, the value +0x70b, the mode +0x70f
+    (0 Taler, 1 land in 100s, 3 people, 4 years) }
+  TAmountDlg = class(TDialogLogic)
+  public
+    function Value: PLongInt;
+    procedure SetupWindow; override;
+    procedure ShowValue;
+    function Handle(Id: SmallInt): Boolean; override;
+    function CanClose: Boolean; override;
+  end;
+
+  { ABKOMMENDLG (VMT DS:0f94, 1038:2107, a HelpDlg): the choice +0x34, peace
+    +0x35, trade +0x36, the partner's name +0x3b; static 101, radios
+    201..203 peace, offer trade, cancel trade }
+  TAbkommenDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+    procedure UpdateRadios;
+    function Handle(Id: SmallInt): Boolean; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -1250,6 +1290,265 @@ begin
   C.SetText(103, PChar(@DS.Game.ScenarioDescription));
 end;
 
+{ -- player selection ------------------------------------------------------- }
+
+procedure TPlayerSelectDlg.Init;
+var
+  Players: PPlayers;
+  I, K, Last: Byte;
+begin
+  Players := PPlayers(Args[2].P);
+  D.Data[$34] := Byte(Args[4].V);
+  D.Data[$33] := Byte(Args[3].V);
+  K := 0;
+  D.Data[$32] := 0;
+  Last := Byte(D.Data[$33] - 1);
+  I := 0;
+  repeat
+    if I <> D.Data[$34] then
+    begin
+      D.Data[$35 + K] := I;
+      FormatPlayerTitle(Players^[I], PChar(@D.Data[$3F + K * $33]), 0, 0);
+      Inc(K);
+    end;
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+end;
+
+procedure TPlayerSelectDlg.SetupWindow;
+var
+  I, Last: Byte;
+begin
+  { the names of all players but one (num - 1 entries) }
+  Last := Byte(D.Data[$33] - 2);
+  I := 0;
+  repeat
+    C.AddString(101, PChar(@D.Data[$3F + I * $33]));
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+  C.ComboSetText(101, PChar(@D.Data[$3F + D.Data[$32] * $33]));
+end;
+
+function TPlayerSelectDlg.CanClose: Boolean;
+begin
+  { no selection (-1) reads +0x34: Exclude itself }
+  D.Data[$32] := D.Data[$35 + C.GetSelIndex(101)];
+  Result := True;
+end;
+
+function ChooseDiplomacyTarget(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Mode: ShortInt): SmallInt;
+var
+  D, E: TDialog;
+  Name: Word;
+  T: Byte;
+begin
+  case Mode of
+    1: Name := $11A2;                 { SPENDEAUSWAHLDLG }
+    5: Name := $11B3;                 { TRADEAUSWAHLDLG }
+    2: Name := $11C3;                 { TRIBUTAUSWAHLDLG }
+  else
+    Name := $11D4;                    { SABOAUSWAHLDLG }
+  end;
+  D := UI.Dialog('PlayerSelectDlg', $357A, [APtr(Parent), AStr(DSText(Name)), APtr(@Players),
+    AByte(NumPlayers), AByte(Me)]);
+  if UI.Execute(D) = 1 then
+  begin
+    T := D.Data[$32];
+    if (Players[T].Mailbox[Me * 6] = 0) or (Mode = -1) then
+      Result := T
+    else
+    begin
+      E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($11E3))]);   { NOAUSWAHLDLG }
+      UI.Execute(E);
+      UI.Done(E, 1);
+      Result := -1;
+    end;
+  end
+  else
+    Result := -1;
+  UI.Done(D, 1);
+end;
+
+{ -- AmountDlg ---------------------------------------------------------------- }
+
+function TAmountDlg.Value: PLongInt;
+begin
+  Result := PLongInt(@D.Data[$70B]);
+end;
+
+procedure TAmountDlg.SetupWindow;
+var
+  P: PPlayer;
+begin
+  P := PPlayer(@D.Data[$2E]);
+  case D.Data[$70F] of
+    0:
+      begin
+        C.SetRange(101, 1, SmallInt(P^.Taler div 100));
+        Value^ := 1;
+      end;
+    1:
+      begin
+        C.SetRange(101, 1, SmallInt(LongInt(P^.Land - P^.LandUsed - 12000) div 100));
+        Value^ := 1;
+      end;
+    3:
+      begin
+        if LongInt(P^.Population - 50) > 10000 then
+          C.SetRange(101, 1, 10000)
+        else
+          C.SetRange(101, 1, SmallInt(P^.Population - 50));
+        Value^ := 1;
+      end;
+    4:
+      begin
+        C.SetRange(101, 5, 50);
+        Value^ := 5;
+      end;
+  end;
+  ShowValue;
+end;
+
+procedure TAmountDlg.ShowValue;
+var
+  Buf: array[0..11] of Char;
+begin
+  C.SetPosition(101, SmallInt(Value^));
+  case D.Data[$70F] of
+    0, 1: IntToPChar(Buf, LongInt(Int64(Value^) * 100));
+    3, 4: IntToPChar(Buf, Value^);
+  else
+    Buf[0] := #0;
+  end;
+  C.SetText(102, Buf);
+end;
+
+function TAmountDlg.Handle(Id: SmallInt): Boolean;
+begin
+  if Id <> 101 then
+    Exit(False);
+  Value^ := C.GetPosition(101);
+  ShowValue;
+  Result := True;
+end;
+
+function TAmountDlg.CanClose: Boolean;
+begin
+  if D.Data[$70F] in [0, 1] then
+    Value^ := LongInt(Int64(Value^) * 100);
+  Result := True;
+end;
+
+{ -- Do_Abkommen -------------------------------------------------------------- }
+
+procedure TAbkommenDlg.SetupWindow;
+begin
+  D.Data[$34] := 0;
+  C.SetText(101, PChar(@D.Data[$3B]));
+  if D.Data[$35] <> 0 then
+  begin
+    C.Enable(201, False);                   { peace already }
+    D.Data[$34] := 1;
+  end;
+  if D.Data[$36] = 0 then
+    C.Enable(203, False)                    { no trade to cancel }
+  else
+  begin
+    C.Enable(202, False);
+    if D.Data[$34] = 1 then
+      D.Data[$34] := 2;
+  end;
+  UpdateRadios;
+end;
+
+procedure TAbkommenDlg.UpdateRadios;
+var
+  I: Integer;
+begin
+  for I := 0 to 2 do
+    C.SetCheck(201 + I, Ord(I = D.Data[$34]));
+end;
+
+function TAbkommenDlg.Handle(Id: SmallInt): Boolean;
+begin
+  if (Id < 201) or (Id > 203) then
+    Exit(False);
+  D.Data[$34] := Id - 201;
+  UpdateRadios;
+  Result := True;
+end;
+
+{ the message of kind Kind from Me in the mailbox of player T }
+procedure PostMessage(var Players: TPlayers; T, Me, Kind: Byte; Data: LongInt);
+var
+  M: PByte;
+begin
+  M := @Players[T].Mailbox[Me * 6];
+  M[0] := Kind;
+  M[1] := 0;
+  PLongInt(@M[2])^ := Data;
+end;
+
+procedure Do_Abkommen(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  T: SmallInt;
+  D, A, E: TDialog;
+  Sent: Boolean;
+  Buf: array[0..81] of Char;
+begin
+  Sent := False;
+  T := ChooseDiplomacyTarget(Parent, Players, Me, NumPlayers, 5);
+  if T < 0 then
+    Exit;
+  D := UI.Dialog('AbkommenDlg', $0F94, [APtr(Parent), AStr(DSText($11F0))]);
+  FormatPlayerTitle(Players[T], Buf, 0, 0);
+  StrCopy(PChar(@D.Data[$3B]), Buf);
+  D.Data[$35] := Ord(ShortInt(Players[Me].PeaceYears[T]) >= 1);
+  D.Data[$36] := Ord(Players[Me].TradeAgreement[T] = 1);
+  if UI.Execute(D) = 1 then
+    case D.Data[$34] of
+      0:
+        begin
+          { peace for 5..50 years }
+          A := UI.Dialog('AmountDlg', $0FFA, [APtr(Parent), AStr(DSText($11FC))]);
+          Move(Players[Me], A.Data[$2E], SizeOf(TPlayer));
+          A.Data[$70F] := 4;
+          Sent := UI.Execute(A) = 1;
+          if Sent then
+            PostMessage(Players, T, Me, 9, PLongInt(@A.Data[$70B])^);
+          UI.Done(A, 1);
+        end;
+      1:
+        begin
+          PostMessage(Players, T, Me, 5, 0);           { a trade agreement }
+          Sent := True;
+        end;
+      2:
+        begin
+          E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($120B))]);   { TRADEALREADYDLG }
+          if UI.Execute(E) = 1 then
+          begin
+            Players[Me].TradeAgreement[T] := 0;
+            LoseFame(Players[Me].Fame, 2);
+            PostMessage(Players, T, Me, 6, 0);
+            Sent := True;
+          end;
+        end;
+    end;
+  UI.Done(D, 1);
+  if Sent then
+  begin
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($121B))]);   { KURIERDLG }
+    UI.Execute(E);
+    UI.Done(E, 1);
+  end;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1428,4 +1727,7 @@ initialization
   RegisterDialogLogic('MilitaryStatsDlg', TMilitaryStatsDlg);
   RegisterDialogLogic('CountryNamesDlg', TCountryNamesDlg);
   RegisterDialogLogic('ScenarioInfoDlg', TScenarioInfoDlg);
+  RegisterDialogLogic('PlayerSelectDlg', TPlayerSelectDlg);
+  RegisterDialogLogic('AmountDlg', TAmountDlg);
+  RegisterDialogLogic('AbkommenDlg', TAbkommenDlg);
 end.

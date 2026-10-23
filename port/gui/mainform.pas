@@ -230,6 +230,12 @@ begin
       if DS.Game.GameState = 1 then
         Do_Spiel(Self);
     604: Do_Laendernamen(Self);                  { CmLaendernamen 1000:1ec3 }
+    222:                                        { CmAbkommen 1000:17fc }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_Abkommen(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
+        Invalidate;
+      end;
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);
