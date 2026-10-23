@@ -53,7 +53,7 @@ original resources.
 | 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint, `Sqrt` | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical (+ 30,000 `Sqrt`) |
 | 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | ✅ all 102 functions (`port/src/rules.pas`; `Seg14_UnitInit` is empty, the local `SortUnits`/`UnitLess` are tested through `SortArmy`); 100,000 / 100,000 vectors identical (1,000 per function) |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | ✅ segment 3 (`port/src/turn.pas`: all 25 logic functions, the rest are dialog classes, plus `FormatPlayerTitle`), segments 2 and 7 (`ai.pas`, all 36), the turn loop of segment 1 (`game.pas`: `NextPlayer`, `CpuTurn`, `ResolveWar`); UI calls replayed (below); 59,039 vectors (1,000 per function) identical, the one exception a test artefact (stale players from an earlier vector, fixed) |
-| 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | ✅ `port/bin/ksrsim` plays a savegame or a new game on (`NewGame`, `EndHumanTurn`, `BeginHumanTurn` in `game.pas`); the humans just end their turns. `tools/emu/sim_compare.sh` runs the same in the emulated original: all 30 savegames and new games of every size agree turn by turn until the end of the game (SIM_RESULT) |
+| 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | ✅ `port/bin/ksrsim` plays a savegame or a new game on (`NewGame`, `EndHumanTurn`, `BeginHumanTurn` in `game.pas`); the humans just end their turns. `tools/emu/sim_compare.sh` runs the same in the emulated original: all 30 savegames (seeds 1–3, up to 300 turns each) and 10 new games of different sizes agree turn by turn, 5,093 turns in all: 97 of 100 games identical to the end, the other 3 identical until the original crashes (an original bug: sabotage action 6 puts a 9th unit into a full Garde, `Ai_ArrangeArmies` then overruns its stack; docs/rules/ai.md) |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |
 | 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | |
 
@@ -136,4 +136,14 @@ H humans named `Spieler1..`, C computers of level L, goods trade and initiative 
 
 `tools/emu/sim_original.py` drives the original the same way: `CmBeenden` (and
 `CmNeuesSpiel`) run in the emulator with a fake main window and the same dialog answers;
-`Randomize` is stubbed (the seed comes from the command line on both sides).
+`Randomize` is stubbed (the seed comes from the command line on both sides). Offered units (`UnitInfoDlg`)
+are declined on both sides: with the army dialog stubbed, a passive human would pile them up in
+the Garde beyond 8, which overruns the player record.
+
+Result: `sim_compare.sh 300 SEED DIR` for seeds 1–3 over all savegames, plus 10 new games
+(`new:1:1:1` … `new:2:8:4`): 5,093 turns, 97 of 100 games identical to the end. In the other 3
+(GLANZGLO seed 1 turn 44, SEP14 and LARSUWE2 seed 3, turns 36 and 295) the emulated original
+crashes; the port is identical up to there. Cause: sabotage action 6 lets a deserter join a
+Garde of 8 units, the computer's next `Ai_ArrangeArmies` sorts 17 units into an array of 16
+and overwrites its return address. The port overruns the same array but survives, so those
+games only compare up to the crash.

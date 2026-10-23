@@ -8,7 +8,7 @@
   goods trade and initiative on.
 
   Runs EndHumanTurn (the original "Runde beenden") TURNS times with the
-  default UI answers (dialogs OK, UI functions 0). After each turn one line:
+  default UI answers (dialogs OK, offered units declined, UI functions 0). After each turn one line:
   turn, current player, year, RandSeed and a CRC32 of the player array and
   the game record - the same lines as tools/emu/sim_original.py prints for
   the original. OUT.KSR receives the final state. }
@@ -31,7 +31,9 @@ var
   Name: string;
 begin
   Result := 1;
-  if D.Name = 'HumanCountDlg' then
+  if D.Name = 'UnitInfoDlg' then
+    Result := 2                    { offered units are declined (see sim_original.py) }
+  else if D.Name = 'HumanCountDlg' then
     D.Data[$34] := Humans
   else if D.Name = 'ComputerCountDlg' then
   begin

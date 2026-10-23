@@ -9,7 +9,7 @@ trade and initiative on.
 
 Runs the original "Runde beenden" (CmBeenden 1000:2476) TURNS times: the
 human's year end, all computer players (NextPlayer), the next human's turn
-start. Dialogs answer OK (Execute = 1), UI functions return 0 (a battle
+start. Dialogs answer OK (Execute = 1; offered units are declined), UI functions return 0 (a battle
 against a human is lost by the attacker, raiders win). After each turn one
 line: turn, current player, year, RandSeed and a CRC32 of the player array
 and the game record. port/bin/ksrsim prints the same lines for the port.
@@ -36,7 +36,18 @@ def field(fields, name):
     raise KeyError(name)
 
 
+UI = None
+
+
 def default_answer(entry, kind):
+    """OK everywhere, except that humans decline offered units (UnitInfoDlg):
+    with the army dialog stubbed, accepted units would pile up in the Garde
+    beyond 8 and overrun the player record (in both programs)."""
+    if entry.startswith('Execute(O') and UI is not None:
+        obj = entry[len('Execute('):entry.index(')')]
+        for e in UI.log:
+            if e.endswith('=' + obj) and e.startswith('UnitInfoDlg'):
+                return (2, {})
     return (1, {}) if kind == 'method' else (0, {})
 
 
@@ -69,7 +80,8 @@ def main():
     header[field(ks.HEADER, 'email_game_q')] = 0
     emu = KaiserEmu()
     sp = emu.scratch_para
-    ui = UILayer(emu, sp, default_answer)
+    global UI
+    ui = UI = UILayer(emu, sp, default_answer)
     emu.reset_ds()
     emu.write(emu.ds_para, HDR_DS, bytes(header))
     emu.write(sp, 0, bytes(10 * PSIZE))

@@ -107,7 +107,7 @@ caught  = Chance(p)                          (always rolled, independent)
 | 3 | 60 | warehouses > 0 | `RemoveWarehouses(1)`: goods shrink in proportion |
 | 4 | 40 | – | every unit without the ability Fortune (9) loses its experience |
 | 5 | 35 | Heer not empty, not away, has a unit that can desert | a random such unit deserts (`deserted_units` + 1, amount = its type) |
-| 6 | 25 | as 5 | as 5, and the unit joins the saboteur's Garde (becomes type 5 if that Garde has more than 8 units) |
+| 6 | 25 | as 5 | as 5, and the unit joins the saboteur's Garde (becomes kind 5 if that Garde has more than 8 units). Off by one: a full Garde of 8 takes a 9th unit, which overwrites the field after `army2` and later crashes the original (see `Ai_ArrangeArmies`, ai.md) |
 | 7 | 40 | flag 0x40 not set | flag 0x40: happiness − 0.18 this turn |
 | 8 | 60 | flag 0x80 not set | flag 0x80: happiness − 0.09 |
 | 9 | 35 | title > 0, flag 0x100 not set | flag 0x100: happiness − 0.07; fame − (3..7) |

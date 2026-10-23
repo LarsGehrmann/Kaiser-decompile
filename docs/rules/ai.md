@@ -134,6 +134,15 @@ Prices as for humans (`DS:5b10`, Ferengicharme 3/4). In this order:
    1–14 (`SabotageAction`, diplomacy.md). The budgets are set by `Ai_SetSabotageBudgets`
    (1030:060f): (6 − aggression) × (title + 1) / 2 for every player with attitude < 50.
 
+`Ai_ArrangeArmies` sorts all units in a local array with room for 16. A computer player with
+more than 16 units overwrites the return address and crashes the original. That happens in
+normal play: sabotage action 6 (diplomacy.md) lets a deserter join a Garde of 8 (it checks
+"more than 8"), and the computer's next `Ai_ArrangeArmies` sees 17 units. It also happens when
+a human with an overfull Garde dies and the country becomes a computer player (offered units go
+to the Garde without a limit; only the army dialog `Do_TruppenAufstellen` makes the human
+reduce it). The port has the same 17-unit array overrun; games are compared only up to that
+point.
+
 `Ai_IsMuchRicher(a, b)` (1030:04ab): wealth = Taler + 5 per Hufe beyond the Kaiser's land
 requirement; true when b has more than 1.5 × the wealth of a.
 
