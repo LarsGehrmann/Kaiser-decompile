@@ -9,3 +9,4 @@ win311/
 port/bin/
 port/obj/
 tools/lazarus/
+.claude/worktrees/

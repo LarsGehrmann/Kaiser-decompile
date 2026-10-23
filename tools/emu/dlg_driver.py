@@ -42,7 +42,7 @@ from unicorn.x86_const import (UC_X86_REG_SP, UC_X86_REG_SS, UC_X86_REG_CS,
                                UC_X86_REG_FLAGS)
 
 CTL_SEG = 0x3000          # fake control objects (paragraphs after the scratch start)
-HEAP_SEG = 0x4000         # heap for the dialog objects (64 KB)
+HEAP_SEG = 0x4000         # heap for the dialog objects (64 KB segments from here on)
 
 # OWL constructors: name -> (address, arguments after Self/VMT in Pascal order)
 CONTROL_CTORS = {
@@ -142,6 +142,7 @@ class DialogDriver:
         self.controls = {}           # (seg, off) -> Control
         self.by_id = {}
         self.heap_next = 0x10
+        self.heap_seg = HEAP_SEG
         self.script = []
         self.scripts = []            # one event list per real dialog (in order)
         self.end_code = None
@@ -188,9 +189,17 @@ class DialogDriver:
 
         def alloc():
             size = emu.uc.reg_read(UC_X86_REG_AX)
+            if self.heap_next + size > 0x10000:
+                # the segment is full (nothing is freed): the next 64 KB
+                # (GEHEIMDLG and three SABOTAGEBUDGETDLG opened from it
+                # need more than one segment)
+                self.heap_seg += 0x1000
+                self.heap_next = 0x10
+                if (self.heap_seg + 0x1000) * 16 > emu.scratch_size:
+                    raise RuntimeError('dialog heap full')
             off = self.heap_next
             self.heap_next = (self.heap_next + size + 15) & ~15
-            seg = emu.scratch_para + HEAP_SEG
+            seg = emu.scratch_para + self.heap_seg
             emu.write(seg, off, bytes(size))
             emu.uc.reg_write(UC_X86_REG_FLAGS, emu.uc.reg_read(UC_X86_REG_FLAGS) & ~1)
             emu.stub_return(0, False, off, seg, cs=emu.para[26])

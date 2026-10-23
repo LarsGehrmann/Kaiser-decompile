@@ -8,7 +8,7 @@ program RuleTest;
 
 uses
   SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
-  Battle, War, NERes, Actions, Annals, Troops, ReplayUI;
+  Battle, War, NERes, Actions, Annals, Troops, Intel, ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -632,6 +632,7 @@ begin
               Got := '-';
             end;
           'ShowCoronation': begin ShowCoronation(Window, Pl^, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Do_Geheimdienst': begin Do_Geheimdienst(Window, Save.Players, ArgI(0), ArgI(1), ArgI(2)); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'Do_TruppenAufstellen': begin Do_TruppenAufstellen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'ChooseUnitToGive':
