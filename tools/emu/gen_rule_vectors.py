@@ -471,6 +471,7 @@ SPECS = {
                    ['attacks_won', 'attacks_lost', 'defences_won', 'defences_lost',
                     'raider_fights_won', 'raider_fights_lost', 'own_units_killed',
                     'deserted_units', 'manoeuvres_held']),
+    'Do_Laendernamen': ('1040:02d5', ['Wnd'], 'none', []),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1176,6 +1177,7 @@ DIALOG_TESTS = {
     'Do_Karriereberatung': ['KARRIEREDLG'],
     'CmWirtschaft': ['WIRTSTATDLG'],
     'CmMilitaer': ['MILSTATDLG'],
+    'Do_Laendernamen': ['LAENDERNAMENDLG'],
 }
 
 

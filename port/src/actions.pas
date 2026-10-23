@@ -45,6 +45,9 @@ procedure Do_ManoeverAbhalten(Parent: Pointer; var P: TPlayer; Unused: Word);
 procedure Do_Wirtschaft(Parent: Pointer; const P: TPlayer);
 { Militaer (CmMilitaer 1000:1c91): MILSTATDLG, battles and losses }
 procedure Do_Militaer(Parent: Pointer; const P: TPlayer; Year: Word);
+{ Laendernamen (1040:02d5): LAENDERNAMENDLG edits the country names and
+  adjectives (DS:63a8 / DS:6696) }
+procedure Do_Laendernamen(Parent: Pointer);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -162,6 +165,15 @@ type
   TMilitaryStatsDlg = class(TDialogLogic)
   public
     procedure SetupWindow; override;
+  end;
+
+  { LAENDERNAMENDLG (VMT DS:2072, 1040:0314): edits 101..110 names, 201..210
+    adjectives, button 200 the built-in names }
+  TCountryNamesDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+    function Handle(Id: SmallInt): Boolean; override;
+    function CanClose: Boolean; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -1155,6 +1167,56 @@ begin
   C.SetText(118, Buf);
 end;
 
+{ -- Do_Laendernamen -------------------------------------------------------- }
+
+procedure Do_Laendernamen(Parent: Pointer);
+var
+  D: TDialog;
+begin
+  D := UI.Dialog('CountryNamesDlg', $2072, [APtr(Parent), AStr(DSText($20C6))]);
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+procedure TCountryNamesDlg.SetupWindow;
+var
+  I: Integer;
+begin
+  for I := 0 to 9 do
+  begin
+    C.SetText(101 + I, DS.CountryNamesRt[I]);
+    C.SetText(201 + I, DS.CountryAdjectives[I]);
+  end;
+end;
+
+function TCountryNamesDlg.Handle(Id: SmallInt): Boolean;
+var
+  I: Integer;
+begin
+  if Id <> 200 then
+    Exit(False);
+  for I := 0 to 9 do
+  begin
+    StrCopy(DS.CountryNamesRt[I], DS.CountryNames[I]);
+    C.SetText(101 + I, DS.CountryNamesRt[I]);
+    StrCopy(DS.CountryAdjectives[I], DS.CountryNames[10 + I]);
+    C.SetText(201 + I, DS.CountryAdjectives[I]);
+  end;
+  Result := True;
+end;
+
+function TCountryNamesDlg.CanClose: Boolean;
+var
+  I: Integer;
+begin
+  for I := 0 to 9 do
+  begin
+    C.GetText(101 + I, DS.CountryNamesRt[I], 13);
+    C.GetText(201 + I, DS.CountryAdjectives[I], 17);
+  end;
+  Result := True;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1331,4 +1393,5 @@ initialization
   RegisterDialogLogic('CareerDlg', TCareerDlg);
   RegisterDialogLogic('EconomyStatsDlg', TEconomyStatsDlg);
   RegisterDialogLogic('MilitaryStatsDlg', TMilitaryStatsDlg);
+  RegisterDialogLogic('CountryNamesDlg', TCountryNamesDlg);
 end.

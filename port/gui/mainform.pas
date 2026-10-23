@@ -220,6 +220,12 @@ begin
     304:                                        { CmInternationalerVergleich 1000:1c42 }
       if DS.Game.GameState = 1 then
         Do_InternationalerVergleich(Self, FSave.Players, DS.Game.NumPlayers);
+    311:                                        { CmWirtschaft 1000:1cf0 }
+      if DS.Game.GameState = 1 then
+        Do_Wirtschaft(Self, FSave.Players[DS.Game.CurrentPlayer]);
+    312:                                        { CmMilitaer 1000:1c91 }
+      if DS.Game.GameState = 1 then
+        Do_Militaer(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.Year);
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);
