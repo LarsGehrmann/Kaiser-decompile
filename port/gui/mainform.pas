@@ -23,6 +23,7 @@ type
     function FindItem(Id: Word): TMenuItem;
     procedure UpdateMenu;
     procedure FormPaint(Sender: TObject);
+    procedure AutoStart(Sender: TObject);
   public
     constructor Create(AOwner: TComponent); override;
     procedure Command(Id: Word);
@@ -44,7 +45,23 @@ const
   CmdNew = 101; CmdOpen = 102; CmdSave = 103; CmdSaveAs = 104; CmdExit = 24340;
   CmdEndTurn = 401; CmdInfo = 502;
 
+procedure TKaiserForm.AutoStart(Sender: TObject);
+var
+  T: Integer;
+begin
+  { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game, TURNS turns }
+  TTimer(Sender).Enabled := False;
+  CmNeuesSpiel;
+  Invalidate;
+  for T := 1 to StrToIntDef(GetEnvironmentVariable('KAISER_AUTOGAME'), 0) do
+    if DS.Game.GameState = 1 then
+      CmBeenden;
+  Close;
+end;
+
 constructor TKaiserForm.Create(AOwner: TComponent);
+var
+  Tm: TTimer;
 begin
   inherited CreateNew(AOwner);
   Caption := 'Kaiser';
@@ -56,6 +73,12 @@ begin
   FillChar(FSave, SizeOf(FSave), 0);
   BuildMenu;
   UpdateMenu;
+  if GetEnvironmentVariable('KAISER_AUTOGAME') <> '' then
+  begin
+    Tm := TTimer.Create(Self);
+    Tm.Interval := 200;
+    Tm.OnTimer := @AutoStart;
+  end;
 end;
 
 procedure TKaiserForm.AddItems(Into: TMenuItem; const M: TMenuTemplate);

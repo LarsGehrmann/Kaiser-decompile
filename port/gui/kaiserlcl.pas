@@ -24,8 +24,15 @@ type
     FBaseX, FBaseY: Integer;
     FItems: array of TControl;
     FIds: array of SmallInt;
+    FAuto: array of Boolean;        { auto check box / radio button style }
+    FState: array of Boolean;       { the check state the game set }
     procedure ButtonClick(Sender: TObject);
+    procedure ControlClick(Sender: TObject);
     function DU(V: Integer; Horz: Boolean): Integer;
+    function IndexOf(C: TControl): Integer;
+  protected
+    { > 0 while the program changes controls (no notifications) }
+    FQuiet: Integer;
   public
     { the result of the dialog: the id of the button that ended it }
     EndId: SmallInt;
@@ -36,25 +43,12 @@ type
     { a button without its own handler: ids 1 (OK) and 2 (Cancel) end the
       dialog; others end it too for the choice dialogs }
     procedure Command(Id: SmallInt); virtual;
+    { a check box, radio button or scroll bar was used (OWL IdCtlNNN) }
+    procedure Notify(Id: SmallInt); virtual;
     function Run: SmallInt;
-  end;
-
-  TLclUI = class(TGameUI)
   private
-    FForms: array of record
-      D: TDialog;
-      F: TTemplateForm;
-      Args: array of TUIArg;
-    end;
-    function FormOf(D: TDialog): TTemplateForm;
-  public
-    MainForm: TForm;
-    function Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog; override;
-    function Execute(D: TDialog): SmallInt; override;
-    procedure Done(D: TDialog; Flag: Word); override;
-    function ExecDialog(D: TDialog): SmallInt; override;
-    function GetText(D: TDialog): PChar; override;
-    function Call(const Name: string; const Args: array of TUIArg): SmallInt; override;
+    FAutoTimer: TTimer;
+    procedure AutoTick(Sender: TObject);
   end;
 
 var
@@ -63,6 +57,10 @@ var
 
 { kaiser.exe next to the program, in ../Kaiser or given as -exe PATH }
 function FindExe: string;
+{ the port's KAISER.INI (Application Support); the original's next to
+  kaiser.exe is read when the port has none yet }
+function SettingsFile: string;
+function OwnSettingsFile: string;
 function ResBitmap(const Name: RawByteString; Id: Word = 0): TBitmap;
 function Utf8(const Raw: RawByteString): string;
 
@@ -90,6 +88,18 @@ begin
     if FileExists(Result) then
       Exit;
   Result := 'kaiser.exe';
+end;
+
+function OwnSettingsFile: string;
+begin
+  Result := GetUserDir + 'Library/Application Support/Kaiser/KAISER.INI';
+end;
+
+function SettingsFile: string;
+begin
+  Result := OwnSettingsFile;
+  if not FileExists(Result) then
+    Result := ExtractFilePath(FindExe) + 'KAISER.INI';
 end;
 
 var
@@ -165,6 +175,7 @@ var
   C: TControl;
   Kind: Byte;
   Bmp, Measure: TBitmap;
+  Cap: TLabel;
 begin
   inherited CreateNew(AOwner);
   FTemplate := T;
@@ -193,6 +204,8 @@ begin
   ClientHeight := DU(T.CY, False);
   SetLength(FItems, Length(T.Items));
   SetLength(FIds, Length(T.Items));
+  SetLength(FAuto, Length(T.Items));
+  SetLength(FState, Length(T.Items));
   for I := 0 to High(T.Items) do
   begin
     It := T.Items[I];
@@ -205,16 +218,30 @@ begin
           begin
             C := TCheckBox.Create(Self);
             TCheckBox(C).Caption := Utf8(It.Text);
+            TCheckBox(C).OnClick := @ControlClick;
           end;
         4, 9:
           begin
             C := TRadioButton.Create(Self);
             TRadioButton(C).Caption := Utf8(It.Text);
+            TRadioButton(C).OnClick := @ControlClick;
           end;
         7:
           begin
-            C := TGroupBox.Create(Self);
-            TGroupBox(C).Caption := Utf8(It.Text);
+            { a group box as a frame (a graphic control, so that the labels
+              inside stay visible) with its caption }
+            C := TBevel.Create(Self);
+            TBevel(C).Shape := bsFrame;
+            if It.Text <> '' then
+            begin
+              Cap := TLabel.Create(Self);
+              Cap.Parent := Self;
+              Cap.Caption := ' ' + Utf8(It.Text) + ' ';
+              Cap.Color := DialogBackground;
+              Cap.Transparent := False;
+              Cap.Left := DU(It.X, True) + 6;
+              Cap.Top := DU(It.Y, False) - Cap.Canvas.TextHeight('X') div 2;
+            end;
           end;
       else
         begin
@@ -243,6 +270,7 @@ begin
       C := TScrollBar.Create(Self);
       if It.Style and 1 <> 0 then
         TScrollBar(C).Kind := sbVertical;
+      TScrollBar(C).OnChange := @ControlClick;
     end
     else if (It.ClassName = 'STATIC') and (It.Style and $F = 3) then
     begin
@@ -282,10 +310,12 @@ begin
     end;
     C.Visible := It.Style and $10000000 <> 0;               { WS_VISIBLE }
     C.Enabled := It.Style and $08000000 = 0;                { WS_DISABLED }
-    if C is TGroupBox then
+    if C is TBevel then
       C.SendToBack;
     FItems[I] := C;
     FIds[I] := It.Id;
+    FAuto[I] := (It.ClassName = 'BUTTON') and (It.Style and $F in [3, 6, 9]);
+    FState[I] := False;
   end;
 end;
 
@@ -325,6 +355,62 @@ begin
     C.Enabled := On;
 end;
 
+function TTemplateForm.IndexOf(C: TControl): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to High(FItems) do
+    if FItems[I] = C then
+      Exit(I);
+  Result := -1;
+end;
+
+function CheckedOf(C: TControl): Boolean;
+begin
+  if C is TCheckBox then
+    Result := TCheckBox(C).Checked
+  else if C is TRadioButton then
+    Result := TRadioButton(C).Checked
+  else
+    Result := False;
+end;
+
+procedure TTemplateForm.ControlClick(Sender: TObject);
+var
+  K: Integer;
+  C: TControl;
+begin
+  K := IndexOf(TControl(Sender));
+  if K < 0 then
+    Exit;
+  C := FItems[K];
+  if FQuiet > 0 then
+  begin
+    FState[K] := CheckedOf(C);
+    Exit;
+  end;
+  if ((C is TCheckBox) or (C is TRadioButton)) and not FAuto[K] then
+  begin
+    { BS_CHECKBOX / BS_RADIOBUTTON: only the program changes the state }
+    Inc(FQuiet);
+    try
+      if C is TCheckBox then
+        TCheckBox(C).Checked := FState[K]
+      else
+        TRadioButton(C).Checked := FState[K];
+    finally
+      Dec(FQuiet);
+    end;
+  end
+  else
+    FState[K] := CheckedOf(C);
+  Notify(FIds[K]);
+end;
+
+procedure TTemplateForm.Notify(Id: SmallInt);
+begin
+end;
+
 procedure TTemplateForm.ButtonClick(Sender: TObject);
 begin
   Command(TButton(Sender).Tag);
@@ -336,137 +422,48 @@ begin
   ModalResult := mrOK;
 end;
 
+var
+  AutoCount: Integer = 0;
+
+procedure TTemplateForm.AutoTick(Sender: TObject);
+var
+  B: TBitmap;
+  P: TPortableNetworkGraphic;
+  I: Integer;
+  Def: SmallInt;
+begin
+  { KAISER_AUTOPILOT=DIR: save the dialog as DIR/NNN_NAME.png, then press
+    its default button (else OK) }
+  FAutoTimer.Enabled := False;
+  Inc(AutoCount);
+  B := GetFormImage;
+  P := TPortableNetworkGraphic.Create;
+  try
+    P.Assign(B);
+    P.SaveToFile(IncludeTrailingPathDelimiter(GetEnvironmentVariable('KAISER_AUTOPILOT')) +
+      Format('%.3d_%s.png', [AutoCount, FTemplate.Name]));
+  finally
+    P.Free;
+    B.Free;
+  end;
+  Def := 1;
+  for I := 0 to High(FTemplate.Items) do
+    if (FTemplate.Items[I].ClassName = 'BUTTON') and (FTemplate.Items[I].Style and $F = 1) then
+      Def := FTemplate.Items[I].Id;
+  Command(Def);
+end;
+
 function TTemplateForm.Run: SmallInt;
 begin
   EndId := 2;
+  if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
+  begin
+    FAutoTimer := TTimer.Create(Self);
+    FAutoTimer.Interval := 300;
+    FAutoTimer.OnTimer := @AutoTick;
+  end;
   ShowModal;
   Result := EndId;
-end;
-
-{ -- TLclUI ------------------------------------------------------------------ }
-
-function ArgText(const A: TUIArg): RawByteString;
-begin
-  if (A.Kind = uaStr) and (PtrUInt(A.P) >= $10000) then
-    Result := PChar(A.P)
-  else
-    Result := '';
-end;
-
-function TLclUI.FormOf(D: TDialog): TTemplateForm;
-var
-  I: Integer;
-begin
-  for I := 0 to High(FForms) do
-    if FForms[I].D = D then
-      Exit(FForms[I].F);
-  Result := nil;
-end;
-
-function TLclUI.Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog;
-var
-  K, I: Integer;
-  TplName: RawByteString;
-  F: TTemplateForm;
-begin
-  Result := inherited Dialog(Name, VMT, Args);
-  F := nil;
-  if (Length(Args) >= 2) and (Name <> 'TButton') then
-  begin
-    TplName := ArgText(Args[1]);
-    if (TplName <> '') and (Exe.Find(RT_DIALOG, TplName) <> nil) then
-      F := TTemplateForm.CreateFromTemplate(MainForm, Exe.Dialog(TplName));
-  end;
-  K := Length(FForms);
-  SetLength(FForms, K + 1);
-  FForms[K].D := Result;
-  FForms[K].F := F;
-  SetLength(FForms[K].Args, Length(Args));
-  for I := 0 to High(Args) do
-    FForms[K].Args[I] := Args[I];
-  if F = nil then
-    Exit;
-  { what the SetupWindow of the base types puts into the dialog }
-  if (Name = 'MessageDlg') or (Name = 'HelpMessageDlg') then
-    F.SetItemText(101, ArgText(Args[2]))
-  else if (Name = 'Message2Dlg') or (Name = 'HelpChoice2Dlg') then
-  begin
-    F.SetItemText(101, ArgText(Args[2]));
-    F.SetItemText(102, ArgText(Args[3]));
-  end;
-end;
-
-function TLclUI.Execute(D: TDialog): SmallInt;
-var
-  F: TTemplateForm;
-begin
-  F := FormOf(D);
-  if F = nil then
-    Exit(inherited Execute(D));
-  Result := F.Run;
-  if (D.Name = 'HeroNameDlg') and (F.Item(101) is TEdit) then
-    StrPLCopy(PChar(@D.Data[DialogTextOfs]), TEdit(F.Item(101)).Text, 24);
-end;
-
-procedure TLclUI.Done(D: TDialog; Flag: Word);
-var
-  I: Integer;
-begin
-  for I := 0 to High(FForms) do
-    if FForms[I].D = D then
-    begin
-      FreeAndNil(FForms[I].F);
-      FForms[I].D := nil;
-    end;
-end;
-
-function TLclUI.ExecDialog(D: TDialog): SmallInt;
-begin
-  Result := Execute(D);
-end;
-
-function TLclUI.GetText(D: TDialog): PChar;
-begin
-  Result := D.Text;
-end;
-
-function TLclUI.Call(const Name: string; const Args: array of TUIArg): SmallInt;
-var
-  Data: TBytes;
-  FN: string;
-  S: TFileStream;
-begin
-  Result := 0;
-  if Name = 'PlaySound' then
-  begin
-    { WAVEDATA resource n, played by afplay (sndPlaySound async) }
-    Data := Exe.FindNamedType('WAVEDATA', '', Word(Args[0].V));
-    if Data = nil then
-      Exit;
-    FN := GetTempDir + 'kaiser_sound_' + IntToStr(Args[0].V) + '.wav';
-    if not FileExists(FN) then
-    begin
-      S := TFileStream.Create(FN, fmCreate);
-      try
-        S.WriteBuffer(Data[0], Length(Data));
-      finally
-        S.Free;
-      end;
-    end;
-    with TProcess.Create(nil) do
-    try
-      Executable := '/usr/bin/afplay';
-      Parameters.Add(FN);
-      Options := [];
-      Execute;
-    finally
-      Free;
-    end;
-  end
-  else if Name = 'MessageBox' then
-    Result := Application.MessageBox(PChar(Utf8(ArgText(Args[1]))), 'Kaiser', MB_OK)
-  else if Name = 'Randomize' then
-    Real48.RandSeed := LongInt(GetTickCount64);      { the clock, like Borland's Randomize }
 end;
 
 initialization

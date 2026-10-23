@@ -5,7 +5,7 @@ program KaiserGui;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, Forms, Graphics, SysUtils, MacAppearance, NERes, KaiserDS, KaiserUI, KaiserLCL, MainForm;
+  Interfaces, Forms, Graphics, SysUtils, MacAppearance, KaiserIni, NERes, KaiserDS, KaiserUI, KaiserLCL, KaiserDlgs, LclUI, MainForm;
 
 { -snapshot DIALOG OUT.png: the dialog built from its template, as an image
   (checks the rendering without a screen capture) }
@@ -31,21 +31,24 @@ end;
 
 
 var
-  LclUI: TLclUI;
+  TheUI: TLclUI;
 begin
   Application.Initialize;
   UseLightAppearance;
   Exe := TNEFile.Create(FindExe);
   ResetDataSegment;
+  InitGlobals;
+  ReadSettings(SettingsFile);
+  DialogBackground := RGBToColor(DS.OptBackground[0], DS.OptBackground[1], DS.OptBackground[2]);
   if ParamStr(1) = '-snapshot' then
   begin
     Snapshot(ParamStr(2), ParamStr(3));
     Halt(0);
   end;
-  LclUI := TLclUI.Create;
+  TheUI := TLclUI.Create;
   UI.Free;
-  UI := LclUI;
+  UI := TheUI;
   Application.CreateForm(TKaiserForm, KaiserForm);
-  LclUI.MainForm := KaiserForm;
+  TheUI.MainForm := KaiserForm;
   Application.Run;
 end.

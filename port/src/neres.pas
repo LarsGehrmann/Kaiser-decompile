@@ -90,6 +90,7 @@ type
 function ParseDialog(const D: TBytes): TDlgTemplate;
 function ParseMenu(const D: TBytes): TMenuTemplate;
 function CP1252ToUTF8(const S: RawByteString): string;
+function UTF8ToCP1252(const S: string): RawByteString;
 
 implementation
 
@@ -451,12 +452,13 @@ begin
   Walk(Result);
 end;
 
-function CP1252ToUTF8(const S: RawByteString): string;
 const
   { 0x80..0x9F in CP1252 }
-  Hi: array[$80..$9F] of Word = ($20AC, $FFFD, $201A, $0192, $201E, $2026, $2020, $2021,
+  CP1252Hi: array[$80..$9F] of Word = ($20AC, $FFFD, $201A, $0192, $201E, $2026, $2020, $2021,
     $02C6, $2030, $0160, $2039, $0152, $FFFD, $017D, $FFFD, $FFFD, $2018, $2019, $201C,
     $201D, $2022, $2013, $2014, $02DC, $2122, $0161, $203A, $0153, $FFFD, $017E, $0178);
+
+function CP1252ToUTF8(const S: RawByteString): string;
 var
   I: Integer;
   C: Word;
@@ -467,10 +469,33 @@ begin
   begin
     C := Ord(S[I]);
     if (C >= $80) and (C <= $9F) then
-      C := Hi[C];
+      C := CP1252Hi[C];
     U[I] := WideChar(C);
   end;
   Result := UTF8Encode(U);
+end;
+
+function UTF8ToCP1252(const S: string): RawByteString;
+var
+  U: UnicodeString;
+  I, K: Integer;
+  C: Word;
+begin
+  U := UTF8Decode(S);
+  SetLength(Result, Length(U));
+  for I := 1 to Length(U) do
+  begin
+    C := Ord(U[I]);
+    if C > $FF then
+    begin
+      for K := $80 to $9F do
+        if CP1252Hi[K] = C then
+          C := K;
+      if C > $FF then
+        C := Ord('?');
+    end;
+    Result[I] := Chr(C);
+  end;
 end;
 
 end.

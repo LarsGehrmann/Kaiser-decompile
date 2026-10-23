@@ -118,9 +118,12 @@ type
     Pad6004: array[0..259] of Byte;
     Game: TGameHeader;  { +0x6108 the global game record = savegame header }
     OptAutosave: Byte;  { +0x639d INI Geschichtsschreibung: autosave at every human turn start }
-    Pad639E: array[0..2] of Byte;
+    OptSound: Byte;  { +0x639e INI Krach & Geschrei: sound effects }
+    OptMusic: Byte;  { +0x639f INI Schalmeienklaenge: MIDI music (kaiser.mid) }
+    OptResolution: Byte;  { +0x63a0 INI Aufloesung: 0 = 640x480, 1 = 800x600, 2 = 1024x768 }
     OptDebug: Byte;  { +0x63a1 INI Debug: census editor in new games }
-    Pad63A2: array[0..5] of Byte;
+    OptBackground: array[0..2] of Byte;  { +0x63a2 INI Hintergrund rot/gruen/blau (255, 255, 172) }
+    Pad63A5: array[0..2] of Byte;
     CountryNamesRt: array[0..9] of array[0..24] of Char;  { +0x63a8 runtime copy, editable (CountryNamesDlg) }
     CpuRulerNames: array[0..9] of array[0..24] of Char;  { +0x64a2 runtime, from KAISER.INI (InitPlayers, InitComputerRuler) }
     HumanNames: array[0..9] of array[0..24] of Char;  { +0x659c runtime: the names entered for the humans in a new game (NewGame_AskPlayerData) }
