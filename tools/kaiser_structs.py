@@ -242,6 +242,8 @@ DS = [
     (0x1068, 'u8[1..9]', 'troop_garde_x', 'column 0..2 of Garde slot 1..9 (inside an 8-pixel wall)'),
     (0x1072, 'u8[1..9]', 'troop_garde_y', 'row 0..2'),
     (0x107c, 'u8[0..8]', 'troop_garde_cell', 'the Garde slot in cell column * 3 + row'),
+    (0x1526, 'u8[0..9]', 'target_map_x', 'GEGNERDLG map (GegnerDlg.DrawMap 1038:462f): column of country 0..9 in 20-pixel cells, each box 4 x 2 cells'),
+    (0x1530, 'u8[0..9]', 'target_map_y', 'row of country 0..9'),
     (0x1bb8, 's32[0..3]', 'grain_trade_amounts', 'KORNDLG buttons: 100000, 10000, 1000, 100 Scheffel'),
     (0x1bc8, 's32[0..4]', 'land_trade_amounts', 'LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen'),
     (0x22b6, 's16[1..4]', 'prokurist_ranges', 'PROKURADLG slider ranges: salt 100, beer 200, wine 500, weapons 1000'),

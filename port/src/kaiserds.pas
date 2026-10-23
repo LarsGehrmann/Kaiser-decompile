@@ -32,7 +32,10 @@ type
     TroopGardeY: array[1..9] of Byte;  { +0x1072 row 0..2 }
     Pad107B: array[0..0] of Byte;
     TroopGardeCell: array[0..8] of Byte;  { +0x107c the Garde slot in cell column * 3 + row }
-    Pad1085: array[0..2866] of Byte;
+    Pad1085: array[0..1184] of Byte;
+    TargetMapX: array[0..9] of Byte;  { +0x1526 GEGNERDLG map (GegnerDlg.DrawMap 1038:462f): column of country 0..9 in 20-pixel cells, each box 4 x 2 cells }
+    TargetMapY: array[0..9] of Byte;  { +0x1530 row of country 0..9 }
+    Pad153A: array[0..1661] of Byte;
     GrainTradeAmounts: array[0..3] of LongInt;  { +0x1bb8 KORNDLG buttons: 100000, 10000, 1000, 100 Scheffel }
     LandTradeAmounts: array[0..4] of LongInt;  { +0x1bc8 LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen }
     Pad1BDC: array[0..1753] of Byte;

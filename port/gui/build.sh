@@ -15,6 +15,8 @@ fpc -Mobjfpc -Sa -O2 ${GUI_FPC_OPTS:-} -dLCL -dLCLcocoa \
   kaisergui.lpr
 APP=../bin/Kaiser.app/Contents
 mkdir -p "$APP/MacOS"
+# a fresh file (overwriting a signed executable in place gets it killed)
+rm -f "$APP/MacOS/Kaiser"
 cp ../bin/kaisergui "$APP/MacOS/Kaiser"
 cat > "$APP/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -27,3 +29,5 @@ cat > "$APP/Info.plist" <<PLIST
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+# ad-hoc signature of the whole bundle (arm64 runs only signed code)
+codesign --force --sign - ../bin/Kaiser.app 2>/dev/null || true

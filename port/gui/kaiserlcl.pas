@@ -14,10 +14,19 @@ unit KaiserLCL;
 interface
 
 uses
-  SysUtils, Classes, Graphics, Controls, Forms, StdCtrls, ExtCtrls, Dialogs, LCLType,
+  SysUtils, Classes, Graphics, Controls, Forms, StdCtrls, ExtCtrls, ComCtrls, Dialogs, LCLType,
   NERes, KaiserTypes, KaiserDS, KaiserUI, Real48;
 
 type
+  { a vertical scroll bar no taller than two arrows (9 x 9 units): Windows
+    shows only its arrows, LCL's TScrollBar a knob without them. The
+    position works like the scroll bar's: the upper arrow is SB_LINEUP (-1) }
+  TSpinBar = class(TUpDown)
+  public
+    Pos, Lo, Hi: Integer;
+    Step: Integer;                  { SetLineStep }
+  end;
+
   TTemplateForm = class(TForm)
   private
     FTemplate: TDlgTemplate;
@@ -28,6 +37,7 @@ type
     FState: array of Boolean;       { the check state the game set }
     procedure ButtonClick(Sender: TObject);
     procedure ControlClick(Sender: TObject);
+    procedure SpinClick(Sender: TObject; Button: TUDBtnType);
     function DU(V: Integer; Horz: Boolean): Integer;
     function IndexOf(C: TControl): Integer;
     procedure ShowStates;
@@ -76,7 +86,7 @@ function Utf8(const Raw: RawByteString): string;
 implementation
 
 uses
-  Process, IntfGraphics, FPImage, GraphType;
+  Process, IntfGraphics, FPImage, GraphType, Buttons;
 
 function Utf8(const Raw: RawByteString): string;
 begin
@@ -297,10 +307,20 @@ begin
               Cap.Color := DialogBackground;
               Cap.Transparent := False;
               Cap.Left := DU(It.X, True) + 6;
-              Cap.Top := DU(It.Y, False) - Cap.Canvas.TextHeight('X') div 2;
+              Cap.Top := DU(It.Y, False) + FBaseY div 2 - Cap.Canvas.TextHeight('X') div 2;
             end;
           end;
       else
+        if DU(It.CX, True) < 24 then
+        begin
+          { a native Cocoa button keeps its padding and squeezes a short
+            caption ("?", 9 units wide): one that LCL draws }
+          C := TSpeedButton.Create(Self);
+          TSpeedButton(C).Caption := Utf8(It.Text);
+          TSpeedButton(C).OnClick := @ButtonClick;
+          C.Tag := It.Id;
+        end
+        else
         begin
           C := TButton.Create(Self);
           TButton(C).Caption := Utf8(It.Text);
@@ -321,6 +341,13 @@ begin
     begin
       C := TComboBox.Create(Self);
       TComboBox(C).Style := csDropDownList;
+    end
+    else if (It.ClassName = 'SCROLLBAR') and (It.Style and 1 <> 0) and (It.CY <= 2 * It.CX) then
+    begin
+      C := TSpinBar.Create(Self);
+      TSpinBar(C).Orientation := udVertical;
+      TSpinBar(C).Step := 1;
+      TSpinBar(C).OnClick := @SpinClick;
     end
     else if It.ClassName = 'SCROLLBAR' then
     begin
@@ -368,7 +395,13 @@ begin
     C.Visible := It.Style and $10000000 <> 0;               { WS_VISIBLE }
     C.Enabled := It.Style and $08000000 = 0;                { WS_DISABLED }
     if C is TBevel then
+    begin
+      { Windows draws a group box's frame half a text line below its top,
+        with or without a caption }
+      C.Top := C.Top + FBaseY div 2;
+      C.Height := C.Height - FBaseY div 2;
       C.SendToBack;
+    end;
     FItems[I] := C;
     FIds[I] := It.Id;
     FAuto[I] := (It.ClassName = 'BUTTON') and (It.Style and $F in [3, 6, 9]);
@@ -455,6 +488,22 @@ begin
   Notify(FIds[K]);
 end;
 
+procedure TTemplateForm.SpinClick(Sender: TObject; Button: TUDBtnType);
+var
+  B: TSpinBar;
+begin
+  B := TSpinBar(Sender);
+  if Button = btNext then
+    Dec(B.Pos, B.Step)
+  else
+    Inc(B.Pos, B.Step);
+  if B.Pos < B.Lo then
+    B.Pos := B.Lo;
+  if B.Pos > B.Hi then
+    B.Pos := B.Hi;
+  ControlClick(Sender);
+end;
+
 { the non-auto buttons show the state the game set: LCL unchecks all other
   radio buttons of a parent when one is checked, Windows leaves them alone }
 procedure TTemplateForm.ShowStates;
@@ -520,7 +569,7 @@ end;
 
 procedure TTemplateForm.ButtonClick(Sender: TObject);
 begin
-  Command(TButton(Sender).Tag);
+  Command(TComponent(Sender).Tag);
 end;
 
 procedure TTemplateForm.Command(Id: SmallInt);

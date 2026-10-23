@@ -73,6 +73,7 @@ type
     FHeer, FGarde: TImage;          { ANORDNENDLG: the painted grids }
     FTimer: TTimer;                 { the type's WMTimer (TDialogLogic.TimerInterval) }
     FPortrait: TImage;              { UnitInfoDlg's portrait }
+    FMap: TImage;                   { GEGNERDLG: the map of the countries }
     procedure GridMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -88,6 +89,12 @@ type
       1300 + type) on the dialog's background, 32 x 32 at (12, 64) of a
       237 x 254 window, scaled to the window size }
     procedure DrawPortrait(Blink: Byte);
+    { GegnerDlg.DrawMap (1038:462f): the 10 countries as boxes with their
+      names on black, 240 x 200 at (340, 14) of a 626 x 335 window, scaled
+      to the window size; grey: no player, yellow: one's own (every country
+      with initiative on), green: affordable, red: the attack costs more
+      initiative than one has }
+    procedure DrawTargetMap;
     destructor Destroy; override;
     function Logic: TDialogLogic;
     procedure SetupWindow; override;
@@ -122,6 +129,8 @@ begin
   C := Item(Id);
   if C is TScrollBar then
     Result := TScrollBar(C).Position
+  else if C is TSpinBar then
+    Result := TSpinBar(C).Pos
   else
     Result := 0;
 end;
@@ -138,6 +147,11 @@ begin
       TScrollBar(C).Min := Lo;
       TScrollBar(C).Max := Hi;
       TScrollBar(C).PageSize := 0;
+    end
+    else if C is TSpinBar then
+    begin
+      TSpinBar(C).Lo := Lo;
+      TSpinBar(C).Hi := Hi;
     end;
   finally
     Dec(FQuiet);
@@ -152,7 +166,9 @@ begin
   Inc(FQuiet);
   try
     if C is TScrollBar then
-      TScrollBar(C).Position := V;
+      TScrollBar(C).Position := V
+    else if C is TSpinBar then
+      TSpinBar(C).Pos := V;
   finally
     Dec(FQuiet);
   end;
@@ -329,7 +345,9 @@ var
 begin
   Ctl := F.Item(Id);
   if Ctl is TScrollBar then
-    TScrollBar(Ctl).SmallChange := N;
+    TScrollBar(Ctl).SmallChange := N
+  else if Ctl is TSpinBar then
+    TSpinBar(Ctl).Step := N;
 end;
 
 function TFormControls.AddString(Id: SmallInt; S: PChar): SmallInt;
@@ -398,6 +416,8 @@ begin
   Logic.SetupWindow;
   if D.Name = 'TroopDlg' then
     DrawTroops;
+  if D.Name = 'GegnerDlg' then
+    DrawTargetMap;
   if Logic.TimerInterval > 0 then
   begin
     FTimer := TTimer.Create(Self);
@@ -534,6 +554,89 @@ begin
     FGarde.Picture.Assign(Buf);
   finally
     Buf.Free;
+  end;
+end;
+
+procedure TLogicDialog.DrawTargetMap;
+var
+  SX, SY: Double;
+  B: TBitmap;
+  Cv: TCanvas;
+  C, Me, Cost: Byte;
+  P: PPlayer;
+
+  function X(V: Integer): Integer;
+  begin
+    Result := Trunc(V * SX + 0.5);
+  end;
+
+  function Y(V: Integer): Integer;
+  begin
+    Result := Trunc(V * SY + 0.5);
+  end;
+
+begin
+  SX := 1;
+  SY := 1;
+  if PSmallInt(@D.Data[$2A])^ > 0 then
+    SX := PSmallInt(@D.Data[$2A])^ / 626;
+  if PSmallInt(@D.Data[$2C])^ > 0 then
+    SY := PSmallInt(@D.Data[$2C])^ / 335;
+  Me := D.Data[$3C];
+  P := PPlayer(@D.Data[$48 + Me * SizeOf(TPlayer)]);
+  if FMap = nil then
+  begin
+    FMap := TImage.Create(Self);
+    FMap.Parent := Self;
+  end;
+  FMap.SetBounds(X(340), Y(14), X(240) - 1, Y(200) - 1);
+  B := TBitmap.Create;
+  try
+    B.SetSize(X(240) - 1, Y(200) - 1);
+    Cv := B.Canvas;
+    Cv.Brush.Color := clBlack;
+    Cv.FillRect(0, 0, B.Width, B.Height);
+    { LOGFONT DS:606c (Seg10_InitBattleFont): Comic Sans MS, -12, bold }
+    Cv.Font.Name := 'Comic Sans MS';
+    Cv.Font.Height := -12;
+    Cv.Font.Style := [fsBold];
+    Cv.Font.Color := clBlack;
+    Cv.Pen.Color := clBlack;
+    for C := 0 to 9 do
+    begin
+      if ShortInt(D.Data[$449A + C]) < 0 then
+        Cv.Brush.Color := clSilver                      { LTGRAY_BRUSH }
+      else
+      begin
+        Cost := AttackInitiativeCost(C, P^.Country);
+        if Cost = 0 then
+        begin
+          if (DS.Game.InitiativeEnabled <> 0) or (P^.Country = C) then
+            Cv.Brush.Color := clYellow
+          else
+            Cv.Brush.Color := clLime;
+        end
+        else if Cost in [2..5] then
+        begin
+          if P^.Initiative >= Cost then
+            Cv.Brush.Color := clLime
+          else
+            Cv.Brush.Color := clRed;
+        end;
+        { other costs keep the brush of the country before }
+      end;
+      Cv.Rectangle(X(DS.TargetMapX[C] * 20), Y(DS.TargetMapY[C] * 20),
+        X((DS.TargetMapX[C] + 4) * 20), Y((DS.TargetMapY[C] + 2) * 20));
+      Cv.Brush.Style := bsClear;                         { TRANSPARENT }
+      { TA_CENTER or TA_BASELINE at the middle of the box }
+      Cv.TextOut(X((DS.TargetMapX[C] + 2) * 20) - Cv.TextWidth(Utf8(DS.CountryNamesRt[C])) div 2,
+        Y((DS.TargetMapY[C] + 1) * 20) - Cv.TextHeight('X') * 3 div 4,
+        Utf8(DS.CountryNamesRt[C]));
+      Cv.Brush.Style := bsSolid;
+    end;
+    FMap.Picture.Assign(B);
+  finally
+    B.Free;
   end;
 end;
 
