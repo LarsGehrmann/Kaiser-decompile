@@ -19,10 +19,26 @@ BeginHumanTurn (1000:33c0)
 CmBeenden "Runde beenden" (1000:2476)
     PlayerTurnEnd(year, num_players, current_player, players)           ; 1010:57b2
     if player.title = 10            -> Victory
-    elif v22 < 1 (and not flag_12)  -> player eliminated:
-                                       message, AddNews(0x10), human_players -= 1
+    elif lifetime < 1 (no immortality) -> the ruler dies (dialog TOD / TODFEM with the year):
+                                       a computer ruler takes the country over (InitComputerRuler),
+                                       human_players - 1, last_human := current, news 16
     NextPlayer
     BeginHumanTurn of the next human (or hand over in e-mail mode)
+```
+
+If no human is left, `NextPlayer` never stops (computers only) until someone is crowned.
+
+## New game – CmNeuesSpiel (1000:0ce6)
+
+```
+running game: "Es läuft bereits ein Spiel! Trotzdem ein neues beginnen?" (yes/no)
+SPIELERZAHLDLG: number of humans and the options (e-mail, Unsterblichkeit, Warenhandel,
+                Initiativpunkte -> header 0x0b, 0x12, 0x13, 0x14); all 10 player records cleared
+COMPUTERZAHLDLG (fewer than 10 humans): number of computers and their level 1..4
+SPIELERNAMEDLG per human: name, sex, country (names also kept at DS:659c)
+CreateComputerPlayers; fewer than 2 players: no game
+current 0, year 0, Randomize, game id := Random(65535) + 1, InitAvenger,
+census editor := INI Debug, InitPlayers, BeginHumanTurn
 ```
 
 ## NextPlayer (1000:35ad)

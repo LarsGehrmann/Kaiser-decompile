@@ -40,6 +40,9 @@ CTORS = {
     'StartFinanzDlg': ('1010:59ef', ['p', 's']),
     'StartPopDlg': ('1010:5c1a', ['p', 's']),
     'HexenDlg': ('1010:5e43', ['p', 's']),
+    'HumanCountDlg': ('1040:2017', ['p', 's']),
+    'ComputerCountDlg': ('1040:234c', ['p', 's']),
+    'PlayerDataDlg': ('1040:2569', ['p', 's', 'p', 'b']),
 }
 # virtual methods of the fake objects: VMT slot -> (name, arg kinds after Self,
 # returns a value)
@@ -76,6 +79,7 @@ FUNCS = {
     'ShowPasswordFail': ('1020:0216', True, ['p'], False),
     'EmailGameStep': ('1000:2637', True, ['p'], False),
     'Menu_DisableSave': ('1060:0037', True, ['w', 'w'], False),
+    'Randomize': ('10c8:13d7', True, [], False),        # the clock: RandSeed stays
 }
 # segments that may only run through the stubs above (UI, OWL, battle view)
 GUARDED_SEGMENTS = [1, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24]
@@ -85,7 +89,10 @@ ALLOWED = [('1060:03d9', 0x14e),           # FormatPlayerTitle
            ('1000:36d2', 0xee),            # CpuTurn
            ('1000:37c0', 0x10f),           # ResolveWar
            ('1000:2476', 0x1c1),           # CmBeenden
-           ('1000:33c0', 0x99)]            # BeginHumanTurn
+           ('1000:33c0', 0x99),            # BeginHumanTurn
+           ('1000:0ce6', 0x156),           # CmNeuesSpiel
+           ('1040:1d98', 0x192),           # NewGame_AskPlayerCounts
+           ('1040:1f2a', 0xeb)]            # NewGame_AskPlayerData
 
 
 def arg_bytes(kinds):

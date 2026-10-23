@@ -297,6 +297,7 @@ DS = [
     (0x63a1, 'u8', 'opt_debug', 'INI Debug: census editor in new games'),
     (0x63a8, 'cstr25[0..9]', 'country_names_rt', 'runtime copy, editable (CountryNamesDlg)'),
     (0x64a2, 'cstr25[0..9]', 'cpu_ruler_names', 'runtime, from KAISER.INI (InitPlayers, InitComputerRuler)'),
+    (0x659c, 'cstr25[0..9]', 'human_names', 'runtime: the names entered for the humans in a new game (NewGame_AskPlayerData)'),
     (0x6696, 'cstr25[0..9]', 'country_adjectives', 'runtime, editable (CountryNamesDlg); knight names (MakeUnitName)'),
 ]
 DS_SIZE = 0x681c

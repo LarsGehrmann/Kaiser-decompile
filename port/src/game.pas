@@ -10,13 +10,17 @@ unit Game;
 interface
 
 uses
-  Strings, KaiserTypes, KaiserDS, Rules, KaiserUI, Turn, Ai;
+  Strings, Real48, KaiserTypes, KaiserDS, Rules, KaiserUI, Turn, Ai;
 
 procedure NextPlayer(Parent: Pointer; HWnd: Word; var Players: TPlayers);  { 1000:35ad }
 procedure CpuTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);     { 1000:36d2 }
 procedure ResolveWar(Parent: Pointer; var Players: TPlayers; Target: Byte);  { 1000:37c0 }
 procedure BeginHumanTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);  { 1000:33c0 }
 procedure EndHumanTurn(Parent: Pointer; HWnd: Word; var Players: TPlayers);    { 1000:2476 }
+procedure NewGame(Parent: Pointer; HWnd: Word; var Players: TPlayers);         { 1000:0ce6 }
+function NewGame_AskPlayerCounts(Parent: Pointer; var Players: TPlayers;
+  var Level: Byte): Byte;                                   { 1040:1d98 }
+procedure NewGame_AskPlayerData(Parent: Pointer; var Players: TPlayers; Humans: Byte);  { 1040:1f2a }
 
 implementation
 
@@ -174,10 +178,10 @@ begin
       FormatPlayerTitle(Players[CurrentPlayer], Title, 0, 0);
       IntToPChar(Buf, LongInt(Word(Year + 1400)));
       if Players[CurrentPlayer].IsFemale = 0 then
-        D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($04A4)), AStr(Title),
+        D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($04A4)), AStr(Title),   { TOD }
           AStr(Buf)])
       else
-        D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($04A8)), AStr(Title),
+        D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($04A8)), AStr(Title),   { TODFEM }
           AStr(Buf)]);
       UI.Execute(D);
       UI.Done(D, 1);
@@ -203,6 +207,111 @@ begin
       EmailGameQ := 0;
       UI.Call('Menu_DisableSave', [AWord(0), AWord(HWnd)]);
     end;
+  end;
+end;
+
+procedure NewGame_AskPlayerData(Parent: Pointer; var Players: TPlayers; Humans: Byte);
+var
+  I, Last: Byte;
+  D: TDialog;
+begin
+  { per human SPIELERNAMEDLG: name (+0x2e), sex (+0x4c), country (+0x4d) }
+  Last := Byte(Humans - 1);
+  for I := 0 to Last do
+  begin
+    D := UI.Dialog('PlayerDataDlg', $195A, [APtr(Parent), AStr(DSText($23DA)), APtr(@Players),
+      AByte(I)]);
+    UI.Execute(D);
+    StrCopy(Players[I].Name, PChar(@D.Data[$2E]));
+    Players[I].IsFemale := D.Data[$4C];
+    Players[I].CpuLevel := 0;
+    Players[I].Country := D.Data[$4D];
+    StrCopy(DS.HumanNames[I], PChar(@D.Data[$2E]));
+    UI.Done(D, 1);
+  end;
+end;
+
+function NewGame_AskPlayerCounts(Parent: Pointer; var Players: TPlayers;
+  var Level: Byte): Byte;
+var
+  D: TDialog;
+  Humans, Cpus, I: Byte;
+begin
+  { SPIELERZAHLDLG: humans (+0x34) and the game options (its CanClose
+    writes them into the game record); COMPUTERZAHLDLG: computers (+0x34)
+    and their level (+0x3b, 0-based). Result: the number of players, 0 when
+    cancelled }
+  D := UI.Dialog('HumanCountDlg', $22E4, [APtr(Parent), AStr(DSText($23BA))]);
+  D.Data[$35] := 1;
+  D.Data[$36] := 10;
+  if UI.Execute(D) <> 1 then
+    Exit(0);
+  for I := 0 to 9 do
+    FillChar(Players[I], SizeOf(TPlayer), 0);
+  Humans := D.Data[$34];
+  UI.Done(D, 1);
+  Level := 0;
+  if Humans < 10 then
+  begin
+    D := UI.Dialog('ComputerCountDlg', $2362, [APtr(Parent), AStr(DSText($23C9))]);
+    if Humans = 1 then
+      D.Data[$35] := 1
+    else
+      D.Data[$35] := 0;
+    D.Data[$36] := Byte(10 - Humans);
+    UI.Execute(D);
+    Cpus := D.Data[$34];
+    if Cpus > 0 then
+      Level := D.Data[$3B] + 1;
+    UI.Done(D, 1);
+  end
+  else
+    Cpus := 0;
+  DS.Game.NumPlayers := Byte(Humans + Cpus);
+  DS.Game.HumanPlayers := Humans;
+  DS.Game.CpuDifficulty := Level;
+  if DS.Game.EmailGameQ = 0 then
+  begin
+    NewGame_AskPlayerData(Parent, Players, Humans);
+    if Cpus > 0 then
+      CreateComputerPlayers(Players, Humans, Cpus, Level);
+  end;
+  Result := Byte(Humans + Cpus);
+end;
+
+procedure NewGame(Parent: Pointer; HWnd: Word; var Players: TPlayers);
+begin
+  { menu "Neues Spiel" (CmNeuesSpiel) }
+  with DS.Game do
+  begin
+    if GameState = 1 then
+      if UI.Call('MessageBox', [AWord(HWnd), AStr(DSText($02D6)), AStr(DSText($030F)),
+        AWord($24)]) <> 6 then            { IDYES }
+        Exit;
+    GameState := 0;
+    NumPlayers := NewGame_AskPlayerCounts(Parent, Players, CpuDifficulty);
+    if NumPlayers < 2 then
+    begin
+      GameState := 0;
+      UI.Call('Menu_DisableGameCommands', [AWord(HWnd)]);
+      UI.Call('Menu_DisableSave', [AWord(0), AWord(HWnd)]);
+      Exit;
+    end;
+    CurrentPlayer := 0;
+    Year := 0;
+    UI.Call('Randomize', []);           { RandSeed from the clock }
+    GameId := Random($FFFF) + 1;
+    InitAvenger(Avenger);
+    CensusEditorEnabled := DS.OptDebug;
+    if EmailGameQ <> 0 then
+    begin
+      GameState := 4;
+      UI.Call('EmailGameStep', [APtr(Parent)]);
+      Exit;
+    end;
+    GameState := 1;
+    InitPlayers(Players, NumPlayers, CpuDifficulty);
+    BeginHumanTurn(Parent, HWnd, Players);
   end;
 end;
 

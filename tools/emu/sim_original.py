@@ -1,6 +1,11 @@
 """Play a savegame on in the emulated original: every human just ends the turn.
 
 Usage: sim_original.py SAVE TURNS SEED
+       sim_original.py new:HUMANS:COMPUTERS:LEVEL TURNS SEED
+
+The second form starts a new game first (CmNeuesSpiel): human i is
+"Spieler<i+1>", male, country i; computer level 1..4; immortality off, goods
+trade and initiative on.
 
 Runs the original "Runde beenden" (CmBeenden 1000:2476) TURNS times: the
 human's year end, all computer players (NextPlayer), the next human's turn
@@ -31,14 +36,40 @@ def field(fields, name):
     raise KeyError(name)
 
 
+def default_answer(entry, kind):
+    return (1, {}) if kind == 'method' else (0, {})
+
+
+def new_game_answers(humans, cpus, level):
+    """The dialog answers of CmNeuesSpiel, in order."""
+    answers = [(1, {0x34: bytes([humans])})]
+    if humans < 10:
+        answers.append((1, {0x34: bytes([cpus]), 0x3b: bytes([max(level - 1, 0)])}))
+    for i in range(humans):
+        answers.append((1, {0x2e: b'Spieler%d\0' % (i + 1), 0x4c: b'\0', 0x4d: bytes([i])}))
+
+    def chooser(entry, kind):
+        if entry.startswith('Execute(') and answers:
+            return answers.pop(0)
+        return default_answer(entry, kind)
+    return chooser
+
+
 def main():
     save, turns, seed = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-    header, players, num = load_save(save)
-    header[field(ks.HEADER, 'game_state')] = 1
+    new = save.startswith('new:')
+    if new:
+        humans, cpus, level = (int(x) for x in save.split(':')[1:4])
+        header, players, num = bytearray(ks.HEADER_SIZE), bytearray(), humans + cpus
+        header[field(ks.HEADER, 'goods_trade_enabled')] = 1
+        header[field(ks.HEADER, 'initiative_enabled')] = 1
+    else:
+        header, players, num = load_save(save)
+        header[field(ks.HEADER, 'game_state')] = 1
     header[field(ks.HEADER, 'email_game_q')] = 0
     emu = KaiserEmu()
     sp = emu.scratch_para
-    ui = UILayer(emu, sp, lambda entry, kind: (1, {}) if kind == 'method' else (0, {}))
+    ui = UILayer(emu, sp, default_answer)
     emu.reset_ds()
     emu.write(emu.ds_para, HDR_DS, bytes(header))
     emu.write(sp, 0, bytes(10 * PSIZE))
@@ -51,6 +82,12 @@ def main():
     self_ptr = (sp - 5, 0x50 - 0x41)       # a fake main window: players at +0x41
     cpu = field(ks.PLAYER, 'cpu_level')
     title = field(ks.PLAYER, 'title')
+    if new:
+        ui.reset()
+        ui.window_alias = self_ptr
+        ui.chooser = new_game_answers(humans, cpus, level)
+        emu.call_far('1000:0ce6', [('ptr', (0, 0)), ('ptr', self_ptr)])
+        ui.chooser = default_answer
     for turn in range(1, turns + 1):
         ui.reset()
         ui.window_alias = self_ptr

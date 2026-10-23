@@ -98,7 +98,7 @@ type
     Pad63A2: array[0..5] of Byte;
     CountryNamesRt: array[0..9] of array[0..24] of Char;  { +0x63a8 runtime copy, editable (CountryNamesDlg) }
     CpuRulerNames: array[0..9] of array[0..24] of Char;  { +0x64a2 runtime, from KAISER.INI (InitPlayers, InitComputerRuler) }
-    Pad659C: array[0..249] of Byte;
+    HumanNames: array[0..9] of array[0..24] of Char;  { +0x659c runtime: the names entered for the humans in a new game (NewGame_AskPlayerData) }
     CountryAdjectives: array[0..9] of array[0..24] of Char;  { +0x6696 runtime, editable (CountryNamesDlg); knight names (MakeUnitName) }
     Pad6790: array[0..139] of Byte;
   end;

@@ -330,6 +330,8 @@ SPECS = {
                       {'army1_count': (0, 8), 'army2_count': (0, 8),
                        'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
     # segment 1: the turn loop, a whole round of computer players
+    'CmNeuesSpiel': ('1000:0ce6', ['NIL', 'SELF'], 'none',
+                     ['h.immortality', 'h.goods_trade_enabled', 'h.initiative_enabled']),
     'CmBeenden': ('1000:2476', ['NIL', 'SELF'], 'none',   # (Msg, Self: Self is pushed last)
                   ['title', 'lifetime', 'J.title', 'J.lifetime', 'h.immortality'],
                   {'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
@@ -715,14 +717,47 @@ def header_turn(rng, header, players, p, num):
     return h
 
 
+def header_newgame(rng, header, players, p, num):
+    """No game running (no question), no e-mail."""
+    return [(field_info(ks.HEADER, 'game_state')[0], b'\0'),
+            (field_info(ks.HEADER, 'email_game_q')[0], b'\0')]
+
+
 # per function: header mutations after the random ones
 HEADER_PRESETS = {
     'NextPlayer': header_turn,
     'CmBeenden': header_turn,
+    'CmNeuesSpiel': header_newgame,
 }
 
 
-def make_chooser(func, rng):
+def newgame_chooser(rng, num):
+    """CmNeuesSpiel: humans, computers (and level), then the humans' data,
+    at most as many players as the savegame has (only those are compared)."""
+    humans = rng.randint(1, min(num, 4))
+    cpus = rng.randint(max(0, 2 - humans), num - humans)   # (fewer than 2: no game)
+    level = rng.randint(0, 3)
+    answers = [(1, {0x34: bytes([humans])})]
+    if humans < 10:
+        answers.append((1, {0x34: bytes([cpus]), 0x3b: bytes([level])}))
+    countries = rng.sample(range(10), humans)
+    for i in range(humans):
+        name = rng.choice([b'Lars', b'Nils', b'Kunigunde', b'X']) + b'\0'
+        answers.append((1, {0x2e: name, 0x4c: bytes([rng.randint(0, 1)]),
+                            0x4d: bytes([countries[i]])}))
+
+    def chooser(entry, kind):
+        if entry.startswith('Execute(') and answers:
+            return answers.pop(0)
+        if entry.startswith('Execute('):
+            return (rng.choice([1, 2]), {})
+        return (1, {}) if kind == 'method' else (0, {})
+    return chooser
+
+
+def make_chooser(func, rng, num=10):
+    if func == 'CmNeuesSpiel':
+        return newgame_chooser(rng, num)
     script = UI_SCRIPTS.get(func, [])
 
     def chooser(entry, kind):
@@ -913,7 +948,7 @@ def main():
             seed = rng.getrandbits(32)
             emu.reset_ds()
             ui.reset()
-            ui.chooser = make_chooser(func, rng)
+            ui.chooser = make_chooser(func, rng, num)
             emu.write(emu.ds_para, HDR_DS, bytes(header))
             emu.write(sp, 0, bytes(10 * PSIZE))     # no players of an earlier vector
             emu.write(sp, 0, bytes(players))

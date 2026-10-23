@@ -416,6 +416,7 @@ begin
           'Ai_ArrangeArmies': begin Ai_ArrangeArmies(Pl^, ArgI(0)); Got := '-'; end;
           'Ai_BanditBattle': Got := IntToStr(Ai_BanditBattle(Pl^));
           'Ai_AutoBattle': Got := IntToStr(Ai_AutoBattle(Pl^, Players[ArgI(0)]));
+          'CmNeuesSpiel': begin NewGame(Window, 0, Players); Got := '-'; end;
           'CmBeenden': begin EndHumanTurn(Window, 0, Players); Got := '-'; end;
           'NextPlayer': begin NextPlayer(Window, 0, Players); Got := '-'; end;
           'Ai_Turn':

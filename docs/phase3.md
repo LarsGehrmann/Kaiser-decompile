@@ -53,7 +53,7 @@ original resources.
 | 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint, `Sqrt` | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical (+ 30,000 `Sqrt`) |
 | 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | ✅ all 102 functions (`port/src/rules.pas`; `Seg14_UnitInit` is empty, the local `SortUnits`/`UnitLess` are tested through `SortArmy`); 100,000 / 100,000 vectors identical (1,000 per function) |
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | ✅ segment 3 (`port/src/turn.pas`: all 25 logic functions, the rest are dialog classes, plus `FormatPlayerTitle`), segments 2 and 7 (`ai.pas`, all 36), the turn loop of segment 1 (`game.pas`: `NextPlayer`, `CpuTurn`, `ResolveWar`); UI calls replayed (below); 59,039 vectors (1,000 per function) identical, the one exception a test artefact (stale players from an earlier vector, fixed) |
-| 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
+| 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | ✅ `port/bin/ksrsim` plays a savegame or a new game on (`NewGame`, `EndHumanTurn`, `BeginHumanTurn` in `game.pas`); the humans just end their turns. `tools/emu/sim_compare.sh` runs the same in the emulated original: all 30 savegames and new games of every size agree turn by turn until the end of the game (SIM_RESULT) |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |
 | 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | |
 
@@ -66,6 +66,9 @@ port/bin/ksrtool show Kaiser/NILSLARS.KSR
 port/bin/real48test port/tests/real48.vec       # runtime vs. original
 port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
 port/bin/ruletest Kaiser port/tests/turn.vec    # turn processing, AI, turn loop vs. original
+port/bin/ksrsim Kaiser/LARS23.KSR 100 1 out.ksr # play on 100 turns, save the result
+port/bin/ksrsim new:2:5:3 100 1                 # new game: 2 humans, 5 computers, level 3
+tools/emu/sim_compare.sh 100 1 /tmp/cmp         # all savegames: port vs. original, turn by turn
 ```
 
 ## How the exact runtime works
@@ -119,3 +122,18 @@ recording:
 - **Port** (`port/tests/replayui.pas`): `TReplayUI` formats each call the same way, compares it
   with the next recorded call and returns the recorded answer. A vector passes only if the
   sequence of UI calls (`ui=`) is identical, too.
+
+## The headless simulator
+
+`ksrsim` is the game without a window: the human players do nothing but end their turn
+("Runde beenden" = `EndHumanTurn`: their year end, all computer players in `NextPlayer`,
+the next human's turn start). Dialogs answer OK, UI functions answer 0 (a computer that
+attacks a human loses the battle until the battle engine exists). After every human turn it
+prints the current player, the year, `RandSeed` and a CRC32 of the player array and the game
+record. A game ends with a coronation, at game state 0, or when no human is left (the original
+`NextPlayer` would loop forever). `new:H:C:L` starts with `NewGame` (the "Neues Spiel" menu):
+H humans named `Spieler1..`, C computers of level L, goods trade and initiative on.
+
+`tools/emu/sim_original.py` drives the original the same way: `CmBeenden` (and
+`CmNeuesSpiel`) run in the emulator with a fake main window and the same dialog answers;
+`Randomize` is stubbed (the seed comes from the command line on both sides).
