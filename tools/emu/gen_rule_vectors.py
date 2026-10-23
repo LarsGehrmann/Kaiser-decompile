@@ -1330,9 +1330,9 @@ def main():
                 near = addr.startswith('n')
                 if func == 'Battle_Play':
                     # up to N timer ticks of the battle, until it ends
-                    n = rng.randint(1, 400)
-                    shown.append(str(n))
-                    ax, dx = battle_ticks(emu, ui, sp, n), 0
+                    ticks = rng.randint(1, 400)
+                    shown.append(str(ticks))
+                    ax, dx = battle_ticks(emu, ui, sp, ticks), 0
                 else:
                     ax, dx = emu.call_far(addr.lstrip('n'), call_args, near=near)
                 r = emu.last_regs

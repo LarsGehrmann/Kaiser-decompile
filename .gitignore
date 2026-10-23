@@ -8,3 +8,4 @@ ghidra_out/import.log
 win311/
 port/bin/
 port/obj/
+tools/lazarus/

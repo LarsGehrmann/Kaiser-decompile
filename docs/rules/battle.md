@@ -605,3 +605,84 @@ Battle window (VMT DS:2d2c):
 - The Reisiger Rächer check (`AvengerJoinsWeaker` 1068:56bc) runs in all battles: he joins a
   side whose score and army strength are both below 2/3 of the opponent's.
 - Plunder, burning, massacre and retreat losses after the battle: see military.md.
+
+## Exact rules from the port (phase 3, milestone 6)
+
+The whole battle code (segment 10 logic, segment 4, segment 6) is ported in `port/src/battle.pas`
+and `port/src/war.pas` and agrees with the original in differential tests (docs/phase3.md).
+Details that the sections above leave out or get wrong:
+
+**Timer and the AI's turn.** The window timer (`WMTimer` 1048:96d1, interval INI
+`Schlacht-Timer`, DS:6794, at least 50 ms) only counts its first 3 ticks (`+0xf7b`); then it
+blinks the current unit of a human side every 400 ms (`+0xf91` = 1 drawn, 0 hidden) or runs one
+`AiStep` for a computer side. `SetupWindow` (1048:0bc3) sets the unit drawn, the counters to 0/1
+and, for a computer side to move, `+0xf81` (attack mode) to 0.
+- **Bug: endless recursion.** `StopTimer` (1048:986a) sends a WM_TIMER at once when the cursor
+  is hidden (`+0xf91` = 0). `AiStep` calls `StopTimer` before ending the battle with a retreat,
+  and that WM_TIMER runs `AiStep` again for the same unit. If the retreat is certain (a fleeing
+  hero: `HeroShouldFlee` and r < −0.2, no random roll), the recursion never ends and the stack
+  overflows. The cursor is hidden at that moment after a human's turn (blink phase) or after a
+  desertion dialog (`StartTimer` hides it). Rare, but it crashes the original.
+- `AiStep` (1048:65a8) order: end checks (`EndDlg` does not stop the step), status panel
+  (`DrawUnitStatus`, which **recomputes the motivation** of the unit: the only place where
+  `ComputeMotivation` runs), retreat, `AiTryAttack`, else `AiMove` (attack mode or city battle)
+  or `AiChooseStance`, a second `AiChooseStance` while steps are left; when the unit is done:
+  desertion, the next unit (`NextUnit`) or the other side's turn (`StartSideTurn`; a side whose
+  units are all in a stance or knocked out passes, the turn goes back).
+- `AiTryAttack` always picks a target first (`AiChooseTarget`), whether or not it attacks; with
+  steps left it attacks the target if it can, else (15 %) a building next to it (attacker in a
+  city), else the nearest enemy (`AiNearestEnemy`, the last of equally near ones). The random
+  fall-back in `AiChooseTarget` (healing enemy, last enemy, wounded friend, helpless enemy)
+  loops until one is found; with no enemy left it would never end (not reached: the battle
+  ends first).
+- `AiMove`: a cautious computer hero (`+0xe2f`) stops after one step; Artillerie and
+  Alchimisten move only with ammunition and no enemy next to them; a defensive unit (attack mode
+  off) only moves to a cell inside the city walls, else the step is spent. `AiStepToward` takes
+  the neighbour nearest to the target (from a random first neighbour, the first of equals); an
+  attacker unit in a city that cannot get nearer heads for row 5, the gate.
+
+**Movement and attacks.**
+- A unit killed by en-passant strikes while moving sets the side to move to 1 (`MoveUnit`
+  1048:4253), whoever was moving.
+- `CanAttack` gives the defender (side 0) no buildings to attack; walls need Sprengpulver with
+  ammunition or Demontage within range, for **either** side.
+- **Bug: a human's attack on a tree.** A tree that a Demontage unit may attack is not handled
+  as an object by the click handler (1048:9113): `AttackUnit` takes the victim's index from the
+  map code (8 or 9 minus the side's unit base), far past the end of the window object. The
+  port keeps the window in a larger zeroed buffer (`TBattleArena`) so this stays harmless.
+- `AttackObject` destroys with `Random(attack) (/2 blind, ×3 Pechpfeile at range) ≥
+  Random(hardness)`, or always with Demontage or Flammenstoß. Palace and cathedral cells vanish
+  only when the destroyed count equals the parts owned.
+- Healing (`HealUnit` 1048:5c60): the healer's level (max 3) gives 1..level+1 hit points.
+
+**Desertion.** `RandomReal × 0.6 > motivation`; the deserter joins the enemy if it has fewer than
+8 units (`UEBERLAUFDLG`), else it leaves (`DESERTDLG`); the dialogs only for a human side. The
+unit is removed and the side's unit 1 becomes current.
+
+**Before the battle** (`BattleSetup` 1018:0225): before a **city** battle (not the second one,
+not in an e-mail game) the attacker deals with the countryside: a human chooses in `LOOT2DLG`
+(plunder, burn, massacre, mercy, with the field percentages), a computer at random
+(`Ai_PlunderChoice`), with empty results. A human defender chooses the battlefield in
+`KRIEGSERNADLG` / `KRIEGSERLADLG` / `KRIEGSERHADLG` (by the attacker's artillery,
+`ArtilleryClass`); the field button is disabled without an army at home.
+
+**After the battle** (segment 6, military.md):
+- A human winner's choice (`PlunderDialog` 1028:0eaf) is followed, whatever was chosen, by the
+  losses in the results: the loser's people drop by the civilians killed (but at most to half),
+  and its buildings by the destroyed and burnt counts (granaries and warehouses through
+  `RemoveGranaries` / `RemoveWarehouses`). After a computer's choice (`Ai_PlunderChoice`)
+  nothing is applied: burning is only shown, but a massacre changes the populations directly.
+- `Ai_PlunderChoice`: `Random(100)` 0–50 plunder, 51–80 burn, 81–89 mercy (+2 fame), 90
+  nothing, 91–99 massacre (−30 fame). Its land transfer writes the buildings handed over into
+  the results record, which is then shown in `VERLUSTDLG` to a human loser.
+- `RetreatLosses` (1028:011c) removes units inside a loop over the old count: the unit after a
+  removed one is skipped.
+- `GetResults` (1048:0e12): civilians killed = `min(pop − 50, units lost × pop / 50)`
+  (32-bit product).
+
+**Results block** (window +0xdd8, 0x37 bytes): +0 total / deported (massacre) / buildings handed
+over (land transfer), +4 civilians killed, +8 markets, +0xc mills, +0x10 palace parts,
++0x14 cathedral parts, +0x18 granaries, +0x1c warehouses, +0x20 university parts, +0x24 taverns,
++0x28 smithies (all longints; the first 44 bytes are a `TLandLoss`), +0x2c land taken, +0x30
+Taler taken, +0x34 the winner's choice (10 plunder, 11 burn, 12 massacre, 13 mercy), +0x35 /
++0x36 units lost by side 0 / 1.
