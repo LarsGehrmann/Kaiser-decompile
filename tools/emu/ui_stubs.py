@@ -104,6 +104,7 @@ FUNCS = {
     'TroopDlg_DrawGarde': ('1038:8699', True, ['w', 'p'], False),
     'TroopDlg_DrawUnitInfo': ('1038:8921', True, ['w', 'p'], False),
     'RecruitDlg_DrawUnitPicture': ('1040:55b5', True, ['b', 'p'], False),
+    'UnitEditDlg_DrawPortrait': ('1038:56b9', True, ['p'], False),
     'Do_UnitEditDlg': ('1038:503d', False, ['p', 'p', 'p'], False),      # near (parent, P, unit)
 }
 # DrawUnitStatus(DC, side, unit, panel, Self) draws, but first recomputes the

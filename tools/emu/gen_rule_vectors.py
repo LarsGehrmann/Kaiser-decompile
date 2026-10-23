@@ -491,6 +491,13 @@ SPECS = {
                              ['taler', 'land', 'land_used', 'population', 'army1_count',
                               'army2_count', 'J.army1_count', 'J.spell', 'J.army_away',
                               'J.mailbox', 'u.type', 'u.level', 'h.initiative_enabled']),
+    'CensusEditor': ('1038:4d68', ['Wnd', 'A', 'N'], 'none',
+                     ['population', 'land', 'taler', 'title', 'spell', 'is_female', 'cpu_level',
+                      'J.taler', 'h.census_editor_enabled'],
+                     {'is_female': (0, 1)}),
+    'Do_SzenarioDlg': ('n1038:4e45', ['Wnd'], 'none', []),
+    'Do_UnitEditDlg': ('n1038:503d', ['Wnd', 'P', 'U'], 'none',
+                       ['u.type', 'u.level', 'u.experience', 'spell']),
     'DeclareWar': ('1038:40e8', ['Wnd', 'A', 'I', 'OB:1', 'N', 'Y'], 'byte',
                    ['title', 'army_away', 'army1_count', 'initiative', 'peace_years', 'fame',
                     'J.army1_count', 'J.army2_count', 'h.initiative_enabled', 'J.mailbox']),
@@ -1091,6 +1098,7 @@ def header_newgame(rng, header, players, p, num):
 
 # per function: header mutations after the random ones
 HEADER_PRESETS = {
+    'CensusEditor': lambda rng, header, players, p, num: [(4, bytes([rng.choice([0, 1, 1, 1])]))],
     'CmDemissionieren': header_turn,
     'CmSpiel': header_scenario,
     'CmWirtschaft': header_turn,
@@ -1323,6 +1331,11 @@ def advance_battle(emu, ui, sp, rng):
         emu.write(sp, BW_AREA + 0xe2b, bytes(human))
 
 
+# the original smashes its stack on some random inputs; those vectors are
+# dropped: Do_UnitEditDlg on an empty army slot (UnitRankName 1068:61db copies
+# an out-of-table rank text into a 26-byte buffer)
+SKIP_ON_CRASH = {'Do_UnitEditDlg'}
+
 HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
                       'Battle_CmAufgeben', 'Battle_CombatOptionsMenu', 'Battle_WMLButtonDown')
 
@@ -1346,6 +1359,9 @@ DIALOG_TESTS = {
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
     'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
     'DeclareWar': ['GEGNERDLG'],
+    'CensusEditor': ['PASSWORDDLG', 'CENSUSDLG', 'SZENARIENDLG', 'SZENARIENDLG'],
+    'Do_SzenarioDlg': ['SZENARIENDLG'],
+    'Do_UnitEditDlg': ['UNITEDITDLG'],
     'Do_Entwicklungshilfe': ['SPENDEAUSWAHLDLG', 'SPENDENDLG', 'ABFRAGETALERDLG'],
     'ShowHighScoreDlg': ['HIGHSCOREDLG'],
     'ShowRecordsDlg': ['REKORDDLG'],
@@ -1525,6 +1541,29 @@ def main():
             seed = rng.getrandbits(32)
             dlg = '/'.join(dialog_script(emu, rng, t, players[p * PSIZE:(p + 1) * PSIZE])
                            for t in DIALOG_TESTS.get(func, []))
+            if func == 'CensusEditor' and rng.random() < 0.8:
+                # the password: the name of the first player's hero (FindHero)
+                pw = b'Hugo'
+                for base, cnt in ((ARMY_BASE[1], 0x137), (ARMY_BASE[2], 0x138)):
+                    for k in range(1, players[cnt] + 1 if players[cnt] <= 9 else 1):
+                        u = players[base + k * ks.UNIT_SIZE:base + (k + 1) * ks.UNIT_SIZE]
+                        if u[0x19] == 9 and pw == b'Hugo':
+                            pw = bytes(u[:25]).split(b'\0')[0]
+                parts = dlg.split('/')
+                parts[0] = f't101:{pw.hex()};ok'
+                # 302 'zurueck' below the first player shows garbage (an
+                # original bug): only after a 301
+                ev, k = [], 0
+                for e in parts[1].split(';'):
+                    if e == 'c301':
+                        k += 1
+                    elif e == 'c302':
+                        if k == 0:
+                            continue
+                        k -= 1
+                    ev.append(e)
+                parts[1] = ';'.join(ev)
+                dlg = '/'.join(parts)
             emu.reset_ds()
             emu.write(emu.ds_para, 0x6794, struct.pack('<H', 400))   # INI Schlacht-Timer
             ui.reset()
@@ -1765,6 +1804,8 @@ def main():
                 if emu.last_runerror is None:
                     if os.environ.get('KAISER_DEBUG_UI'):
                         print('|'.join(ui.log), file=sys.stderr)
+                    if func in SKIP_ON_CRASH:
+                        continue                  # an input the original can't take
                     raise
                 rv = f'E{emu.last_runerror}'
             out_vals = []

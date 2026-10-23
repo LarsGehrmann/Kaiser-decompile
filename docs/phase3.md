@@ -220,6 +220,11 @@ Original bugs found by the dialog tests (the specs keep the inputs out of their 
 - GEHEIMDLG (1038:092a): the Landausbau row divides by the player's land; a shown player
   without land stops with runtime error 200 (`preset_intel` gives every player land; the port
   shows 0 %).
+- CENSUSDLG (the hidden census editor): "zurück" is enabled at the first player and shows
+  player 255 (16-bit wrapped heap garbage); a sex byte other than 0/1 picks a garbage radio
+  button. The scripts avoid the first, the specs clamp the second.
+- UNITEDITDLG on an empty army slot: `UnitRankName` (1068:61db) copies an out-of-table rank
+  text into a 26-byte buffer and smashes the stack (such vectors are dropped, SKIP_ON_CRASH).
 - `FormatThousands` (1068:6b58, Wirtschaft and other statistics): its length table ends at 9
   digits; a 10-digit number makes it write the digits 11,520 bytes off its buffer and show an
   empty string. The port shows the same and skips the stray write.

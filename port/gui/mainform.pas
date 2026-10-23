@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel;
+  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census;
 
 type
   TKaiserForm = class(TForm)
@@ -321,6 +321,12 @@ begin
       begin
         Intel.Do_Geheimdienst(Self, FSave.Players, DS.Game.NumPlayers, DS.Game.CurrentPlayer,
           DS.Game.Year);
+        Invalidate;
+      end;
+    802:                                        { Ctrl+P: CensusEditor 1038:4d68 }
+      if DS.Game.GameState = 1 then
+      begin
+        CensusEditor(Self, FSave.Players, DS.Game.NumPlayers);
         Invalidate;
       end;
     306:                                        { CmHofschmiede 1000:1c66 }

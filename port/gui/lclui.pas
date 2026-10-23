@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel;
+  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census;
 
 type
   TLclUI = class(TGameUI)
@@ -136,6 +136,8 @@ begin
     if F is TLogicDialog then
       TLogicDialog(F).DrawTroops;
   end
+  else if Name = 'Do_UnitEditDlg' then
+    Census.Do_UnitEditDlg(Args[0].P, PPlayer(Args[1].P)^, PUnit(Args[2].P)^)
   else if Name = 'Victory' then
     Annals.Victory(Args[0].P, Players^)
   else if Name = 'Annals_Load' then
