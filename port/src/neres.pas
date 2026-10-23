@@ -83,6 +83,8 @@ type
     function Menu(const Name: RawByteString): TMenuTemplate;
     { a BITMAP resource as a complete .bmp file }
     function BitmapFile(const Name: RawByteString; Id: Word = 0): TBytes;
+    { a GROUP_ICON resource and its ICON images as a complete .ico file }
+    function IconFile(const Name: RawByteString; Id: Word = 0): TBytes;
   end;
 
 function ParseDialog(const D: TBytes): TDlgTemplate;
@@ -284,6 +286,42 @@ begin
   PLongWord(@Result[6])^ := 0;
   PLongWord(@Result[10])^ := NtoLE(OffBits);
   Move(D[0], Result[14], Length(D));
+end;
+
+function TNEFile.IconFile(const Name: RawByteString; Id: Word): TBytes;
+var
+  G, Img: TBytes;
+  N, I: Integer;
+  Off: LongWord;
+  Images: array of TBytes;
+begin
+  { GRPICONDIR (6 bytes) + N x GRPICONDIRENTRY (14 bytes: .. nID); the .ico
+    entries are 16 bytes with the file offset of the image }
+  Result := nil;
+  G := Find(RT_GROUP_ICON, Name, Id);
+  if Length(G) < 6 then
+    Exit;
+  N := G[4] or (G[5] shl 8);
+  SetLength(Images, N);
+  Off := 6 + 16 * N;
+  for I := 0 to N - 1 do
+  begin
+    Img := Find(RT_ICON, '', G[6 + 14 * I + 12] or (G[6 + 14 * I + 13] shl 8));
+    Images[I] := Img;
+    Inc(Off, Length(Img));
+  end;
+  SetLength(Result, Off);
+  Move(G[0], Result[0], 6);
+  Off := 6 + 16 * N;
+  for I := 0 to N - 1 do
+  begin
+    Move(G[6 + 14 * I], Result[6 + 16 * I], 8);                 { size, colours, planes, bits }
+    PLongWord(@Result[6 + 16 * I + 8])^ := NtoLE(LongWord(Length(Images[I])));
+    PLongWord(@Result[6 + 16 * I + 12])^ := NtoLE(Off);
+    if Length(Images[I]) > 0 then
+      Move(Images[I][0], Result[Off], Length(Images[I]));
+    Inc(Off, Length(Images[I]));
+  end;
 end;
 
 { -- templates ------------------------------------------------------------ }

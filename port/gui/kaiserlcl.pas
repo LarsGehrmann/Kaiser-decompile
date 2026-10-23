@@ -127,6 +127,33 @@ begin
   BitmapCache.AddObject(Key, Result);
 end;
 
+{ an ICON resource into an image (SS_ICON statics) }
+procedure LoadIcon(Img: TImage; const Name: RawByteString);
+var
+  Data: TBytes;
+  S: TMemoryStream;
+  Ico: TIcon;
+begin
+  Data := Exe.IconFile(Name);
+  if Data = nil then
+    Exit;
+  S := TMemoryStream.Create;
+  Ico := TIcon.Create;
+  try
+    S.WriteBuffer(Data[0], Length(Data));
+    S.Position := 0;
+    try
+      Ico.LoadFromStream(S);
+      Img.Picture.Assign(Ico);
+      Img.AutoSize := True;
+    except
+    end;
+  finally
+    Ico.Free;
+    S.Free;
+  end;
+end;
+
 { -- TTemplateForm ---------------------------------------------------------- }
 
 constructor TTemplateForm.CreateFromTemplate(AOwner: TComponent; const T: TDlgTemplate);
@@ -137,7 +164,7 @@ var
   It: TDlgItem;
   C: TControl;
   Kind: Byte;
-  Bmp: TBitmap;
+  Bmp, Measure: TBitmap;
 begin
   inherited CreateNew(AOwner);
   FTemplate := T;
@@ -148,11 +175,18 @@ begin
   if T.FontFace <> '' then
   begin
     Font.Name := Utf8(T.FontFace);
-    Font.Size := T.FontSize;
+    Font.Size := Round(T.FontSize * 96 / 72);   { Windows laid the dialogs out at 96 DPI }
   end;
-  Canvas.Font := Font;
-  FBaseX := (Canvas.TextWidth(Sample) div 26 + 1) div 2;
-  FBaseY := Canvas.TextHeight(Sample);
+  { the dialog base units of the template font (GetDialogBaseUnits) }
+  Measure := TBitmap.Create;
+  try
+    Measure.SetSize(4, 4);
+    Measure.Canvas.Font := Font;
+    FBaseX := (Measure.Canvas.TextWidth(Sample) div 26 + 1) div 2;
+    FBaseY := Measure.Canvas.TextHeight(Sample);
+  finally
+    Measure.Free;
+  end;
   if FBaseX < 4 then FBaseX := 6;
   if FBaseY < 8 then FBaseY := 13;
   ClientWidth := DU(T.CX, True);
@@ -219,8 +253,10 @@ begin
       begin
         TImage(C).Picture.Assign(Bmp);
         TImage(C).Transparent := True;
-      end;
-      TImage(C).AutoSize := Bmp <> nil;
+        TImage(C).AutoSize := True;
+      end
+      else
+        LoadIcon(TImage(C), It.Text);
     end
     else
     begin
@@ -238,6 +274,7 @@ begin
     C.Parent := Self;
     C.Left := DU(It.X, True);
     C.Top := DU(It.Y, False);
+    C.Font.Color := clBlack;
     if not ((C is TImage) and TImage(C).AutoSize) then
     begin
       C.Width := DU(It.CX, True);
