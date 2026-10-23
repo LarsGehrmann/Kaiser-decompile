@@ -9,13 +9,14 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni;
+  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals;
 
 type
   TKaiserForm = class(TForm)
+  public
+    FSave: TSaveGame;
   private
     FMenu: TMainMenu;
-    FSave: TSaveGame;
     FSaveFile: string;
     procedure BuildMenu;
     procedure AddItems(Into: TMenuItem; const M: TMenuTemplate);
@@ -262,6 +263,8 @@ begin
       if DS.Game.GameState = 1 then
         Do_Spiel(Self);
     604: Do_Laendernamen(Self);                  { CmLaendernamen 1000:1ec3 }
+    106: Do_Annalen(Self);                       { CmAnnalen 1000:1541 }
+    107: Do_Rekorde(Self);                       { CmRekorde 1000:1575 }
     222:                                        { CmAbkommen 1000:17fc }
       if DS.Game.GameState = 1 then
       begin

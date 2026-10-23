@@ -64,6 +64,8 @@ TEXT_OFS = 0x100           # where a fake dialog keeps its text result
 FUNCS = {
     'ShowBuildingLossDlg': ('1040:0565', True, ['p', 's', 'L', 'b'], False),
     'Do_KornVerteilen': ('1040:8551', True, ['p', 'p', 'b'], False),
+    'Annals_Save': ('1050:000d', True, ['r2750'], False),     # KAISER.SCO (file I/O)
+    'Records_Save': ('1050:030f', True, ['r391'], False),     # KAISER.REC
     'Do_TruppenAufstellen': ('1038:6a30', True, ['p', 'p', 'b'], False),
     'PlaySound': ('1070:0002', True, ['w', 'w'], False),
     'Email_AskPassword': ('1020:014e', True, ['p', 'p', 's', 's'], True),

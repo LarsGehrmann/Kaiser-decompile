@@ -8,7 +8,7 @@ program RuleTest;
 
 uses
   SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
-  Battle, War, NERes, Actions, ReplayUI;
+  Battle, War, NERes, Actions, Annals, ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -620,6 +620,18 @@ begin
               Got := B2S(DeclareWar(Window, Save.Players, ArgI(0), OutBuf[0], ArgI(1), ArgI(2)));
             end;
           'CmDemissionieren': begin Do_Demissionieren(Window, 0, Players); Got := '-'; end;
+          'ShowHighScoreDlg', 'ShowRecordsDlg':
+            begin
+              Hx := HexBytes(Args[0]);
+              Move(Hx[0], OutBuf, Length(Hx));
+              OutSize := Length(Hx);
+              if Func = 'ShowHighScoreDlg' then
+                ShowHighScoreDlg(Window, TAnnals(Pointer(@OutBuf)^), ArgI(1))
+              else
+                ShowRecordsDlg(Window, TRecords(Pointer(@OutBuf)^));
+              Got := '-';
+            end;
+          'ShowCoronation': begin ShowCoronation(Window, Pl^, ArgI(0), ArgI(1)); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin

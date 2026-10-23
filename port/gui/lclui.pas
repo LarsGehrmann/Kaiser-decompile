@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs, Rules, Actions;
+  KaiserLCL, KaiserDlgs, Rules, Actions, Annals;
 
 type
   TLclUI = class(TGameUI)
@@ -18,6 +18,7 @@ type
     function FormOf(D: TDialog): TKaiserDialog;
   public
     MainForm: TForm;
+    Players: PPlayers;            { the game's players (Victory) }
     function Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog; override;
     function Execute(D: TDialog): SmallInt; override;
     procedure Done(D: TDialog; Flag: Word); override;
@@ -29,6 +30,20 @@ implementation
 
 uses
   Process;
+
+{ the port writes its annals and records next to its KAISER.INI; it reads
+  the original's next to kaiser.exe until it has its own }
+function OwnDataFile(const Name: string): string;
+begin
+  Result := ExtractFilePath(OwnSettingsFile) + Name;
+end;
+
+function DataFile(const Name: string): string;
+begin
+  Result := OwnDataFile(Name);
+  if not FileExists(Result) then
+    Result := ExtractFilePath(FindExe) + Name;
+end;
 
 function ArgText(const A: TUIArg): RawByteString;
 begin
@@ -109,6 +124,16 @@ begin
     Do_Gebaeude(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
   else if Name = 'Do_HandelMitGuetern' then
     Do_HandelMitGuetern(Args[0].P, PPlayer(Args[1].P)^)
+  else if Name = 'Victory' then
+    Annals.Victory(Args[0].P, Players^)
+  else if Name = 'Annals_Load' then
+    Result := Ord(AnnalsLoad(DataFile('KAISER.SCO'), TAnnals(Args[0].P^)))
+  else if Name = 'Annals_Save' then
+    AnnalsSave(OwnDataFile('KAISER.SCO'), TAnnals(Args[0].P^))
+  else if Name = 'Records_Load' then
+    RecordsLoad(DataFile('KAISER.REC'), TRecords(Args[0].P^))
+  else if Name = 'Records_Save' then
+    RecordsSave(OwnDataFile('KAISER.REC'), TRecords(Args[0].P^))
   else if Name = 'PlaySound' then
   begin
     { WAVEDATA resource n, played by afplay (sndPlaySound, asynchronous),

@@ -50,5 +50,6 @@ begin
   UI := TheUI;
   Application.CreateForm(TKaiserForm, KaiserForm);
   TheUI.MainForm := KaiserForm;
+  TheUI.Players := @KaiserForm.FSave.Players;
   Application.Run;
 end.

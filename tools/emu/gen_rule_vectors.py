@@ -487,6 +487,9 @@ SPECS = {
     'CmDemissionieren': ('1000:16d0', ['NIL', 'SELF'], 'none',
                          ['title', 'lifetime', 'J.title', 'J.lifetime', 'h.immortality'],
                          {'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
+    'ShowHighScoreDlg': ('1040:3f44', ['Wnd', 'ANN', 'B:0:4'], 'none', []),
+    'ShowRecordsDlg': ('1040:44f8', ['Wnd', 'REC'], 'none', []),
+    'ShowCoronation': ('1040:4bc7', ['Wnd', 'P', 'I', 'B:0:255'], 'none', ['cpu_level', 'title']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1226,6 +1229,9 @@ DIALOG_TESTS = {
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
     'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
     'DeclareWar': ['GEGNERDLG'],
+    'ShowHighScoreDlg': ['HIGHSCOREDLG'],
+    'ShowRecordsDlg': ['REKORDDLG'],
+    'ShowCoronation': ['KROENUNGSDLG'],
     'Do_Sabotage': ['SABOTAGEBUDGETDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG'],
 }
 
@@ -1425,6 +1431,36 @@ def main():
                         struct.pack_into('<11i', blk, 0, *([rng.randint(0, 300)] + [rng.randint(0, 2000)] +
                                                           [rng.choice([0, 0, rng.randint(0, 4)]) for _ in range(9)]))
                         blk[0x35], blk[0x36] = rng.randint(0, 8), rng.randint(0, 8)
+                        off = OUT_AREA + 0x400
+                    emu.write(sp, off, bytes(blk))
+                    outs.append((len(blk), off))
+                    call_args.append(('ptr', (sp, off)))
+                    shown.append(bytes(blk).hex())
+                elif kind in ('ANN', 'REC'):
+                    # an annals table (KAISER.SCO, 0xabe) / records (KAISER.REC,
+                    # 0x187), plausible; shown as hex, reported in out=
+                    def name(n):
+                        t = rng.choice([b'', b'Kaiser Lars von Sachsen', b'K\xf6nigin *Erna* von Bayern',
+                                        b'x' * (n - 1)])
+                        return (t + bytes(n))[:n]
+                    if kind == 'ANN':
+                        blk = bytearray()
+                        for _ in range(55):
+                            e = name(41) + bytes([rng.choice([0, rng.randint(0, 12)])])
+                            e += struct.pack('<iHH', rng.choice([0, rng.randint(-1000, 3000000)]),
+                                             rng.randint(1400, 1700), rng.getrandbits(16))
+                            blk += e
+                        off = OUT_AREA + 0x200
+                    else:
+                        blk = bytearray(0x187)
+                        for o, n in ((4, 41), (0x2f, 25), (0x4a, 41), (0x77, 25), (0x92, 41), (0xbf, 25),
+                                     (0xde, 41), (0x10b, 25), (0x126, 41), (0x14f, 25), (0x16c, 25)):
+                            blk[o:o + n] = name(n)
+                        struct.pack_into('<H', blk, 0x2d, rng.randint(1, 300))
+                        for o in (0x73, 0xbb, 0x107):
+                            struct.pack_into('<i', blk, o, rng.choice([rng.randint(0, 999999999), -5]))
+                        blk[0x168] = rng.randint(0, 120)
+                        struct.pack_into('<h', blk, 0x16a, rng.randint(-5, 500))
                         off = OUT_AREA + 0x400
                     emu.write(sp, off, bytes(blk))
                     outs.append((len(blk), off))
