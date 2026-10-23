@@ -67,11 +67,20 @@ FUNCS = {
     'Do_LandHandeln': ('1040:7e4b', True, ['p', 'p', 'b', 'b'], False),
     'Do_Gebaeude': ('1040:6cff', True, ['p', 'p', 'b', 'b'], False),
     'FreeMem': ('10c8:0147', True, ['p', 'w'], False),   # a dialog freed without Done
+    # the turn loop (NextPlayer, CpuTurn, ResolveWar)
+    'Battle': ('1018:0558', True, ['p', 'p', 'p', 'b', 'b', 'b'], True),
+    'Victory': ('1000:3459', True, ['p'], False),
+    'EndGame': ('1000:0a6f', True, ['p'], False),
+    'ShowEmailHandOver': ('1020:02ee', True, ['p', 'p', 'p'], False),
+    'SaveGame': ('1050:058b', True, ['p', 'p', 'p'], False),
 }
 # segments that may only run through the stubs above (UI, OWL, battle view)
 GUARDED_SEGMENTS = [1, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24]
 # code in guarded segments that is plain logic and may run
-ALLOWED = [('1060:03d9', 0x14e)]           # FormatPlayerTitle
+ALLOWED = [('1060:03d9', 0x14e),           # FormatPlayerTitle
+           ('1000:35ad', 0x125),           # NextPlayer
+           ('1000:36d2', 0xee),            # CpuTurn
+           ('1000:37c0', 0x10f)]           # ResolveWar
 
 
 def arg_bytes(kinds):
@@ -88,6 +97,7 @@ class UILayer:
     def __init__(self, emu, players_para, chooser):
         self.emu = emu
         self.players_para = players_para
+        self.window_alias = None         # a fake window object standing for W
         self.chooser = chooser
         self.log = []
         self.objects = []
@@ -96,10 +106,11 @@ class UILayer:
     # -- symbolic arguments --------------------------------------------------
     def sym(self, seg, off):
         from kaiser_structs import PLAYER_SIZE
-        if (seg, off) == WINDOW:
+        if (seg, off) == WINDOW or (seg, off) == self.window_alias:
             return 'W'
-        if seg == self.players_para and off < 10 * PLAYER_SIZE:
-            return f'P{off // PLAYER_SIZE}:{off % PLAYER_SIZE}'
+        rel = seg * 16 + off - self.players_para * 16     # (any segment:offset form)
+        if 0 <= rel < 10 * PLAYER_SIZE:
+            return f'P{rel // PLAYER_SIZE}:{rel % PLAYER_SIZE}'
         if seg == self.emu.ds_para:
             return f'D{off}'
         for i, (s, o) in enumerate(self.objects):

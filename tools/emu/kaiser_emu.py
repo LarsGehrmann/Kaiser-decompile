@@ -94,7 +94,8 @@ class KaiserEmu:
                         self.strings[(r.res_id - 1) * 16 + i] = r.data[p + 1:p + 1 + n]
                     p += 1 + n
         # Windows API functions the emulator implements: (module, ordinal)
-        self.api = {('USER', 176): self._load_string}
+        self.api = {('USER', 176): self._load_string,
+                    ('USER', 125): self._invalidate_rect}
         self.pristine_ds = bytes(self.read(self.ds_para, 0, 0x10000))
         # far return target: a HLT instruction in the stub segment
         self.return_ip = 0xFF00
@@ -344,6 +345,10 @@ class KaiserEmu:
             n = min(len(text), cch - 1)
             self.write(buf_seg, buf_off, text[:n] + b'\0')
         self._api_return(10, n)
+
+    def _invalidate_rect(self):
+        # InvalidateRect(hWnd, lpRect, bErase): repainting is not emulated
+        self._api_return(8)
 
     def _setup(self, stack_words):
         uc = self.uc

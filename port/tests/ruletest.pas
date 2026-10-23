@@ -7,7 +7,7 @@ program RuleTest;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai,
+  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
   ReplayUI;
 
 type
@@ -416,6 +416,7 @@ begin
           'Ai_ArrangeArmies': begin Ai_ArrangeArmies(Pl^, ArgI(0)); Got := '-'; end;
           'Ai_BanditBattle': Got := IntToStr(Ai_BanditBattle(Pl^));
           'Ai_AutoBattle': Got := IntToStr(Ai_AutoBattle(Pl^, Players[ArgI(0)]));
+          'NextPlayer': begin NextPlayer(Window, 0, Players); Got := '-'; end;
           'Ai_Turn':
             begin
               Ai_Turn(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3));

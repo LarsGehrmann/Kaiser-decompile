@@ -51,6 +51,7 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   OB:n   pointer to an n-byte out record (zeroed), reported as hex
 #   PJ     pointer to another player J != test player (J shown)
 #   Wnd    the parent window pointer (UI calls log it as W)
+#   SELF   the main window object (players at +0x41), logged as W too
 #   Y      a year: 0 (the first turn) in a quarter of the cases, else 1..300
 #   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
@@ -328,6 +329,10 @@ SPECS = {
                       ARMY + ['population', 'J.population', 'J.army1_count', 'J.army2_count'],
                       {'army1_count': (0, 8), 'army2_count': (0, 8),
                        'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
+    # segment 1: the turn loop, a whole round of computer players
+    'NextPlayer': ('1000:35ad', ['SELF'], 'none',
+                   ['title', 'lifetime', 'J.title', 'J.lifetime', 'h.immortality'],
+                   {'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
     # segment 2: the computer player's year
     'Ai_Turn': ('1008:0002', ['Wnd', 'W:0:65535', 'A', 'I', 'N', 'Y'], 'none',
                 AIM + ECON + ARMY + ['event', 'h.immortality', 'h.goods_trade_enabled',
@@ -415,6 +420,9 @@ UI_SCRIPTS = {
                                                  {0x100: b'Neuheld\0'}))],
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'Ai_Turn': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'NextPlayer': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
+                   ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
+                   ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
     'Ai_MilitaryPolicy': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'PlayerTurnEnd': [('Execute(', lambda rng: (rng.choice([1, 2]), {0x100: b'Neuheld\0'}))],
     'PlayerTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
@@ -640,6 +648,29 @@ def preset_goods(rng, players, p, num):
     return m
 
 
+def preset_round(rng, players, p, num):
+    """Human p ends the turn; the others are mostly computer players with
+    their messages, attitudes and treaties."""
+    m = set_field(players, p, 'cpu_level', 0)
+    m += set_field(players, p, 'skip_turn', 0)
+    for j in range(num):
+        if j == p:
+            continue
+        if rng.random() < 0.8:
+            m += set_field(players, j, 'cpu_level', rng.randint(1, 6))
+            m += set_field(players, j, 'ai_aggression_q', rng.randint(1, 6))
+            m += preset_ai(rng, players, j, num)
+        else:
+            m += set_field(players, j, 'cpu_level', 0)
+        if rng.random() < 0.1:
+            m += set_field(players, j, 'skip_turn', 1)
+        for name in ('army1_count', 'army2_count'):
+            off, _ = field_info(ks.PLAYER, name)
+            if players[j * PSIZE + off] > 8:
+                m += set_field(players, j, name, 8)
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
     'DiplomacyTurnStart': preset_mailbox,
@@ -652,12 +683,34 @@ PRESETS = {
     'Ai_ChooseWarTarget': preset_war,
     'Ai_LandPolicy': preset_land,
     'Ai_SellGoods': preset_goods,
+    'NextPlayer': preset_round,
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'PlayerTurnEnd': preset_promotion,
     'Ai_LandToSellForPromotion': preset_promotion,
     'Ai_KnightSquires': preset_knights,
     'SabotageEnd': preset_sabotage_log,
+}
+
+
+def header_turn(rng, header, players, p, num):
+    """The turn of human player p ends: the others are mostly computers."""
+    h = []
+
+    def put(name, value):
+        off, typ = field_info(ks.HEADER, name)
+        b = struct.pack({'u8': '<B', 's16': '<h', 'u16': '<H'}[typ], value)
+        h.append((off, b))
+    put('current_player', p)
+    put('game_state', 1)
+    put('email_game_q', 0)
+    put('year', rng.randint(1, 120))
+    return h
+
+
+# per function: header mutations after the random ones
+HEADER_PRESETS = {
+    'NextPlayer': header_turn,
 }
 
 
@@ -845,6 +898,8 @@ def main():
                     val = struct.pack(fmt, rng.randint(lo, hi))
                     muts.append((a, val))
                     players[a:a + size] = val
+            if func in HEADER_PRESETS:
+                hmuts += HEADER_PRESETS[func](rng, header, players, p, num)
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
@@ -905,6 +960,11 @@ def main():
                     call_args.append(('ptr', (0, 0)))
                 elif kind == 'Wnd':
                     call_args.append(('ptr', WINDOW))
+                elif kind == 'SELF':
+                    # a fake main window: the player array lies at Self+0x41
+                    self_ptr = (sp - 5, 0x50 - 0x41)
+                    ui.window_alias = self_ptr
+                    call_args.append(('ptr', self_ptr))
                 elif kind == 'F':
                     off, _ = field_info(ks.PLAYER, rest)
                     call_args.append(('ptr', (sp, p * PSIZE + off)))
