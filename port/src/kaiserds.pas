@@ -99,6 +99,9 @@ var
 { Restore the initial contents (as Windows loads them) }
 procedure ResetDataSegment;
 
+{ a zero-terminated text constant of the data segment (offset given) }
+function DSText(Ofs: Word): PChar; inline;
+
 implementation
 
 const
@@ -1642,6 +1645,11 @@ const
     $00,$00,$00,$00,$00,$00,$00,$02,$52,$75,$6E,$74,$69,$6D,$65,$20,
     $65,$72,$72,$6F,$72,$20,$30,$30,$30,$20,$61,$74,$20,$30,$30,$30,
     $30,$3A,$30,$30,$30,$30,$2E,$00);
+
+function DSText(Ofs: Word): PChar;
+begin
+  Result := PChar(@PByte(@DS)[Ofs]);
+end;
 
 procedure ResetDataSegment;
 begin

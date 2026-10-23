@@ -70,6 +70,10 @@ class KaiserEmu:
             raise EmuError('not enough emulated memory')
         self.ds_para = self.para[self.ne.autodata_seg]
         self._stub_keys = {}
+        self._stub_handlers = {}         # stub offset -> handler (redirected functions)
+        self._next_stub = 0x0800          # slots after the import stubs (segment is 4 KB)
+        self.guard_ranges = []           # (lin_begin, lin_end, name): executing there stops
+        self.guard_allow = []            # (lin_begin, lin_end): allowed inside guard ranges
         self._load_segments()
         self._apply_relocations()
         # string table resources (id -> raw cp1252 bytes) for LoadString
@@ -159,10 +163,19 @@ class KaiserEmu:
                         self.write(base, site, struct.pack('<H', off))
 
     # -- calling -------------------------------------------------------------
-    def _run(self, para, off, max_insns=5_000_000):
+    def _run(self, para, off, max_insns=5_000_000, until=None):
+        if until is None:
+            until = (self.stub_para, self.return_ip)
         def hook(uc, address, size, user):
             if self.stub_para * 16 <= address < self.stub_para * 16 + 0xFF00:
                 off = address - self.stub_para * 16
+                if off in self._stub_handlers:
+                    try:
+                        self._stub_handlers[off]()
+                    except Exception as e:      # report instead of losing it in Unicorn
+                        uc.emu_stop()
+                        raise_box.append(f'stub handler failed: {e!r}')
+                    return
                 key = self._stub_keys.get(off)
                 name = None
                 if key is not None:
@@ -184,21 +197,78 @@ class KaiserEmu:
                              end=self.stub_para * 16 + 0xFEFF)
         re_lin = self.lin(self.para[26], 0x005d)
         h2 = self.uc.hook_add(UC_HOOK_CODE, runerror, begin=re_lin, end=re_lin)
+
+        def guard(uc, address, size, user):
+            for b, e in self.guard_allow:
+                if b <= address < e:
+                    return
+            uc.emu_stop()
+            seg = (address >> 4) & 0xFFFF
+            raise_box.append(f'unstubbed code at linear {address:#x} ({user})')
+        guards = [self.uc.hook_add(UC_HOOK_CODE, guard, user_data=name, begin=b, end=e - 1)
+                  for b, e, name in self.guard_ranges]
         try:
-            self.uc.emu_start(self.lin(para, off),
-                              self.lin(self.stub_para, self.return_ip),
+            self.uc.emu_start(self.lin(para, off), self.lin(*until),
                               count=max_insns)
         except UcError as e:
             raise EmuError(f'emulation failed: {e}')
         finally:
             self.uc.hook_del(h)
             self.uc.hook_del(h2)
+            for g in guards:
+                self.uc.hook_del(g)
         if raise_box:
             raise EmuError(raise_box[0])
         cs = self.uc.reg_read(UC_X86_REG_CS)
         ip = self.uc.reg_read(UC_X86_REG_IP)
-        if (cs, ip) != (self.stub_para, self.return_ip):
+        if (cs, ip) != until:
             raise EmuError(f'did not return (stopped at {cs:04x}:{ip:04x})')
+
+    # -- redirected (stubbed) functions --------------------------------------
+    def new_stub(self, handler):
+        """A stub slot that runs handler() when reached; returns (para, off)."""
+        off = self._next_stub
+        self._next_stub += 2
+        if self._next_stub > 0x1000:
+            raise EmuError('out of stub slots')
+        self.write(self.stub_para, off, b'\xcc\xcc')
+        self._stub_handlers[off] = handler
+        return self.stub_para, off
+
+    def redirect(self, addr, handler):
+        """Patch the entry of a function with a far jump to a stub slot."""
+        seg_index, off = ghidra_seg(addr)
+        para, soff = self.new_stub(handler)
+        self.write(self.para[seg_index], off, struct.pack('<BHH', 0xEA, soff, para))
+        return para, soff
+
+    def stack_words(self, n, skip):
+        """n words on the stack after skip bytes (the return address)."""
+        ss = self.uc.reg_read(UC_X86_REG_SS)
+        sp = self.uc.reg_read(UC_X86_REG_SP)
+        return struct.unpack(f'<{n}H', self.read(ss, sp + skip, 2 * n))
+
+    def stub_return(self, nbytes, far=True, ax=0, dx=0, cs=None):
+        """Return from a redirected function like RETF/RET nbytes."""
+        ss = self.uc.reg_read(UC_X86_REG_SS)
+        sp = self.uc.reg_read(UC_X86_REG_SP)
+        if far:
+            ip, cs = struct.unpack('<HH', self.read(ss, sp, 4))
+            sp += 4
+        else:
+            ip, = struct.unpack('<H', self.read(ss, sp, 2))
+            sp += 2
+        self.uc.reg_write(UC_X86_REG_SP, sp + nbytes)
+        self.uc.reg_write(UC_X86_REG_AX, ax & 0xFFFF)
+        self.uc.reg_write(UC_X86_REG_DX, dx & 0xFFFF)
+        self.uc.reg_write(UC_X86_REG_CS, cs)
+        self.uc.reg_write(UC_X86_REG_IP, ip)
+
+    def segment_range(self, seg_index):
+        """Linear [begin, end) of a loaded segment."""
+        seg = self.ne.segments[seg_index - 1]
+        b = self.lin(self.para[seg_index], 0)
+        return b, b + max(seg.length, 1)
 
     # -- emulated Windows API -------------------------------------------------
     def _api_args(self, nbytes):
@@ -269,10 +339,13 @@ class KaiserEmu:
         out['flags'] = self.uc.reg_read(UC_X86_REG_FLAGS)
         return out
 
-    def call_far(self, addr, args, **regs):
+    NEAR_RETURN = 0xFFF0       # HLT in each code segment for near calls
+
+    def call_far(self, addr, args, near=False, **regs):
         """Call a far Pascal procedure. args: list of ('word', v) /
         ('long', v) / ('ptr', (para, off)) / ('real', 6 bytes) in Pascal
-        order (left to right).
+        order (left to right). near=True calls a near procedure (returns to
+        a HLT at offset FFF0 of its own segment).
         Returns (ax, dx)."""
         seg_index, off = ghidra_seg(addr)
         para = self.para[seg_index]
@@ -291,12 +364,18 @@ class KaiserEmu:
                 raise ValueError(kind)
         # the stack grows down: first pushed = highest address
         stack = list(reversed(words))
-        self._setup([self.return_ip, self.stub_para] + stack)
+        if near:
+            self.uc.mem_write(self.lin(para, self.NEAR_RETURN), b'\xf4')
+            self._setup([self.NEAR_RETURN] + stack)
+            until = (para, self.NEAR_RETURN)
+        else:
+            self._setup([self.return_ip, self.stub_para] + stack)
+            until = (self.stub_para, self.return_ip)
         for k, v in regs.items():
             self.uc.reg_write(REGS[k], v & 0xFFFF)
         self.uc.reg_write(UC_X86_REG_CS, para)
         self.uc.reg_write(UC_X86_REG_IP, off)
-        self._run(para, off)
+        self._run(para, off, until=until)
         self.last_regs = {k: self.uc.reg_read(r) for k, r in REGS.items()}
         return (self.uc.reg_read(UC_X86_REG_AX), self.uc.reg_read(UC_X86_REG_DX))
 

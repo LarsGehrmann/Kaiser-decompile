@@ -1,0 +1,258 @@
+{ A TGameUI for the differential tests: formats every UI call like
+  tools/emu/ui_stubs.py and answers it from the recorded calls of the
+  original (the ui= field of a vector). Log holds what the port did, with
+  '!' after a call that does not match the recording. }
+unit ReplayUI;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserUI;
+
+type
+  TReplayUI = class(TGameUI)
+  private
+    FExpected: TStringList;
+    FPos: Integer;
+    FLog: TStringList;
+    function Sym(P: Pointer): string;
+    function FormatArgs(const Args: array of TUIArg): string;
+    { match the next recorded call; returns the recorded result part
+      after '=' ('' if none) }
+    function Take(const Entry: string): string;
+    function Answer(const R: string; D: TDialog): SmallInt;
+  public
+    PlayersBase: PByte;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Start(const Recorded: string);
+    function LogText: string;
+    function Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog; override;
+    function Execute(D: TDialog): SmallInt; override;
+    procedure Done(D: TDialog; Flag: Word); override;
+    function ExecDialog(D: TDialog): SmallInt; override;
+    function GetText(D: TDialog): PChar; override;
+    function Call(const Name: string; const Args: array of TUIArg): SmallInt; override;
+  end;
+
+implementation
+
+function HexOfMem(P: PByte; N: Integer): string;
+var
+  I: Integer;
+begin
+  Result := '';
+  for I := 0 to N - 1 do
+    Result := Result + LowerCase(IntToHex(P[I], 2));
+end;
+
+constructor TReplayUI.Create;
+begin
+  inherited Create;
+  FExpected := TStringList.Create;
+  FExpected.Delimiter := '|';
+  FExpected.StrictDelimiter := True;
+  FLog := TStringList.Create;
+end;
+
+destructor TReplayUI.Destroy;
+begin
+  FExpected.Free;
+  FLog.Free;
+  inherited Destroy;
+end;
+
+procedure TReplayUI.Start(const Recorded: string);
+begin
+  Reset;
+  FLog.Clear;
+  FPos := 0;
+  if (Recorded = '-') or (Recorded = '') then
+    FExpected.Clear
+  else
+    FExpected.DelimitedText := Recorded;
+end;
+
+function TReplayUI.LogText: string;
+var
+  I: Integer;
+begin
+  if FLog.Count = 0 then
+    Exit('-');
+  Result := FLog[0];
+  for I := 1 to FLog.Count - 1 do
+    Result := Result + '|' + FLog[I];
+end;
+
+function TReplayUI.Sym(P: Pointer): string;
+var
+  A, B: PtrUInt;
+begin
+  A := PtrUInt(P);
+  if P = Window then
+    Exit('W');
+  B := PtrUInt(PlayersBase);
+  if (A >= B) and (A < B + 10 * PlayerSize) then
+    Exit(Format('P%d:%d', [(A - B) div PlayerSize, (A - B) mod PlayerSize]));
+  B := PtrUInt(@DS);
+  if (A >= B) and (A < B + SizeOf(DS)) then
+    Exit('D' + IntToStr(A - B));
+  if P = nil then
+    Exit('nil');
+  Result := 'S';
+end;
+
+function TReplayUI.FormatArgs(const Args: array of TUIArg): string;
+var
+  I: Integer;
+  S: string;
+begin
+  Result := '';
+  for I := 0 to High(Args) do
+  begin
+    case Args[I].Kind of
+      uaPtr:
+        if FindDialog(Args[I].P) <> nil then
+          S := 'O' + IntToStr(FindDialog(Args[I].P).Index)
+        else
+          S := Sym(Args[I].P);
+      uaStr: S := 's:' + HexOfMem(PByte(Args[I].P), StrLen(PChar(Args[I].P)));
+      uaWord: S := IntToStr(Word(Args[I].V));
+      uaByte: S := IntToStr(Byte(Args[I].V));
+      uaLong: S := IntToStr(Args[I].V);
+      uaRec: S := 'r' + IntToStr(Args[I].Len) + ':' + HexOfMem(PByte(Args[I].P), Args[I].Len);
+    end;
+    if I > 0 then
+      Result := Result + ',';
+    Result := Result + S;
+  end;
+end;
+
+function TReplayUI.Take(const Entry: string): string;
+var
+  E: string;
+begin
+  Result := '';
+  if FPos < FExpected.Count then
+    E := FExpected[FPos]
+  else
+    E := '';
+  Inc(FPos);
+  if (E = Entry) then
+    Exit('');
+  if Copy(E, 1, Length(Entry) + 1) = Entry + '=' then
+    Exit(Copy(E, Length(Entry) + 2, MaxInt));
+  Result := '!';
+end;
+
+function TReplayUI.Answer(const R: string; D: TDialog): SmallInt;
+var
+  Parts: TStringList;
+  I, Off, K, Colon: Integer;
+  H: string;
+begin
+  { "ax+off:hex+off:hex" }
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := '+';
+    Parts.StrictDelimiter := True;
+    Parts.DelimitedText := R;
+    Result := StrToIntDef(Parts[0], 0);
+    for I := 1 to Parts.Count - 1 do
+    begin
+      Colon := Pos(':', Parts[I]);
+      Off := StrToInt('$' + Copy(Parts[I], 1, Colon - 1));
+      H := Copy(Parts[I], Colon + 1, MaxInt);
+      if D <> nil then
+        for K := 0 to Length(H) div 2 - 1 do
+          D.Data[Off + K] := StrToInt('$' + Copy(H, 2 * K + 1, 2));
+    end;
+  finally
+    Parts.Free;
+  end;
+end;
+
+function TReplayUI.Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog;
+var
+  Entry: string;
+begin
+  Result := inherited Dialog(Name, VMT, Args);
+  Entry := Format('%s[%x](%s)', [Name, VMT, FormatArgs(Args)]);
+  if Take(Entry) = '!' then
+    FLog.Add(Entry + '!')
+  else
+    FLog.Add(Entry + '=O' + IntToStr(Result.Index));
+end;
+
+function TReplayUI.Execute(D: TDialog): SmallInt;
+var
+  Entry, R: string;
+begin
+  Entry := 'Execute(O' + IntToStr(D.Index) + ')';
+  R := Take(Entry);
+  if R = '!' then
+  begin
+    FLog.Add(Entry + '!');
+    Exit(0);
+  end;
+  FLog.Add(Entry + '=' + R);
+  Result := Answer(R, D);
+end;
+
+procedure TReplayUI.Done(D: TDialog; Flag: Word);
+var
+  Entry: string;
+begin
+  Entry := Format('Done(O%d,%d)', [D.Index, Flag]);
+  if Take(Entry) = '!' then
+    Entry := Entry + '!';
+  FLog.Add(Entry);
+end;
+
+function TReplayUI.ExecDialog(D: TDialog): SmallInt;
+var
+  Entry, R: string;
+begin
+  Entry := 'ExecDialog(A,O' + IntToStr(D.Index) + ')';
+  R := Take(Entry);
+  if R = '!' then
+  begin
+    FLog.Add(Entry + '!');
+    Exit(0);
+  end;
+  FLog.Add(Entry + '=' + R);
+  Result := Answer(R, D);
+end;
+
+function TReplayUI.GetText(D: TDialog): PChar;
+var
+  Entry: string;
+begin
+  Entry := 'GetText(O' + IntToStr(D.Index) + ')';
+  if Take(Entry) = '!' then
+    Entry := Entry + '!';
+  FLog.Add(Entry);
+  Result := D.Text;
+end;
+
+function TReplayUI.Call(const Name: string; const Args: array of TUIArg): SmallInt;
+var
+  Entry, R: string;
+begin
+  Entry := Format('%s(%s)', [Name, FormatArgs(Args)]);
+  R := Take(Entry);
+  if R = '!' then
+  begin
+    FLog.Add(Entry + '!');
+    Exit(0);
+  end;
+  if R = '' then
+    FLog.Add(Entry)
+  else
+    FLog.Add(Entry + '=' + R);
+  Result := Answer(R, nil);
+end;
+
+end.

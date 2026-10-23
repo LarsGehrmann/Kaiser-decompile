@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from kaiser_emu import KaiserEmu, EmuError  # noqa: E402
+from ui_stubs import UILayer, WINDOW  # noqa: E402
 import kaiser_structs as ks  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -49,8 +50,12 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   OP     out far pointer, reported as offset into the player array
 #   OB:n   pointer to an n-byte out record (zeroed), reported as hex
 #   PJ     pointer to another player J != test player (J shown)
+#   Wnd    the parent window pointer (UI calls log it as W)
 #   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
+# An address 'nSEG:OFF' is a near procedure. Functions that open dialogs
+# run with the UI layer (tools/emu/ui_stubs.py); UI_SCRIPTS decides what
+# the dialogs answer, the calls are recorded in ui=.
 # Mutations: player fields; 'u.FIELD' = that field of a random unit (both
 # armies); 'U.FIELD' = that field of the unit passed as U; 'J.FIELD' = a
 # field of player J; 'h.FIELD' = a
@@ -239,7 +244,29 @@ SPECS = {
     'RealmName': ('1068:6cb4', ['OB:40', 'G:6'], 'none', []),
     'FameText': ('1068:6d8b', ['OB:40', 'B:0:120'], 'none', []),
     'MagnitudeText': ('1068:6e30', ['OB:40', 'G:7'], 'none', []),
+    # milestone 4: turn processing (segment 3)
+    'RulerFallsIll': ('n1010:3777', ['Wnd'], 'none', []),
+    'WitchChoosesSpell': ('n1010:372a', ['Wnd', 'P'], 'none', ['spell']),
 }
+
+
+# per function: list of (entry prefix, answer(rng) -> (ax, {offset: bytes}))
+# for Execute / ExecDialog / whole UI functions; the default answers 1 (OK)
+# for dialogs and 0 for functions
+UI_SCRIPTS = {
+    'WitchChoosesSpell': [('Execute(', lambda rng: (1, {0x38: bytes([rng.randint(0, 12)])}))],
+}
+
+
+def make_chooser(func, rng):
+    script = UI_SCRIPTS.get(func, [])
+
+    def chooser(entry, kind):
+        for prefix, answer in script:
+            if entry.startswith(prefix):
+                return answer(rng)
+        return (1, {}) if kind == 'method' else (0, {})
+    return chooser
 
 
 def field_info(fields, name):
@@ -382,6 +409,7 @@ def main():
     rng = random.Random(int(sys.argv[3]) if len(sys.argv) > 3 else 7)
     emu = KaiserEmu()
     sp = emu.scratch_para
+    ui = UILayer(emu, sp, None)
     for func in funcs:
         addr, args, ret, fields = SPECS[func][:4]
         clamps = SPECS[func][4] if len(SPECS[func]) > 4 else {}
@@ -413,6 +441,8 @@ def main():
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
             emu.reset_ds()
+            ui.reset()
+            ui.chooser = make_chooser(func, rng)
             emu.write(emu.ds_para, HDR_DS, bytes(header))
             emu.write(sp, 0, bytes(players))
             emu.write(sp, OUT_AREA, bytes(0x1000))
@@ -463,6 +493,8 @@ def main():
                     shown.append(str(uidx))
                 elif kind == 'NIL':
                     call_args.append(('ptr', (0, 0)))
+                elif kind == 'Wnd':
+                    call_args.append(('ptr', WINDOW))
                 elif kind == 'F':
                     off, _ = field_info(ks.PLAYER, rest)
                     call_args.append(('ptr', (sp, p * PSIZE + off)))
@@ -490,7 +522,8 @@ def main():
                 else:
                     raise ValueError(a)
             try:
-                ax, dx = emu.call_far(addr, call_args)
+                near = addr.startswith('n')
+                ax, dx = emu.call_far(addr.lstrip('n'), call_args, near=near)
                 r = emu.last_regs
                 if ret == 'long':
                     rv = str(struct.unpack('<i', struct.pack('<HH', ax, dx))[0])
@@ -526,7 +559,8 @@ def main():
                   f'args={",".join(shown) or "-"} mut={mut or "-"} hmut={hmut or "-"} -> '
                   f'ret={rv} out={",".join(out_vals) or "-"} '
                   f'seedout={emu.rand_seed()} diff={diff(players, after) or "-"} '
-                  f'hdiff={diff(header, hafter) or "-"}')
+                  f'hdiff={diff(header, hafter) or "-"} '
+                  f'ui={"|".join(ui.log) or "-"}')
 
 
 if __name__ == '__main__':

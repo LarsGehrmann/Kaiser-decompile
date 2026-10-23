@@ -7,7 +7,8 @@ program RuleTest;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules;
+  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn,
+  ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -100,7 +101,8 @@ end;
 
 var
   Lines, Parts, Args: TStringList;
-  SaveDir, Func, Got, Want, S, Outs: string;
+  Replay: TReplayUI;
+  SaveDir, Func, Got, Want, S, Outs, UIField: string;
   Save: TSaveGame;
   Before, After, HBefore, HAfter: TBytes;
   I, Num, Pass, Fail, PIdx: Integer;
@@ -138,6 +140,11 @@ var
   end;
 
 begin
+  { the original's UI calls are replayed; W = this window pointer }
+  Replay := TReplayUI.Create;
+  UI.Free;
+  UI := Replay;
+  Window := Pointer(PtrUInt($0EEE1234));
   SaveDir := IncludeTrailingPathDelimiter(ParamStr(1));
   Lines := TStringList.Create;
   Lines.LoadFromFile(ParamStr(2));
@@ -167,6 +174,11 @@ begin
     Before := Snapshot(Save.Players[0], Num * PlayerSize);
     HBefore := Snapshot(DS.Game, HeaderSize);
     RandSeed := StrToInt64(Field(S, 'seed'));
+    Replay.PlayersBase := PByte(@Save.Players[0]);
+    UIField := Field(S, 'ui');
+    if UIField = '' then
+      UIField := '-';
+    Replay.Start(UIField);
     if Field(S, 'args') = '-' then
       Args.Clear
     else
@@ -366,6 +378,8 @@ begin
           'RealmName': begin OutSize := 40; RealmName(@OutBuf, ArgI(0)); Got := '-'; end;
           'FameText': begin OutSize := 40; FameText(@OutBuf, ArgI(0)); Got := '-'; end;
           'MagnitudeText': begin OutSize := 40; MagnitudeText(@OutBuf, ArgI(0)); Got := '-'; end;
+          'RulerFallsIll': begin RulerFallsIll(Window); Got := '-'; end;
+          'WitchChoosesSpell': begin WitchChoosesSpell(Window, Pl^); Got := '-'; end;
           'SabotageYearsToNextOp':
             begin
               B1 := PIdx;
@@ -393,10 +407,11 @@ begin
     After := Snapshot(Save.Players[0], Num * PlayerSize);
     HAfter := Snapshot(DS.Game, HeaderSize);
     Got := 'ret=' + Got + ' out=' + Outs + ' seedout=' + IntToStr(RandSeed) +
-      ' diff=' + DiffText(Before, After) + ' hdiff=' + DiffText(HBefore, HAfter);
+      ' diff=' + DiffText(Before, After) + ' hdiff=' + DiffText(HBefore, HAfter) +
+      ' ui=' + Replay.LogText;
     Want := 'ret=' + Field(S, 'ret') + ' out=' + Field(S, 'out') +
       ' seedout=' + Field(S, 'seedout') + ' diff=' + Field(S, 'diff') +
-      ' hdiff=' + Field(S, 'hdiff');
+      ' hdiff=' + Field(S, 'hdiff') + ' ui=' + UIField;
     if Got = Want then
       Inc(Pass)
     else

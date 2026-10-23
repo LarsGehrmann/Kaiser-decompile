@@ -1969,12 +1969,6 @@ end;
 
 { ---- batch 5: game setup, sabotage, texts ---- }
 
-{ a zero-terminated text constant of the data segment (offset given) }
-function DSText(Ofs: Word): PChar; inline;
-begin
-  Result := PChar(@PByte(@DS)[Ofs]);
-end;
-
 procedure CreateComputerPlayers(var Players: TPlayers; NumHumans, NumCpu,
   Difficulty: Byte);
 var
