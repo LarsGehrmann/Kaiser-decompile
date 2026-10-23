@@ -500,6 +500,7 @@ SPECS = {
                        ['u.type', 'u.level', 'u.experience', 'spell']),
     'TradeCaravan': ('1040:08a2', ['Wnd', 'P', 'Y'], 'none',
                      ['taler', 'salt', 'beer', 'wine', 'weapons', 'warehouses', 'title']),
+    'ShowHeroLevelUp': ('1040:384b', ['Wnd', 'HG'], 'none', []),
     'DeclareWar': ('1038:40e8', ['Wnd', 'A', 'I', 'OB:1', 'N', 'Y'], 'byte',
                    ['title', 'army_away', 'army1_count', 'initiative', 'peace_years', 'fame',
                     'J.army1_count', 'J.army2_count', 'h.initiative_enabled', 'J.mailbox']),
@@ -1362,6 +1363,7 @@ DIALOG_TESTS = {
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
     'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
     'DeclareWar': ['GEGNERDLG'],
+    'ShowHeroLevelUp': ['HEROMADELEVELDLG'],
     'TradeCaravan': ['SALZKARAWANEDLG_II'],
     'CensusEditor': ['PASSWORDDLG', 'CENSUSDLG', 'SZENARIENDLG', 'SZENARIENDLG'],
     'Do_SzenarioDlg': ['SZENARIENDLG'],
@@ -1680,6 +1682,16 @@ def main():
                                                           [rng.choice([0, 0, rng.randint(0, 4)]) for _ in range(9)]))
                         blk[0x35], blk[0x36] = rng.randint(0, 8), rng.randint(0, 8)
                         off = OUT_AREA + 0x400
+                    emu.write(sp, off, bytes(blk))
+                    outs.append((len(blk), off))
+                    call_args.append(('ptr', (sp, off)))
+                    shown.append(bytes(blk).hex())
+                elif kind == 'HG':
+                    # a hero's level-up record (THeroGains, 0x20 bytes)
+                    nm = rng.choice([b'Castor', b'Sir Iggy', b'x' * 24, b''])
+                    blk = bytearray((nm + bytes(25))[:25] + bytes([rng.randint(0, 120)]) +
+                                    bytes(rng.randint(0, 5) for _ in range(6)))
+                    off = OUT_AREA + 0x200
                     emu.write(sp, off, bytes(blk))
                     outs.append((len(blk), off))
                     call_args.append(('ptr', (sp, off)))

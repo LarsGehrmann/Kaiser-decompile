@@ -619,6 +619,14 @@ begin
           'Do_SzenarioDlg': begin Do_SzenarioDlg(Window); Got := '-'; end;
           'Do_UnitEditDlg': begin Do_UnitEditDlg(Window, Pl^, UnitArg(0)^); Got := '-'; end;
           'TradeCaravan': begin TradeCaravan(Window, Pl^, ArgI(0)); Got := '-'; end;
+          'ShowHeroLevelUp':
+            begin
+              Hx := HexBytes(Args[0]);
+              Move(Hx[0], OutBuf, Length(Hx));
+              OutSize := Length(Hx);
+              ShowHeroLevelUp(Window, THeroGains(Pointer(@OutBuf)^));
+              Got := '-';
+            end;
           'DeclareWar':
             begin
               OutSize := 1;

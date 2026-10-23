@@ -209,7 +209,7 @@ their templates:
   a ported dialog's object is logged as `O<n>+<offset>` (e.g. its copy of the player).
 
 `port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
-`Do_HandelMitGuetern` with the Prokurist (100), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each), `CmWirtschaft` (100), `CmMilitaer` (50), `Do_Laendernamen` (50), `CmSpiel` (60), `Do_Abkommen`, `Do_TributFordern`, `Do_Sabotage`, `Do_Geheimdienst` with strikes and the sabotage budget opened from it (100 each). Segment 9 frames are zeroed like the logic segments.
+`Do_HandelMitGuetern` with the Prokurist (100), `TradeCaravan` (100), `ShowHeroLevelUp` (50), the census editor (50 each), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each), `CmWirtschaft` (100), `CmMilitaer` (50), `Do_Laendernamen` (50), `CmSpiel` (60), `Do_Abkommen`, `Do_TributFordern`, `Do_Sabotage`, `Do_Geheimdienst` with strikes and the sabotage budget opened from it (100 each). Segment 9 frames are zeroed like the logic segments.
 
 Original bugs found by the dialog tests (the specs keep the inputs out of their range):
 
