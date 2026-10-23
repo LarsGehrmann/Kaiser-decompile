@@ -57,6 +57,9 @@ function ChooseDiplomacyTarget(Parent: Pointer; var Players: TPlayers; Me, NumPl
   Mode: ShortInt): SmallInt;
 { Abkommen (1038:1e35): offer peace for 5..50 years, offer or cancel trade }
 procedure Do_Abkommen(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+{ Tribut fordern (1038:2ca5): demand Taler, land, people, a trade agreement
+  or peace from another player }
+procedure Do_TributFordern(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -222,6 +225,17 @@ type
     procedure SetupWindow; override;
     procedure UpdateRadios;
     function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { TRIBUTDLG (VMT DS:0f22, 1038:31fe, a HelpDlg): the choice +0x34, the
+    target at +0x35, the disabled flags +0x70e (5), the target's name
+    +0x713; static 101, radios 201..205 Taler, land, people, trade, peace }
+  TTributDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+    procedure UpdateRadios;
+    function Handle(Id: SmallInt): Boolean; override;
+    function CanClose: Boolean; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -1549,6 +1563,118 @@ begin
   end;
 end;
 
+{ -- Do_TributFordern ---------------------------------------------------------- }
+
+procedure TTributDlg.SetupWindow;
+var
+  I: Integer;
+begin
+  D.Data[$34] := 0;
+  for I := 0 to 4 do
+    if D.Data[$70E + I] <> 0 then
+      C.Enable(201 + I, False);
+  C.SetText(101, PChar(@D.Data[$713]));
+  UpdateRadios;
+end;
+
+procedure TTributDlg.UpdateRadios;
+var
+  I: Integer;
+begin
+  for I := 0 to 4 do
+    C.SetCheck(201 + I, Ord(I = D.Data[$34]));
+end;
+
+function TTributDlg.Handle(Id: SmallInt): Boolean;
+begin
+  if (Id < 201) or (Id > 205) then
+    Exit(False);
+  D.Data[$34] := Id - 201;
+  UpdateRadios;
+  Result := True;
+end;
+
+function TTributDlg.CanClose: Boolean;
+begin
+  { the radio -> the mailbox sub-kind: people 3, trade 5, peace 4 }
+  case D.Data[$34] of
+    2: D.Data[$34] := 3;
+    3: D.Data[$34] := 5;
+    4: D.Data[$34] := 4;
+  end;
+  Result := True;
+end;
+
+procedure Do_TributFordern(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  T: SmallInt;
+  D, A, E: TDialog;
+  Sent: Boolean;
+  Buf: array[0..80] of Char;
+  Q: PPlayer;
+  Sub: Byte;
+
+  { ask for the amount (AmountDlg in Mode on the target's data) }
+  procedure Ask(Name: Word; Mode: Byte);
+  begin
+    A := UI.Dialog('AmountDlg', $0FFA, [APtr(Parent), AStr(DSText(Name))]);
+    Move(Players[T], A.Data[$2E], SizeOf(TPlayer));
+    A.Data[$70F] := Mode;
+    Sent := UI.Execute(A) = 1;
+    if Sent then
+      PostMessage(Players, T, Me, 2, PLongInt(@A.Data[$70B])^);
+    if Sent then
+      Players[T].Mailbox[Me * 6 + 1] := Sub;
+    UI.Done(A, 1);
+  end;
+
+begin
+  Sent := False;
+  T := ChooseDiplomacyTarget(Parent, Players, Me, NumPlayers, 2);
+  if T < 0 then
+    Exit;
+  D := UI.Dialog('TributDlg', $0F22, [APtr(Parent), AStr(DSText($1286))]);
+  FormatPlayerTitle(Players[T], Buf, 0, 0);
+  StrCopy(PChar(@D.Data[$713]), Buf);
+  Move(Players[T], D.Data[$35], SizeOf(TPlayer));
+  D.Data[$70E] := 0;
+  Q := @Players[T];
+  { land only from a neighbour with 12000 Hufen to spare }
+  if (LongInt(LongInt(Q^.Land - Q^.LandUsed) - 100) > 12000) and
+     (AttackInitiativeCost(Players[Me].Country, Q^.Country) < 3) then
+    D.Data[$70F] := 0
+  else
+    D.Data[$70F] := 1;
+  D.Data[$710] := Ord(Q^.Population <= 50);
+  D.Data[$711] := Ord(Q^.TradeAgreement[Me] <> 0);
+  D.Data[$712] := Ord(ShortInt(Q^.PeaceYears[Me]) >= 1);
+  if UI.Execute(D) = 1 then
+  begin
+    Sub := D.Data[$34];
+    case Sub of
+      0: Ask($1290, 0);                          { ABFRAGETALERDLG }
+      1: Ask($12A0, 1);                          { ABFRAGELANDDLG }
+      3: Ask($12AF, 3);                          { ABFRAGESKLAVENDLG }
+      5:
+        begin
+          Sent := True;
+          PostMessage(Players, T, Me, 2, 0);
+          Players[T].Mailbox[Me * 6 + 1] := 5;
+        end;
+      4: Ask($12C1, 4);                          { ABFRAGEZEITDLG }
+    end;
+  end;
+  UI.Done(D, 1);
+  if Sent then
+  begin
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($12D0))]);   { KURIERDLG }
+    UI.Execute(E);
+    UI.Done(E, 1);
+    if Players[Me].Spell <> 1 then
+      LoseFame(Players[Me].Fame, 1);
+  end;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1730,4 +1856,5 @@ initialization
   RegisterDialogLogic('PlayerSelectDlg', TPlayerSelectDlg);
   RegisterDialogLogic('AmountDlg', TAmountDlg);
   RegisterDialogLogic('AbkommenDlg', TAbkommenDlg);
+  RegisterDialogLogic('TributDlg', TTributDlg);
 end.

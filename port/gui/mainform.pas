@@ -236,6 +236,12 @@ begin
         Do_Abkommen(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
         Invalidate;
       end;
+    223:                                        { CmTributFordern 1000:183d }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_TributFordern(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
+        Invalidate;
+      end;
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);

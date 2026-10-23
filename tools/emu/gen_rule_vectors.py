@@ -475,6 +475,9 @@ SPECS = {
     'CmSpiel': ('1000:1d4b', ['NIL', 'SELF'], 'none', []),
     'Do_Abkommen': ('1038:1e35', ['Wnd', 'A', 'I', 'N'], 'none',
                     ['peace_years', 'trade_agreement', 'fame', 'J.mailbox', 'title']),
+    'Do_TributFordern': ('1038:2ca5', ['Wnd', 'A', 'I', 'N'], 'none',
+                         ['J.peace_years', 'J.trade_agreement', 'fame', 'J.mailbox', 'spell',
+                          'J.land', 'J.population', 'J.taler', 'h.initiative_enabled']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1195,6 +1198,7 @@ DIALOG_TESTS = {
     'Do_Laendernamen': ['LAENDERNAMENDLG'],
     'CmSpiel': ['SZENARIENINFODLG'],
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
+    'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
 }
 
 
