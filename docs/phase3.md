@@ -65,7 +65,7 @@ onto the LCL):
 | Step | Content | Validation |
 |---|---|---|
 | 7a | Toolchain (LCL Cocoa built from the Lazarus sources); resources read at runtime from `kaiser.exe` (dialog and menu templates, bitmaps, sounds, strings); a generic dialog from a template; the main window with the original menu; open a savegame, end the turn (`EndHumanTurn`) with the simple dialogs | the app runs a game on; templates render like the originals |
-| 7b | The dialog base types of segment 12 (KaiserDlg, MessageDlg, Message2Dlg, choice dialogs …) and the menu actions of segments 8 and 9 (`Do_*`), ported with their handlers | differential tests of the logic parts where the emulator can drive them |
+| 7b | The dialog base types of segment 12 (KaiserDlg, MessageDlg, Message2Dlg, choice dialogs …) and the menu actions of segments 8 and 9 (`Do_*`), ported with their handlers | differential tests of the logic parts where the emulator can drive them (`actions.vec`, `troops.vec`, `dialogs.vec`) |
 | 7c | The battle window: drawing (DrawMap, DrawCell, DrawUnitStatus), timer, clicks, cursors | play battles |
 | 7d | Main window painting and status (segment 13, 1), Annalen, Rekorde, help, sounds, toolbar | manual play-through |
 
@@ -86,6 +86,7 @@ port/bin/ruletest Kaiser port/tests/turn.vec    # turn processing, AI, turn loop
 port/bin/ruletest Kaiser port/tests/battle.vec  # battle window, setup and aftermath vs. original
 port/bin/ruletest Kaiser port/tests/actions.vec # menu actions with the original's dialogs
 port/bin/ruletest Kaiser port/tests/troops.vec  # the troop dialog (clicks into the unit grids)
+port/bin/ruletest Kaiser port/tests/dialogs.vec # the generic dialog types on their own (Dlg_*)
 port/bin/ksrsim Kaiser/LARS23.KSR 100 1 out.ksr # play on 100 turns, save the result
 port/bin/ksrsim new:2:5:3 100 1                 # new game: 2 humans, 5 computers, level 3
 tools/emu/sim_compare.sh 100 1 /tmp/cmp         # all savegames: port vs. original, turn by turn
@@ -201,7 +202,7 @@ their templates:
   opened by a dialog's handler (the Prokurist from the goods dialog) runs nested with the next
   script; each dialog object keeps its own controls.
 - The port: dialog types are `TDialogLogic` classes in `port/src/actions.pas` (and
-  `troops.pas`, `intel.pas`, `annals.pas`), registered by
+  `troops.pas`, `intel.pas`, `annals.pas`, `gamedialogs.pas`), registered by
   the constructor name; they work on `D.Data` laid out like the original object and reach the
   controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
   and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`). Mouse
@@ -211,6 +212,41 @@ their templates:
 
 `port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
 `Do_HandelMitGuetern` with the Prokurist (100), `TradeCaravan` (100), `ShowHeroLevelUp` (50), the census editor (50 each), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each), `CmWirtschaft` (100), `CmMilitaer` (50), `Do_Laendernamen` (50), `CmSpiel` (60), `Do_Abkommen`, `Do_TributFordern`, `Do_Sabotage`, `Do_Geheimdienst` with strikes and the sabotage budget opened from it (100 each). Segment 9 frames are zeroed like the logic segments.
+
+- A script event `T` is a timer tick: the type's DMT handler for wm_Timer (0x0113) in the
+  emulator, `TDialogLogic.Timer` in the port (for a type whose SetupWindow set a timer:
+  `TimerInterval`, which the GUI turns into an LCL timer).
+
+**The generic dialog types on their own** (spec kind `Dlg_<type>`, `DLG_TYPES` in
+`gen_rule_vectors.py`). The types of segment 12 and the small types of segments 3, 6 and 9 are
+faked in all the other vectors (their constructors are in `CTORS` of `ui_stubs.py`); a
+`Dlg_<type>` vector runs one of them for real: that constructor is unstubbed for the run
+(`UILayer(unstub=...)`), called with Self nil, the VMT the game uses, the parent W and random
+but plausible arguments (templates by name or MAKEINTRESOURCE id, texts, a unit record of a
+savegame, numbers, the player array), then the fields the game writes into the object before
+Execute get random values (`fld=`: offset in the object and hex), then Execute (VMT +0x4c: the
+driver plays `dlg=` on the type's handlers) and Done (VMT +0x08, flag 1). `args=` holds the
+constructor's arguments after the parent (`s:<hex>` string, `i:<id>` resource id, `w:` /
+`b:` numbers, `r:<hex>` record, `A` the player array), `ret=` Execute's end code, `out=`
+the object's result parts after Execute (`<offset>:<hex>;...`: the results the game reads,
+the help context of the HelpDlg types, the copied texts). The log has the usual form
+(`KaiserDlg[0](W,s:..)=O1|Execute(O1)|SetText(c101,..)|[ok]|=>1|Done(O1,1)`: every type's
+constructor goes through the stubbed KaiserDlg.Init). KaiserDlg itself (its Init is OWL's
+TDialog.Init) is built in place through that stub and gets its VMT afterwards. The port
+(`ruletest`) does the same with `UI.Dialog` / `UI.Execute` / `UI.Done`; `TReplayUI`
+leaves the faked types without logic (`LogicFor`), except the one of the vector. UI calls
+of the types: `UnitInfoDlg_DrawPortrait(blink,O1)` (painting), `DisableButton2`.
+
+`port/tests/dialogs.vec`: 50 each of `KaiserDlg`, `MessageDlg`, `HelpMessageDlg`, `Message2Dlg`,
+`HelpChoice2Dlg`, `HeroNameDlg` (the random name proposal, the Lindwurm's name), `UnitInfoDlg`
+(with timer ticks; its Done passes 0 to KaiserDlg.Done), `Button2Dlg`, `ButtonChoiceDlg`
+(segment 12), `PromotionDlg`, `StartFinanzDlg`, `StartPopDlg` (Str(Real:2:0) = `R48Str`),
+`HexenDlg` (segment 3), `MassacreDlg`, `PlunderResultDlg`, `PlunderChoiceDlg` (segment 6),
+`HumanCountDlg` (its CanClose writes the game options into the header), `ComputerCountDlg`,
+`PlayerDataDlg` (segment 9) – `port/src/gamedialogs.pas` (not `dialogs.pas`: the LCL has a
+unit `Dialogs`); 5,700 (300 per type, seed 12) + 2,280 (120 per type, seed 11) generated
+vectors identical. `PlayerSelectDlg` (1058:06d2) of segment 12 was ported before
+(`actions.pas`).
 
 Original bugs found by the dialog tests (the specs keep the inputs out of their range):
 
@@ -226,6 +262,15 @@ Original bugs found by the dialog tests (the specs keep the inputs out of their 
   button. The scripts avoid the first, the specs clamp the second.
 - UNITEDITDLG on an empty army slot: `UnitRankName` (1068:61db) copies an out-of-table rank
   text into a 26-byte buffer and smashes the stack (such vectors are dropped, SKIP_ON_CRASH).
+- The text constructors of segment 12 (MessageDlg, HelpMessageDlg, Message2Dlg, HelpChoice2Dlg)
+  StrCopy their texts unchecked into 81-byte buffers (+0x2e, +0x34, +0x7f, +0x85); a longer
+  text overwrites the next buffer or the static control's pointer behind it, and SetupWindow
+  calls SetText on a wrong object (the emulator logs `SetText(S,..)`; in Windows a crash). The
+  same holds for the texts the game writes into PromotionDlg (+0x2e), MassacreDlg (+0x42) and
+  PlunderChoiceDlg (+0x34 / +0x67, 51 bytes). The specs keep texts within the buffers.
+- ButtonChoiceDlg (1058:0da7): the button count is a byte loop 0..count-1; with 0 it creates 256
+  buttons and writes their pointers past the object (0x61 bytes), with more than 10 too (the
+  battle always passes 5). The specs use 1..10.
 - `FormatThousands` (1068:6b58, Wirtschaft and other statistics): its length table ends at 9
   digits; a 10-digit number makes it write the digits 11,520 bytes off its buffer and show an
   empty string. The port shows the same and skips the stray write.

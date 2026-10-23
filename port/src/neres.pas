@@ -79,6 +79,9 @@ type
     function Find(TypeId: Word; const Name: RawByteString; Id: Word = 0): TBytes;
     function FindNamedType(const TypeName, Name: RawByteString; Id: Word = 0): TBytes;
     function Dialog(const Name: RawByteString): TDlgTemplate;
+    { the template of a dialog constructor's name argument: a name or
+      MAKEINTRESOURCE(id) (a "pointer" below $10000) }
+    function DialogRes(Name: PChar): TDlgTemplate;
     function DialogNames: TStringList;
     function Menu(const Name: RawByteString): TMenuTemplate;
     { a BITMAP resource as a complete .bmp file }
@@ -222,6 +225,19 @@ begin
     raise Exception.Create('no dialog ' + Name);
   Result := ParseDialog(D);
   Result.Name := UpperCase(Name);
+end;
+
+function TNEFile.DialogRes(Name: PChar): TDlgTemplate;
+var
+  D: TBytes;
+begin
+  if PtrUInt(Name) >= $10000 then
+    Exit(Dialog(Name));
+  D := Find(RT_DIALOG, '', Word(PtrUInt(Name)));
+  if D = nil then
+    raise Exception.Create('no dialog ' + IntToStr(PtrUInt(Name)));
+  Result := ParseDialog(D);
+  Result.Name := IntToStr(PtrUInt(Name));
 end;
 
 function TNEFile.DialogNames: TStringList;

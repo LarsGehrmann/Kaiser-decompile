@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports;
+  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports, GameDialogs;
 
 type
   TLclUI = class(TGameUI)
@@ -68,14 +68,19 @@ var
   I: Integer;
   TplName: RawByteString;
   F: TKaiserDialog;
+  Id: Word;
 begin
   Result := inherited Dialog(Name, VMT, Args);
-  if (Length(Args) < 2) or (Name = 'TButton') then
+  if (Length(Args) < 2) or (Name = 'TButton') or (Args[1].Kind <> uaStr) then
     Exit;
+  { the template: a name or MAKEINTRESOURCE(id) (the reports of the turn) }
+  Id := 0;
   TplName := ArgText(Args[1]);
-  if (TplName = '') or (Exe.Find(RT_DIALOG, TplName) = nil) then
+  if TplName = '' then
+    Id := Word(PtrUInt(Args[1].P));
+  if ((TplName = '') and (Id = 0)) or (Exe.Find(RT_DIALOG, TplName, Id) = nil) then
     Exit;
-  F := DialogClassOf(Name).CreateFromTemplate(MainForm, Exe.Dialog(TplName));
+  F := DialogClassOf(Name).CreateFromTemplate(MainForm, Exe.DialogRes(PChar(Args[1].P)));
   F.D := Result;
   SetLength(F.Args, Length(Args));
   for I := 0 to High(Args) do
@@ -146,6 +151,17 @@ begin
     Reports.TradeCaravan(Args[0].P, PPlayer(Args[1].P)^, Word(Args[2].V))
   else if Name = 'ShowHeroLevelUp' then
     Reports.ShowHeroLevelUp(Args[0].P, THeroGains(Args[1].P^))
+  else if Name = 'UnitInfoDlg_DrawPortrait' then
+  begin
+    F := FormOf(FindDialog(Args[1].P));
+    if F is TLogicDialog then
+      TLogicDialog(F).DrawPortrait(Byte(Args[0].V));
+  end
+  else if Name = 'DisableButton2' then
+  begin
+    if FindDialog(Args[0].P) <> nil then
+      GameDialogs.DisableButton2(FindDialog(Args[0].P));
+  end
   else if Name = 'Victory' then
     Annals.Victory(Args[0].P, Players^)
   else if Name = 'Annals_Load' then

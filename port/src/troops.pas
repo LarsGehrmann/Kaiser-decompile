@@ -107,7 +107,7 @@ type
     procedure DrawUnitPicture(Blink: Byte);
     { WMTimer (1040:5760), every 400 ms while the dialog is open: the
       picture blinks at random (Random(3), so it changes RandSeed) }
-    procedure Timer;
+    procedure Timer; override;
     function Handle(Id: SmallInt): Boolean; override;
   end;
 
@@ -931,6 +931,7 @@ begin
   UpdateUnitInfo;
   DrawUnitPicture(D.Data[$7CB]);
   PWord(@D.Data[$7C7])^ := 1;                         { SetTimer(.., 1, 400, nil) }
+  TimerInterval := 400;
 end;
 
 procedure TRecruitDlg.UpdateUnitInfo;

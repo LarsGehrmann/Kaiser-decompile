@@ -14,6 +14,8 @@ in hmut/hdiff to the start of the game header (DS:6108).
 
 Usage: tools/.venv/bin/python -I tools/emu/gen_rule_vectors.py FUNC[,FUNC] N [SEED]
        > port/tests/rules.vec
+A FUNC Dlg_<type> (e.g. Dlg_MessageDlg) tests one dialog type on its own
+(DLG_TYPES below; extra fields fld= and the object's results in out=).
 """
 import glob
 import os
@@ -1495,6 +1497,318 @@ def dialog_script(emu, rng, template, player=None):
     return ';'.join(events)
 
 
+# -- the dialog types on their own (spec kind Dlg_<type>) ---------------------
+# The original's constructor builds the object (Self nil, the VMT the game
+# uses, the parent W and random but plausible arguments), the fields the game
+# writes into it before Execute get random values (fld=: offset in the object,
+# hex), then Execute (VMT +0x4c: the dialog driver plays dlg= on the type's own
+# handlers) and Done (VMT +0x08, flag 1) run. args= lists the constructor's
+# arguments after the parent: s:<hex> a string, i:<id> MAKEINTRESOURCE, w:<n>
+# / b:<n> numbers, r:<hex> a record by reference, A the player array;
+# ret= is what Execute returned. KaiserDlg's own constructor stays stubbed
+# (it is OWL's TDialog.Init): the object is built in place through the stub's
+# inherited path and gets the VMT afterwards. Texts stay within the object's
+# buffers (80 characters: the constructors StrCopy them unchecked, a longer
+# one overwrites the control pointers behind).
+def _dlg_text(rng, maxlen=80):
+    """A text the game would pass: empty, words, umlauts, up to maxlen."""
+    k = rng.random()
+    if k < 0.1:
+        return b''
+    if k < 0.2:
+        return bytes(rng.choice(b'abcdefghijklmnopqrstuvwxyzABCDEFG \xe4\xf6\xfc\xdf.,!')
+                     for _ in range(rng.randint(maxlen - 3, maxlen)))
+    words = [b'Kaiser', b'K\xf6nigin', b'Lars', b'von', b'Sachsen', b'Bayern', b'1234',
+             b'*Erna*', b'Gr\xfc\xdfe', b'%', b'-5', b'Taler']
+    t = b' '.join(rng.choice(words) for _ in range(rng.randint(1, 8)))
+    return t[:maxlen]
+
+
+def _dlg_long(rng):
+    return rng.choice([0, rng.randint(0, 100), rng.randint(0, 100000), rng.randint(-5000, 5000000),
+                       rng.randint(-2 ** 31, 2 ** 31 - 1), -2 ** 31])
+
+
+def _dlg_unit(rng, players, num):
+    """A unit record of a savegame (61 bytes), some fields changed."""
+    cands = []
+    for i in range(num):
+        for a, cnt in ((1, 0x137), (2, 0x138)):
+            for k in range(1, min(8, players[i * PSIZE + cnt]) + 1):
+                o = i * PSIZE + ARMY_BASE[a] + k * ks.UNIT_SIZE
+                if players[o + 0x19] <= 35:
+                    cands.append(o)
+    if cands:
+        o = rng.choice(cands)
+        u = bytearray(players[o:o + ks.UNIT_SIZE])
+    else:
+        u = bytearray(ks.UNIT_SIZE)
+        u[0:5] = b'Miliz'
+    for _ in range(rng.randint(0, 4)):
+        f = rng.choice(['attack', 'defence', 'max_hp', 'range', 'max_steps', 'pay', 'ability',
+                        'level', 'type', 'name'])
+        if f == 'name':
+            t = _dlg_text(rng, 24)
+            u[0:25] = t + bytes(25 - len(t))
+        elif f == 'pay':
+            struct.pack_into('<h', u, 0x2b, rng.choice([0, rng.randint(0, 500),
+                                                       rng.randint(-32768, 32767)]))
+        elif f == 'ability':
+            u[0x2f] = rng.randint(0, 38)
+        elif f == 'type':
+            u[0x19] = rng.choice([rng.randint(0, 35), 9, 12, 13])
+        elif f == 'level':
+            u[0x24] = rng.choice([rng.randint(0, 3), rng.randint(0, 30)])
+        else:
+            o = {'attack': 0x1b, 'defence': 0x1c, 'max_hp': 0x1d, 'range': 0x1f,
+                 'max_steps': 0x20}[f]
+            u[o] = rng.randint(0, 255)
+    if not (u[0x19] == 9 or 12 <= u[0x19] <= 13) and u[0x24] > 3:
+        u[0x24] = rng.randint(0, 3)        # RankNames: 4 ranks of troops (heroes 0..)
+    return bytes(u)
+
+
+def _templates(emu, lo, hi):
+    return [r.res_id for r in emu.ne.resources
+            if r.type_id == 5 and isinstance(r.res_id, int) and lo <= r.res_id <= hi]
+
+
+def _count_script(rng, name):
+    events = []
+    for _ in range(rng.choice([0, rng.randint(1, 4), rng.randint(1, 12)])):
+        if rng.random() < 0.4:
+            events.append(f's101:{rng.randint(-2, 12)}')
+        elif name == 'HumanCountDlg':
+            events.append(f'c{rng.randint(301, 304)}')
+        else:
+            events.append(f'c{rng.randint(201, 204)}')
+    events.append('ok' if rng.random() < 0.8 else 'cancel')
+    return events
+
+
+def _dlg_case(emu, rng, name, players, p, num):
+    """(template, args, fields, script, header mutations) of one vector."""
+    tpls = DLG_TYPES[name][2]
+    if callable(tpls):
+        tpls = tpls(emu)
+    tpl = rng.choice(tpls)
+    args, fields, hmuts, events = [], {}, [], None
+    if name == 'MessageDlg':
+        args = [('s', _dlg_text(rng))]
+    elif name == 'HelpMessageDlg':
+        args = [('s', _dlg_text(rng)), ('w', rng.choice([0, 0x14, rng.randint(0, 400)]))]
+    elif name == 'Message2Dlg':
+        args = [('s', _dlg_text(rng)), ('s', _dlg_text(rng))]
+    elif name == 'HelpChoice2Dlg':
+        args = [('s', _dlg_text(rng, 65)), ('s', _dlg_text(rng, 65)),
+                ('w', rng.choice([0x7c, 0, 300]))]
+        if rng.random() < 0.4:
+            fields[0xe7] = b'\0'             # DisableButton2
+        if rng.random() < 0.1:
+            fields[0xe6] = b'\0'
+    elif name == 'HeroNameDlg':
+        args = [('w', rng.choice([0, 0xd1, rng.randint(0, 400)]))]
+        hmuts = [(4, bytes([rng.choice([0, 0, 1, 2])]))]      # census editor (Lindwurm name)
+        events = []
+        for _ in range(rng.choice([0, 1, 1, 2, 3])):
+            t = rng.choice([b'guams dlo', b'guams dlo', b'Guams dlo', b'Hugo', b'', b'x' * 20,
+                            b'guams dlo ', b'K\xf6nig Kunibert'])
+            events.append(f't101:{t.hex()}')
+            if rng.random() < 0.3:
+                events.append(rng.choice(['ok', 'cancel']))
+        events.append('ok' if rng.random() < 0.8 else 'cancel')
+    elif name == 'UnitInfoDlg':
+        args = [('r', _dlg_unit(rng, players, num)), ('b', rng.choice([0x65, 0x66, 0x66, 0])),
+                ('w', rng.choice([0, rng.randint(200, 235), 0x80]))]
+        events = []
+        for _ in range(rng.choice([0, rng.randint(1, 5), rng.randint(1, 30)])):
+            events.append(rng.choice(['T', 'T', 'T', 'm40:50', 'v10:10']))
+        events.append('ok' if rng.random() < 0.7 else 'cancel')
+    elif name == 'ButtonChoiceDlg':
+        n = rng.choice([5, 5, 5, rng.randint(1, 10)])
+        args = [('w', n), ('r', bytes(rng.choice([0, 1, 1, 2]) for _ in range(10)))]
+        events = [f'c{rng.randint(101, 111)}' for _ in range(rng.randint(0, 4))]
+        events.append(rng.choice(['ok', 'cancel']))
+    elif name == 'Button2Dlg':
+        events = [f'c{rng.randint(100, 103)}' for _ in range(rng.randint(0, 3))]
+        events.append(rng.choice(['ok', 'cancel']))
+    elif name == 'PromotionDlg':
+        year = rng.choice([0, rng.randint(0, 300), rng.randint(0, 65535)])
+        fields = {0x2e: _dlg_text(rng, 79) + b'\0', 0x7f: struct.pack('<H', year),
+                  0x81: bytes([rng.randint(0, 9)]), 0x82: bytes([rng.choice([0, 1])])}
+    elif name == 'StartFinanzDlg':
+        fields = {0x34 + 4 * i: struct.pack('<i', _dlg_long(rng)) for i in range(10)}
+    elif name == 'StartPopDlg':
+        fields = {0x2e + 4 * i: struct.pack('<i', _dlg_long(rng)) for i in range(4)}
+        x = rng.choice([rng.random(), rng.random() * 1.5, rng.random() * 0.01, 0.0, 1.0, 0.5,
+                        -rng.random(), rng.random() * 1000])
+        fields[0x3e] = r48(x)
+    elif name == 'MassacreDlg':
+        fields = {0x2e: struct.pack('<i', _dlg_long(rng)), 0x32: struct.pack('<i', _dlg_long(rng)),
+                  0x42: _dlg_text(rng, 79) + b'\0'}
+    elif name == 'PlunderResultDlg':
+        fields = {0x2e + 4 * i: struct.pack('<i', _dlg_long(rng)) for i in range(3)}
+    elif name == 'PlunderChoiceDlg':
+        fields = {0x34: _dlg_text(rng, 50) + b'\0', 0x67: _dlg_text(rng, 50) + b'\0'}
+        events = [f'c{rng.randint(200, 205)}' for _ in range(rng.randint(0, 3))]
+        events.append(rng.choice(['ok', 'cancel']))
+    elif name in ('HumanCountDlg', 'ComputerCountDlg'):
+        lo = rng.choice([0, 1, 1, rng.randint(0, 5)])
+        hi = max(lo, rng.choice([10, rng.randint(lo, 10), 9 - lo]))
+        fields = {0x35: bytes([lo]), 0x36: bytes([hi])}
+        events = _count_script(rng, name)
+    elif name == 'PlayerDataDlg':
+        args = [('A', None), ('b', rng.randrange(num))]
+        events = []
+        for _ in range(rng.choice([0, rng.randint(1, 4), rng.randint(1, 8)])):
+            k = rng.random()
+            if k < 0.3:
+                t = rng.choice([b'', b'Lars', b'Kunigunde von X', b'x' * 20])
+                events.append(f't101:{t.hex()}')
+            elif k < 0.6:
+                events.append(f'l201:{rng.randint(-1, 10)}')
+            else:
+                events.append(f'c{rng.choice([102, 103])}')
+            if rng.random() < 0.2:
+                events.append('ok')
+        events.append('ok' if rng.random() < 0.8 else 'cancel')
+    if events is None:
+        script = dialog_script(emu, rng, str(tpl))
+    else:
+        script = ';'.join(events)
+    return tpl, args, fields, script, hmuts
+
+
+# type -> (constructor, VMT, templates or a function of the emulator giving them)
+DLG_TYPES = {
+    'KaiserDlg': ('1058:0002', 0x3364,
+                  lambda emu: ['AUFSTANDDLG', 'BANKGNADENDLG', 'FIRSTKINGDLG', 'KRANKDLG',
+                               'KURIERDLG', 'MILIZDLG', 'NOHEERDLG', 'RUECKZUGDLG',
+                               'ZUWENIGKORNDLG', 'SPENDENADADLG', 'HEERWEGDLG']
+                  + _templates(emu, 200, 499)),
+    'MessageDlg': ('1058:024d', 0x33c6,
+                   lambda emu: ['KARRIEREOKDLG', 'MANOEVERDLG', 'MANOEVERNOIPDLG',
+                                'SABOTAGEENDE2DLG', 'SABOTAGEENDEDLG', 'WEITERDLG',
+                                'KLATSCHKINGDLG', 'KLATSCHPESTDLG']
+                   + _templates(emu, 100, 199) + _templates(emu, 500, 799)),
+    'HelpMessageDlg': ('1058:02d6', 0x341a, ['BELEIHENDLG']),
+    'Message2Dlg': ('1058:0364', 0x3472, ['DESERTDLG', 'SCHMIEDEDLG', 'STARTTURNDLG',
+                                          'STARTTURNFEMDLG', 'TOD', 'TODFEM', 'UEBERLAUFDLG',
+                                          'KLATSCHTODDLG', 'KLATSCHWARWONDLG']),
+    'HelpChoice2Dlg': ('1058:043e', 0x34c6, ['KRIEGSERHADLG', 'KRIEGSERLADLG', 'KRIEGSERNADLG']),
+    'HeroNameDlg': ('1058:05a1', 0x351e, ['HELDDLG', 'REKHELDDLG', 'RITTERHELDDLG']),
+    'UnitInfoDlg': ('1058:0862', 0x35e6, ['SOELDNERDLG', 'LINDWURMDLG_I', 'VAMPIRDLG',
+                                          'PALADINDLG', 'HEALDLG']),
+    'Button2Dlg': ('1058:0d0d', 0x3652, ['LAGERVOLLDLG']),
+    'ButtonChoiceDlg': ('1058:0da7', 0x36ea, ['KAMPFOPTDLG']),
+    'PromotionDlg': ('1010:58d3', 0x05f0, ['BEFDLG', 'FEMBEFDLG']),
+    'StartFinanzDlg': ('1010:59ef', 0x0916, ['STARTFINANZDLG']),
+    'StartPopDlg': ('1010:5c1a', 0x0536, ['STARTPOPDLG']),
+    'HexenDlg': ('1010:5e43', 0x0598, ['HEXENDLG']),
+    'MassacreDlg': ('1028:0461', 0x0cec, ['MASSAKERDLG']),
+    'PlunderResultDlg': ('1028:0c00', 0x0c98, ['PLUENDERNDLG']),
+    'PlunderChoiceDlg': ('1028:1290', 0x0d60, ['LOOTDLG', 'LOOT2DLG']),
+    'HumanCountDlg': ('1040:2017', 0x22e4, ['SPIELERZAHLDLG']),
+    'ComputerCountDlg': ('1040:234c', 0x2362, ['COMPUTERZAHLDLG']),
+    'PlayerDataDlg': ('1040:2569', 0x195a, ['SPIELERNAMEDLG']),
+}
+for _n in DLG_TYPES:
+    SPECS['Dlg_' + _n] = (DLG_TYPES[_n][0], [], 'word',
+                          ['country', 'J.country'] if _n == 'PlayerDataDlg' else [])
+
+
+# the parts of the object reported in out= after Execute (offset, length):
+# the results the game reads, the help context +0x2e of the HelpDlg types,
+# the texts the constructors copied (not the OWL fields and control pointers)
+DLG_RESULTS = {
+    'MessageDlg': [(0x2e, 0x51)],
+    'HelpMessageDlg': [(0x2e, 2), (0x34, 0x51)],
+    'Message2Dlg': [(0x2e, 0x51), (0x7f, 0x51)],
+    'HelpChoice2Dlg': [(0x2e, 2), (0x34, 0x51), (0x85, 0x51), (0xe6, 2)],
+    'HeroNameDlg': [(0x2e, 2), (0x38, 0x10), (0x49, 1)],
+    'UnitInfoDlg': [(0x2e, 2), (0x34, 0x3e), (0x72, 3)],
+    'ButtonChoiceDlg': [(0x2e, 11)],
+    'StartFinanzDlg': [(0x2e, 2)],
+    'HexenDlg': [(0x2e, 2), (0x38, 2)],
+    'PlunderChoiceDlg': [(0x2e, 2)],
+    'HumanCountDlg': [(0x2e, 2), (0x34, 3)],
+    'ComputerCountDlg': [(0x2e, 2), (0x34, 3), (0x3b, 1)],
+    'PlayerDataDlg': [(0x2e, 0x10), (0x47, 5), (0x4c, 13)],
+}
+
+
+def ghidra_addr(emu, cs, ip):
+    for si, para in emu.para.items():
+        if para == cs:
+            return f'{0x1000 + (si - 1) * 8:04x}:{ip:04x}'
+    raise ValueError(f'no segment at {cs:04x}')
+
+
+def run_dialog_type(emu, ui, sp, name, case):
+    """Construct, Execute and Done one object of a dialog type; the end code."""
+    addr, vmt = DLG_TYPES[name][:2]
+    tpl, args, fields = case[:3]
+    mem = [OUT_AREA + 0x600]
+    call = [('ptr', WINDOW)]
+
+    def put(data):
+        off = mem[0]
+        emu.write(sp, off, data)
+        mem[0] += (len(data) + 16) & ~15
+        return ('ptr', (sp, off))
+    if isinstance(tpl, int):
+        call.append(('ptr', (0, tpl)))
+    else:
+        call.append(put(tpl.encode() + b'\0'))
+    for kind, v in args:
+        if kind == 's':
+            call.append(put(v + b'\0'))
+        elif kind == 'r':
+            call.append(put(v))
+        elif kind == 'A':
+            call.append(('ptr', (sp, 0)))
+        else:
+            call.append(('word', v))
+    if name == 'KaiserDlg':
+        # TDialog.Init is OWL's: the stub builds the object in place (its
+        # inherited path), then it gets KaiserDlg's VMT
+        d = ui.driver
+        size = emu.ds_word(vmt)
+        obj = (emu.scratch_para + d.heap_seg, d.heap_next)
+        d.heap_next += (size + 15) & ~15
+        emu.write(obj[0], obj[1], bytes(size))
+        emu.call_far(addr, call + [('word', 0), ('ptr', obj)])
+        emu.write(obj[0], obj[1], struct.pack('<H', vmt))
+    else:
+        ax, dx = emu.call_far(addr, call + [('word', vmt), ('ptr', (0, 0))])
+        obj = (dx, ax)
+    for off, b in sorted(fields.items()):
+        emu.write(obj[0], obj[1] + off, b)
+    vmt_of = struct.unpack('<H', emu.read(obj[0], obj[1], 2))[0]
+
+    def slot(n):
+        ip, cs = struct.unpack('<HH', emu.read(emu.ds_para, vmt_of + n, 4))
+        return ghidra_addr(emu, cs, ip)
+    code, _ = emu.call_far(slot(0x4c), [('ptr', obj)])
+    result = ';'.join(f'{o}:{bytes(emu.read(obj[0], obj[1] + o, n)).hex()}'
+                      for o, n in DLG_RESULTS.get(name, []))
+    emu.call_far(slot(0x08), [('word', 1), ('ptr', obj)])
+    return code, result
+
+
+def dlg_args_text(case):
+    tpl, args = case[:2]
+    out = [f'i:{tpl}' if isinstance(tpl, int) else 's:' + tpl.encode().hex()]
+    for kind, v in args:
+        if kind in ('s', 'r'):
+            out.append(f'{kind}:{v.hex()}')
+        elif kind == 'A':
+            out.append('A')
+        else:
+            out.append(f'{kind}:{v}')
+    return ','.join(out)
+
+
 def kind_bw(args):
     return any(a == 'BW' for a in args)
 
@@ -1506,8 +1820,11 @@ def main():
     emu = KaiserEmu()
     sp = emu.scratch_para
     real = [f for f in funcs if f in DIALOG_TESTS]
+    # Dlg_<type>: that constructor runs for real (KaiserDlg's stays: its
+    # inherited path builds every dialog object)
+    real += [f[4:] for f in funcs if f.startswith('Dlg_') and f != 'Dlg_KaiserDlg']
     ui = UILayer(emu, sp, None, unstub=real)
-    emu.api_fallback = bool(real)
+    emu.api_fallback = bool(real) or any(f.startswith('Dlg_') for f in funcs)
     for func in funcs:
         addr, args, ret, fields = SPECS[func][:4]
         clamps = SPECS[func][4] if len(SPECS[func]) > 4 else {}
@@ -1542,6 +1859,10 @@ def main():
                     players[a:a + size] = val
             if func in HEADER_PRESETS:
                 hmuts += HEADER_PRESETS[func](rng, header, players, p, num)
+            dlg_case = None
+            if func.startswith('Dlg_'):
+                dlg_case = _dlg_case(emu, rng, func[4:], players, p, num)
+                hmuts += dlg_case[4]
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
@@ -1570,6 +1891,8 @@ def main():
                     ev.append(e)
                 parts[1] = ';'.join(ev)
                 dlg = '/'.join(parts)
+            if dlg_case is not None:
+                dlg = dlg_case[3]
             emu.reset_ds()
             emu.write(emu.ds_para, 0x6794, struct.pack('<H', 400))   # INI Schlacht-Timer
             ui.reset()
@@ -1801,6 +2124,10 @@ def main():
                     ticks = rng.randint(1, 400)
                     shown.append(str(ticks))
                     ax, dx = battle_ticks(emu, ui, sp, ticks), 0
+                elif dlg_case is not None:
+                    shown.append(dlg_args_text(dlg_case))
+                    ax, dlg_result = run_dialog_type(emu, ui, sp, func[4:], dlg_case)
+                    dx = 0
                 else:
                     ax, dx = emu.call_far(addr.lstrip('n'), call_args, near=near)
                 r = emu.last_regs
@@ -1825,6 +2152,8 @@ def main():
                     raise
                 rv = f'E{emu.last_runerror}'
             out_vals = []
+            if dlg_case is not None and rv[0] != 'E' and dlg_result:
+                out_vals.append(dlg_result)
             for kind, off in outs:
                 v = emu.read(sp, off, 4)
                 if isinstance(kind, int):
@@ -1843,13 +2172,16 @@ def main():
                 bw_fields = (f' bw={bw_before[lo:hi].hex() if kind_bw(args) else "-"}'
                              f' bwdiff={diff(bw_before[lo:hi], bw_after[lo:hi]) or "-"}')
             mut = ';'.join(f'{o}:{v.hex()}' for o, v in muts)
+            fld = ';'.join(f'{o}:{v.hex()}' for o, v in sorted(dlg_case[2].items())) if dlg_case else ''
+
             hmut = ';'.join(f'{o}:{v.hex()}' for o, v in hmuts)
             print(f'func={func} save={os.path.basename(save)} p={p} seed={seed} '
-                  f'args={",".join(shown) or "-"} mut={mut or "-"} hmut={hmut or "-"} -> '
+                  f'args={",".join(shown) or "-"} mut={mut or "-"} hmut={hmut or "-"} '
+                  f'{"fld=" + (fld or "-") + " " if dlg_case is not None else ""}-> '
                   f'ret={rv} out={",".join(out_vals) or "-"} '
                   f'seedout={emu.rand_seed()} diff={diff(players, after) or "-"} '
                   f'hdiff={diff(header, hafter) or "-"}{bw_fields} '
-                  f'{"dlg=" + (dlg or "-") + " " if func in DIALOG_TESTS else ""}'
+                  f'{"dlg=" + (dlg or "-") + " " if func in DIALOG_TESTS or dlg_case else ""}'
                   f'ui={"|".join(ui.log) or "-"}')
 
 

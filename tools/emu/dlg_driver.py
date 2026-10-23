@@ -30,6 +30,8 @@ Script format (vector field dlg=): events separated by ';':
                handler for wm_LButtonDown (index 0x0201), TMessage with
                WParam = 1 (MK_LBUTTON), LParam = (x, y)
   v<x>:<y>     the mouse moved to (x, y): wm_MouseMove (0x0200), WParam 0
+  T            a timer tick: the type's DMT handler for wm_Timer (0x0113),
+               WParam = 1 (the id the emulated SetTimer returns)
   ok / cancel  the OK / Cancel button (id 1 / 2)
 A first event w<width>:<height> is no user event: KaiserDlg.SetupWindow
 (stubbed) stores this window size at +0x2a / +0x2c, as the original does
@@ -402,6 +404,14 @@ class DialogDriver:
             ev = self.script[self.run['step']]
             self.run['step'] += 1
             self.ui.log.append(f'[{ev}]')
+            if ev == 'T':                             # wm_Timer
+                h = self.dmt_handler(sseg, so, 0x0113)
+                if h is None:
+                    continue
+                msg = (emu.scratch_para + CTL_SEG, 0)
+                emu.write(msg[0], msg[1], struct.pack('<7H', 0, 0x0113, 1, 0, 0, 0, 0))
+                self._call(h, [so, sseg, msg[1], msg[0]], 'handler')
+                return
             if ev[0] in 'mv':                         # a mouse message
                 x, _, y = ev[1:].partition(':')
                 index = 0x0201 if ev[0] == 'm' else 0x0200

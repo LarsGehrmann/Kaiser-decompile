@@ -88,6 +88,18 @@ type
       D.Data[$2a] / [$2c] (KaiserDlg.SetupWindow stores it there) }
     function Mouse(X, Y: SmallInt): Boolean; virtual;
     function MouseMove(X, Y: SmallInt): Boolean; virtual;
+    { the DMT handler for wm_Timer of a type that sets a timer in
+      SetupWindow (SetTimer): TimerInterval > 0 is its interval in ms (the
+      UI calls Timer that often while the dialog is open) }
+    procedure Timer; virtual;
+    { the flag the type's Done passes on to KaiserDlg.Done (UnitInfoDlg's
+      own Done passes 0) }
+    function DoneFlag(Flag: Word): Word; virtual;
+    { the text result the game reads with GetText (VMT +0x58, HeroNameDlg's
+      GetName); else the fake objects' +0x100 }
+    function GetText: PChar; virtual;
+  public
+    TimerInterval: Integer;
   end;
   TDialogLogicClass = class of TDialogLogic;
 
@@ -102,6 +114,9 @@ type
     function Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog; virtual;
     function Execute(D: TDialog): SmallInt; virtual;
     procedure Done(D: TDialog; Flag: Word); virtual;
+    { the ported type of a constructor name (nil: none, the dialog is a
+      plain object); the tests leave the types they fake out }
+    function LogicFor(const Name: string): TDialogLogicClass; virtual;
     { Application^.ExecDialog }
     function ExecDialog(D: TDialog): SmallInt; virtual;
     function GetText(D: TDialog): PChar; virtual;
@@ -204,6 +219,20 @@ begin
   Result := False;
 end;
 
+procedure TDialogLogic.Timer;
+begin
+end;
+
+function TDialogLogic.DoneFlag(Flag: Word): Word;
+begin
+  Result := Flag;
+end;
+
+function TDialogLogic.GetText: PChar;
+begin
+  Result := D.Text;
+end;
+
 function APtr(P: Pointer): TUIArg;
 begin
   Result.Kind := uaPtr; Result.P := P; Result.V := 0; Result.Len := 0;
@@ -279,12 +308,17 @@ begin
     SetLength(Result.Data, Result.Size + $10)
   else
     SetLength(Result.Data, $210);
-  LC := DialogLogicOf(Name);
+  LC := LogicFor(Name);
   if LC <> nil then
   begin
     Result.Logic := LC.Create(Result, Args);
     TDialogLogic(Result.Logic).Init;
   end;
+end;
+
+function TGameUI.LogicFor(const Name: string): TDialogLogicClass;
+begin
+  Result := DialogLogicOf(Name);
 end;
 
 function TGameUI.Execute(D: TDialog): SmallInt;
@@ -303,7 +337,10 @@ end;
 
 function TGameUI.GetText(D: TDialog): PChar;
 begin
-  Result := D.Text;
+  if D.Logic <> nil then
+    Result := TDialogLogic(D.Logic).GetText
+  else
+    Result := D.Text;
 end;
 
 function TGameUI.Call(const Name: string; const Args: array of TUIArg): SmallInt;

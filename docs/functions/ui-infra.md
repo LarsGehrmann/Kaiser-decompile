@@ -359,6 +359,13 @@ directory (see above), which is the Windows directory only when no working direc
 
 ## Segment 12 (1058) – common dialog classes
 
+Ported (with the small dialog types of segments 3, 6 and 9) in `port/src/gamedialogs.pas`,
+`PlayerSelectDlg` in `port/src/actions.pas`; each type is tested on its own against the
+original (`Dlg_<type>` vectors, `port/tests/dialogs.vec`, docs/phase3.md). Two findings: the
+text constructors StrCopy their texts unchecked (more than 80 characters overwrite the control
+pointers behind the buffers), and ButtonChoiceDlg's button loop runs 256 times for a count of 0.
+UnitInfoDlg's portrait sits at (12, 64) of a 237 x 254 window, scaled to the real size.
+
 ### KaiserDlg – base of all game dialogs (VMT DS:3364, DMT DS:3350)
 
 | Address | Name | Purpose |
