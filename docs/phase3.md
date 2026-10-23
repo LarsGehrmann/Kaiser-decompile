@@ -56,7 +56,7 @@ original resources. Deliverables: the macOS app and a Windows 11 executable (mil
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | ✅ segment 3 (`port/src/turn.pas`: all 25 logic functions, the rest are dialog classes, plus `FormatPlayerTitle`), segments 2 and 7 (`ai.pas`, all 36), the turn loop of segment 1 (`game.pas`: `NextPlayer`, `CpuTurn`, `ResolveWar`); UI calls replayed (below); 59,039 vectors (1,000 per function) identical, the one exception a test artefact (stale players from an earlier vector, fixed) |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | ✅ `port/bin/ksrsim` plays a savegame or a new game on (`NewGame`, `EndHumanTurn`, `BeginHumanTurn` in `game.pas`); the humans just end their turns. `tools/emu/sim_compare.sh` runs the same in the emulated original: all 30 savegames (seeds 1–3, up to 300 turns each) and 10 new games of different sizes agree turn by turn, 5,093 turns in all: 97 of 100 games identical to the end, the other 3 identical until the original crashes (an original bug: sabotage action 6 puts a 9th unit into a full Garde, `Ai_ArrangeArmies` then overruns its stack; docs/rules/ai.md) |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | ✅ `port/src/battle.pas`: all logic of the battle window (Init, combat, movement, healing, desertion, the AI, the timer, the human's clicks, buttons and combat options, GetResults); `port/src/war.pas`: segment 4 (BattleSetup, BattleFameAndXp, BattleAftermath, Battle, FightRaiders) and segment 6 (battlefield choice, plunder, burning, massacre, retreat losses). 13,343 vectors over 66 functions identical, from battle states the original's AI played (`port/tests/battle.vec`: 660 of them); 668 whole AI battles from all savegames identical (`battle_compare.py 2 2000`). Found on the way: an endless recursion of the original (`StopTimer` → `AiStep`, battle.md) |
-| 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | ✅ `port/bin/Kaiser.app` (7a–7d below): every menu command, the dialogs with their ported logic, the battle window, the main window, help; checked by autopilot runs and a visual sweep (below); the manual play-through against DOSBox-X is the user's. Not ported: the MIDI music, the e-mail game |
+| 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | ✅ `port/bin/Kaiser.app` (7a–7d below): every menu command, the dialogs with their ported logic, the battle window, the main window, help; checked by autopilot runs and a visual sweep (below); the manual play-through against DOSBox-X is the user's. Not ported: the e-mail game |
 | 8 | Windows 11 executable: the same sources built for Win64 (x86_64, LCL win32 widgetset), cross-compiled from macOS (FPC cross compiler `ppcrossx64` and the LCL built for `win64`); the macOS-only parts (sounds via `afplay`, the settings in Application Support) get Windows equivalents (`PlaySound`/`sndPlaySound`, `%APPDATA%\Kaiser`) | the test programs (`ruletest`, `real48test`) pass when run on Windows (or Wine); the GUI starts and plays a game on Windows 11 | built: `port/build-win.sh`, `port/package-win.sh` → `port/bin/Kaiser-win64.zip` (below); not yet run on Windows (no Wine on this Mac: Homebrew's Wine casks are disabled) |
 
 Milestone 7 in steps (the GUI is the UI segments 1, 5, 8, 9, 10 drawing, 12, 13, 15–17 ported
@@ -108,9 +108,14 @@ GUI links with `-k-ld_classic`.
   [MAP], the anchor of `docs/manual.md`); the dialog types whose port does not keep the help
   context (+0x2e) take the constants of their `HelpDlg.Init` calls.
 - **Right click** on a unit of the map: `ShowUnitLookDlg` (1040:330f).
+- **Music** (`port/gui/music.pas`): kaiser.mid in a loop on the title screen like MidiOpen /
+  MidiPlay / MMMciNotify / MidiClose (1000:0920–0a0e): started by the first show and a
+  restore (WMSize), EndGame and "Schalmeienklänge", stopped by a minimise, the painting of a
+  game and the window's end; Windows: MCI (`mciSendString`), macOS: `AVMIDIPlayer` with the
+  system's General MIDI sounds.
 - **Not ported / different:** the toolbar's right-click context help (WinHelp
   HELP_CONTEXTPOPUP, command + 1000); map clicks do
-  nothing without a running game (the original reads the stale player); the MIDI music; for
+  nothing without a running game (the original reads the stale player); for
   1024×768 the original enables toolbar indices up to DS:4556 = 72 and stops with runtime error
   213 (ui-infra.md), the port clamps to the last tool; after a resolution change the window keeps
   its position instead of moving to (0, 0), and the client height stays H − 40 (the original's

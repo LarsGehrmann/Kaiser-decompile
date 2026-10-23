@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
-  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48;
+  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music;
 
 type
   TKaiserForm = class(TForm)
@@ -27,6 +27,8 @@ type
     procedure UpdateMenu;
     procedure CheckCommand(Id: Word; On: Boolean);
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
+    procedure FormShow(Sender: TObject);
+    procedure FormWindowStateChange(Sender: TObject);
     procedure FormPaint(Sender: TObject);
     procedure AutoStart(Sender: TObject);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
@@ -198,6 +200,8 @@ begin
       end;
     1:
       begin
+        if MusicOpen then                         { Paint in a game: MidiClose }
+          MusicStop;
         FToolbar.EnableTools(LastGameTool(FToolbar), True);
         FormatPlayerTitle(FSave.Players[DS.Game.CurrentPlayer], Buf, 1, 1);
         S := Utf8(Buf);
@@ -360,6 +364,8 @@ begin
   Color := clBlack;
   OnPaint := @FormPaint;
   OnClose := @FormClose;
+  OnShow := @FormShow;
+  OnWindowStateChange := @FormWindowStateChange;
   OnMouseDown := @FormMouseDown;
   FillChar(FSave, SizeOf(FSave), 0);
   FBuffer := TBitmap.Create;
@@ -488,7 +494,26 @@ end;
 
 procedure TKaiserForm.FormClose(Sender: TObject; var CloseAction: TCloseAction);
 begin
+  MusicStop;                                      { Done }
   WriteSettings(OwnSettingsFile);
+end;
+
+{ WMSize (1000:08ba): restored (also the first show) on the title screen
+  with music on: kaiser.mid; minimised: stopped }
+procedure TKaiserForm.FormShow(Sender: TObject);
+begin
+  if (DS.Game.GameState = 0) and (DS.OptMusic = 1) then
+    MusicPlay(MusicFile);
+end;
+
+procedure TKaiserForm.FormWindowStateChange(Sender: TObject);
+begin
+  if DS.Game.GameState <> 0 then
+    Exit;
+  if WindowState = wsMinimized then
+    MusicStop
+  else if DS.OptMusic = 1 then
+    MusicPlay(MusicFile);
 end;
 
 procedure TKaiserForm.MenuClick(Sender: TObject);
@@ -596,7 +621,17 @@ begin
       end;
     601: DS.OptAutosave := Ord(DS.OptAutosave = 0);        { Geschichtsschreibung }
     602: DS.OptSound := Ord(DS.OptSound = 0);              { Krach und Geschrei }
-    603: DS.OptMusic := Ord(DS.OptMusic = 0);              { Schalmeienklaenge (MIDI not played) }
+    603:                                        { CmSchalmeienklaenge 1000:1e56 }
+      begin
+        if DS.OptMusic = 0 then
+        begin
+          if DS.Game.GameState = 0 then
+            MusicPlay(MusicFile);
+        end
+        else
+          MusicStop;
+        DS.OptMusic := Ord(DS.OptMusic = 0);
+      end;
     610..612: SetResolution(Id - 610);              { Cm640x480, Cm800x600, CmResolution1024 }
     501, 503: CmHilfe;                              { Hilfe, Ueber die Hilfe }
     701..708:                                   { Berichte: the reports at turn start }

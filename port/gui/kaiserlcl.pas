@@ -80,6 +80,8 @@ function FindExe: string;
   kaiser.exe is read when the port has none yet }
 function SettingsFile: string;
 function OwnSettingsFile: string;
+{ kaiser.mid next to kaiser.exe }
+function MusicFile: string;
 function ResBitmap(const Name: RawByteString; Id: Word = 0): TBitmap;
 { a sprite: BITMAP Id with the mask BITMAP Id + 1000 (black = sprite, white =
   transparent; Bmp_DrawMasked 1078:00c4) as a 32-bit bitmap with alpha }
@@ -126,6 +128,11 @@ begin
   Result := GetUserDir + '.config/kaiser/KAISER.INI';
   {$endif}
   {$endif}
+end;
+
+function MusicFile: string;
+begin
+  Result := ExtractFilePath(FindExe) + 'kaiser.mid';
 end;
 
 function SettingsFile: string;

@@ -30,7 +30,7 @@ type
 implementation
 
 uses
-  {$ifdef windows}MMSystem,{$endif} Process;
+  {$ifdef windows}MMSystem,{$endif} Process, Music;
 
 { the port writes its annals and records next to its KAISER.INI; it reads
   the original's next to kaiser.exe until it has its own }
@@ -44,6 +44,16 @@ begin
   Result := OwnDataFile(Name);
   if not FileExists(Result) then
     Result := ExtractFilePath(FindExe) + Name;
+end;
+
+{ EndGame (1000:0a6f): the title screen (the menu follows the state after
+  the command) and kaiser.mid }
+procedure EndGame;
+begin
+  DS.Game.GameState := 0;
+  MusicStop;
+  if DS.OptMusic <> 0 then
+    MusicPlay(MusicFile);
 end;
 
 function ArgText(const A: TUIArg): RawByteString;
@@ -256,12 +266,10 @@ begin
     { Victory (1000:3459): the coronation, high score and records, then
       EndGame }
     Annals.Victory(Args[0].P, Players^);
-    DS.Game.GameState := 0;
+    EndGame;
   end
   else if Name = 'EndGame' then
-    { EndGame (1000:0a6f): the title screen (the menu follows the state
-      after the command; kaiser.mid is not played) }
-    DS.Game.GameState := 0
+    EndGame
   else if Name = 'Annals_Load' then
     Result := Ord(AnnalsLoad(DataFile('KAISER.SCO'), TAnnals(Args[0].P^)))
   else if Name = 'Annals_Save' then
