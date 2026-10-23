@@ -33,6 +33,7 @@ WINDOW = (0x0EEE, 0x1234)  # the parent window pointer the game passes around
 CTORS = {
     'KaiserDlg': ('1058:0002', ['p', 's']),
     'MessageDlg': ('1058:024d', ['p', 's', 's']),
+    'HelpMessageDlg': ('1058:02d6', ['p', 's', 's', 'w']),   # (parent, name, text, help context)
     'Message2Dlg': ('1058:0364', ['p', 's', 's', 's']),
     'HeroNameDlg': ('1058:05a1', ['p', 's', 'w']),
     'UnitInfoDlg': ('1058:0862', ['p', 's', 'r61', 'b', 'w']),
@@ -94,6 +95,14 @@ FUNCS = {
     'Battle_DisableButtons': ('1048:0dde', True, ['p'], False),
     'Battle_End': ('1048:8ff5', True, ['b', 'p'], False),   # EndDlg(code)
     'DisableButton2': ('1058:0591', True, ['p'], False),
+    # the troop dialog (ANORDNENDLG, segment 8): its drawing (DC, Self) and
+    # the dialogs it opens that are not ported yet
+    'TroopDlg_DrawHeer': ('1038:84a1', True, ['w', 'p'], False),
+    'TroopDlg_DrawGarde': ('1038:8699', True, ['w', 'p'], False),
+    'TroopDlg_DrawUnitInfo': ('1038:8921', True, ['w', 'p'], False),
+    'RecruitDialog': ('1040:5108', True, ['p', 'p', 'b', 'b'], False),   # (parent, P, army, free)
+    'ShowPayDlg': ('1040:00f7', True, ['p', 'p'], False),                # (parent, unit): SOLDDLG
+    'Do_UnitEditDlg': ('1038:503d', False, ['p', 'p', 'p'], False),      # near (parent, P, unit)
 }
 # DrawUnitStatus(DC, side, unit, panel, Self) draws, but first recomputes the
 # unit's motivation (ComputeMotivation(unit, side, Self), if the unit exists):
@@ -227,6 +236,17 @@ class UILayer:
         for i, (s, o) in enumerate(self.objects):
             if (seg, off) == (s, o):
                 return f'O{i + 1}'
+        best = None
+        for i, (s, o) in enumerate(self.objects):
+            # a real dialog object (size 0: its own constructor built it):
+            # a pointer into it, e.g. its copy of the player
+            rel = seg * 16 + off - (s * 16 + o)
+            if self.sizes[i] == 0 and 0 < rel and (best is None or rel < best[1]):
+                size = self.emu.ds_word(struct.unpack('<H', self.emu.read(s, o, 2))[0])
+                if rel < size:
+                    best = (i, rel)
+        if best is not None:
+            return f'O{best[0] + 1}+{best[1]}'
         if (seg, off) == self.app:
             return 'A'
         if seg == 0 and off == 0:
@@ -419,7 +439,8 @@ class UILayer:
         return handler
 
     def _func_handler(self, name, far, kinds, has_ret):
-        si = int(FUNCS[name][0].split(':')[0], 16)
+        from kaiser_emu import ghidra_seg
+        cs = None if far else self.emu.para[ghidra_seg(FUNCS[name][0])[0]]
 
         def handler():
             emu = self.emu
@@ -431,5 +452,5 @@ class UILayer:
                 ax, _ = self.chooser(entry, 'func')
                 entry += f'={ax}'
             self.log.append(entry)
-            emu.stub_return(n, far, ax)
+            emu.stub_return(n, far, ax, cs=cs)
         return handler

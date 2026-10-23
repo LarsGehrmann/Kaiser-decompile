@@ -25,7 +25,14 @@ Script format (vector field dlg=): events separated by ';':
   s<id>:<pos>  move a scroll bar to pos (clamped to its range)
   l<id>:<idx>  select entry idx of a list/combo box
   t<id>:<hex>  type text into an edit
+  m<x>:<y>     a left mouse click at client pixel (x, y): the type's DMT
+               handler for wm_LButtonDown (index 0x0201), TMessage with
+               WParam = 1 (MK_LBUTTON), LParam = (x, y)
+  v<x>:<y>     the mouse moved to (x, y): wm_MouseMove (0x0200), WParam 0
   ok / cancel  the OK / Cancel button (id 1 / 2)
+A first event w<width>:<height> is no user event: KaiserDlg.SetupWindow
+(stubbed) stores this window size at +0x2a / +0x2c, as the original does
+with the real window's size (types that scale a painted area read it).
 """
 import struct
 
@@ -141,6 +148,7 @@ class DialogDriver:
         self.dialogs = {}            # dialog object -> its template and controls
         self.run = None
         self.stack = []              # the runs of the dialogs a nested dialog interrupts
+        self.window_size = None      # (w, h) KaiserDlg.SetupWindow stores (w event)
 
     # -- helpers ------------------------------------------------------------
     def _stack(self, n, skip=4):
@@ -160,7 +168,7 @@ class DialogDriver:
             emu.redirect(addr, self._method(name, nargs))
         emu.redirect(EXECUTE, self._execute)
         emu.redirect(END_DLG, self._end_dlg)
-        emu.redirect(KAISER_SETUP, lambda: emu.stub_return(4, True))
+        emu.redirect(KAISER_SETUP, self._kaiser_setup)
         emu.redirect(KAISER_DONE, self._done)
         emu.redirect(OWL_CANCLOSE, lambda: emu.stub_return(4, True, 1))
         self._heap_alloc_patch()
@@ -282,12 +290,25 @@ class DialogDriver:
         ip, cs = struct.unpack('<HH', self.emu.read(self.emu.ds_para, vmt + slot, 4))
         return cs, ip
 
+    def _kaiser_setup(self):
+        """KaiserDlg.SetupWindow: stores the window size (w event) at
+        +0x2a / +0x2c; centring the window is not emulated."""
+        so, sseg = self._stack(2)
+        if self.window_size is not None:
+            self.emu.write(sseg, so + 0x2a, struct.pack('<hh', *self.window_size))
+        self.emu.stub_return(4, True)
+
     def handler_of(self, seg, off, cid):
         """The DMT handler for id_First + cid of the object's type (or None)."""
+        index = 0x8000 + (cid & 0xFFFF) if cid >= 0 else cid & 0xFFFF
+        return self.dmt_handler(seg, off, index)
+
+    def dmt_handler(self, seg, off, index):
+        """The DMT handler for a message index (wm_First + WM_xxx = WM_xxx,
+        id_First + id = 0x8000 + id) of the object's type, or None (OWL's own)."""
         emu = self.emu
         vmt = struct.unpack('<H', emu.read(seg, off, 2))[0]
         dmt = struct.unpack('<H', emu.read(emu.ds_para, vmt + 4, 2))[0]
-        index = 0x8000 + (cid & 0xFFFF) if cid >= 0 else cid & 0xFFFF
         while dmt:
             parent, _, _, count = struct.unpack('<4H', emu.read(emu.ds_para, dmt, 8))
             idx = struct.unpack(f'<{count}H', emu.read(emu.ds_para, dmt + 8, 2 * count))
@@ -314,6 +335,10 @@ class DialogDriver:
                     'base': sp - 0x40, 'pending': None}
         self.end_code = None
         self.script = [e for e in (self.scripts.pop(0) if self.scripts else '').split(';') if e]
+        self.window_size = None
+        if self.script and self.script[0].startswith('w'):
+            w, _, h = self.script.pop(0)[1:].partition(':')
+            self.window_size = (int(w), int(h))
         self.ui.log.append(f'Execute({self.ui.sym(sseg, so)})')
         # SetupWindow first
         self._call(self._vmt_slot(sseg, so, 0x38), [so, sseg], 'setup')
@@ -367,6 +392,17 @@ class DialogDriver:
             ev = self.script[self.run['step']]
             self.run['step'] += 1
             self.ui.log.append(f'[{ev}]')
+            if ev[0] in 'mv':                         # a mouse message
+                x, _, y = ev[1:].partition(':')
+                index = 0x0201 if ev[0] == 'm' else 0x0200
+                h = self.dmt_handler(sseg, so, index)
+                if h is None:
+                    continue
+                msg = (emu.scratch_para + CTL_SEG, 0)
+                emu.write(msg[0], msg[1], struct.pack('<HHHhhHH', 0, index, int(ev[0] == 'm'),
+                                                      int(x), int(y), 0, 0))
+                self._call(h, [so, sseg, msg[1], msg[0]], 'handler')
+                return
             cid = self._apply(ev)
             if cid is None:
                 continue
