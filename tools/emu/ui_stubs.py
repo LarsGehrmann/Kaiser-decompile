@@ -187,7 +187,8 @@ class UILayer:
     """chooser(entry_without_result, kind) -> (ax, {offset: bytes}) decides
     results; kind is 'ctor', 'method' or 'func'."""
 
-    def __init__(self, emu, players_para, chooser):
+    def __init__(self, emu, players_para, chooser, unstub=()):
+        self.unstub = set(unstub)        # FUNCS that run for real (dialog tests)
         self.emu = emu
         self.players_para = players_para
         self.window_alias = None         # a fake window object standing for W
@@ -196,6 +197,17 @@ class UILayer:
         self.log = []
         self.objects = []
         self._install()
+        from dlg_driver import DialogDriver
+        self.driver = DialogDriver(self)
+        from kaiser_emu import ghidra_seg
+        for addr in self.driver.addresses():
+            si, off = ghidra_seg(addr)
+            b = emu.lin(emu.para[si], off)
+            emu.guard_allow.append((b, b + 5))
+        for seg in (8, 9, 12):                       # the dialog types' own code
+            b, e = emu.segment_range(seg)
+            emu.guard_allow.append((b, e))
+
 
     # -- symbolic arguments --------------------------------------------------
     def sym(self, seg, off):
@@ -271,7 +283,8 @@ class UILayer:
         for name, (addr, kinds) in CTORS.items():
             emu.redirect(addr, self._ctor_handler(name, kinds))
         for name, (addr, far, kinds, has_ret) in FUNCS.items():
-            emu.redirect(addr, self._func_handler(name, far, kinds, has_ret))
+            if name not in self.unstub:
+                emu.redirect(addr, self._func_handler(name, far, kinds, has_ret))
         emu.redirect(DRAW_UNIT_STATUS[0], self._draw_unit_status_handler())
         self.vmt = bytearray(0x80)
         for slot, (name, kinds, has_ret) in METHODS.items():
@@ -285,7 +298,8 @@ class UILayer:
             b, e = emu.segment_range(seg)
             emu.guard_ranges.append((b, e, f'segment {seg}'))
         emu.guard_allow = []
-        redirected = ([a for a, _ in CTORS.values()] + [f[0] for f in FUNCS.values()] +
+        redirected = ([a for a, _ in CTORS.values()] +
+                      [f[0] for n, f in FUNCS.items() if n not in self.unstub] +
                       [DRAW_UNIT_STATUS[0]])
         for addr, size in ALLOWED + [(a, 5) for a in redirected]:   # 5: the patched jump
             si, off = ghidra_seg(addr)
@@ -298,6 +312,8 @@ class UILayer:
         self.log = []
         self.objects = []
         self.sizes = []
+        if hasattr(self, 'driver'):
+            self.driver.reset()
         emu.write(emu.ds_para, FAKE_VMT, bytes(self.vmt))
         emu.write(self.app[0], self.app[1], struct.pack('<H', FAKE_VMT) + bytes(OBJ_SIZE - 2))
         emu.write(emu.ds_para, APP_PTR, struct.pack('<HH', self.app[1], self.app[0]))
@@ -314,8 +330,14 @@ class UILayer:
             size = emu.ds_word(vmt)                   # instance size from the VMT
             if (words[0], words[1]) != (0, 0) and vmt == 0:
                 # an inherited constructor (VMT 0): the object is set up by
-                # its own constructor, leave it alone
+                # its own constructor, leave it alone (a real dialog type:
+                # the driver needs its template)
                 obj = (words[1], words[0])
+                if name == 'KaiserDlg' and kinds[1] == 's':
+                    off_s, seg_s = args[len(args) - 4 + 0], args[len(args) - 4 + 1]
+                    nm = self.cstring(seg_s, off_s) if seg_s else b''
+                    if hasattr(self, 'driver'):
+                        self.driver.set_template(nm.decode('latin-1'))
                 size = 0
                 self.objects.append(obj)
                 self.sizes.append(size)

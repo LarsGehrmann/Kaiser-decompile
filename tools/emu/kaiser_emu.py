@@ -106,6 +106,8 @@ class KaiserEmu:
                     ('KERNEL', 62): self._lock_resource,
                     ('KERNEL', 19): self._global_unlock}
         self.pristine_ds = bytes(self.read(self.ds_para, 0, 0x10000))
+        self.api_fallback = False        # unknown APIs: 0 (dialog tests)
+        self.api_calls = []
         # far return target: a HLT instruction in the stub segment
         self.return_ip = 0xFF00
         self.uc.mem_write(self.lin(self.stub_para, self.return_ip), b'\xf4')
@@ -242,6 +244,12 @@ class KaiserEmu:
                     name = (mod, key[1])
                 if name in self.api:
                     self.api[name]()
+                    return
+                if self.api_fallback and name is not None and self._api_arg_bytes(*name) is not None:
+                    # an API without effect on the game (drawing, window
+                    # handling): pops its arguments, returns 0
+                    self.api_calls.append(name)
+                    self._api_return(self._api_arg_bytes(*name), 0)
                     return
                 uc.emu_stop()
                 raise_box.append(f'Windows API call {name} (stub offset {off:#x})')
@@ -393,6 +401,28 @@ class KaiserEmu:
     def _global_unlock(self):
         self._api_args(2)
         self._api_return(2, 0)
+
+    _spec_args = {}
+
+    def _api_arg_bytes(self, module, ordinal):
+        """Argument bytes of a PASCAL API from the Wine spec file (None if
+        unknown)."""
+        import re
+        from ne import SPEC_DIR, SPEC_FILES
+        mod = module.upper()
+        if mod not in self._spec_args:
+            table = {}
+            fname = SPEC_FILES.get(mod)
+            if fname:
+                for line in open(os.path.join(SPEC_DIR, fname), encoding='utf-8'):
+                    line = line.split('#')[0].strip()
+                    m = re.match(r'(\d+)\s+pascal\S*\s+(?:-\S+\s+)*[\w@?$]+\(([^)]*)\)', line)
+                    if m:
+                        size = sum(4 if a in ('long', 'segptr', 'segstr', 'ptr', 'str') else 2
+                                   for a in m.group(2).split())
+                        table[int(m.group(1))] = size
+            self._spec_args[mod] = table
+        return self._spec_args[mod].get(ordinal)
 
     def _invalidate_rect(self):
         # InvalidateRect(hWnd, lpRect, bErase): repainting is not emulated

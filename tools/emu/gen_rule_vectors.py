@@ -426,6 +426,9 @@ SPECS = {
     'War_BattleAftermath': ('n1018:0664', ['Wnd', 'P', 'PJ', 'INFO', 'RES', 'B:10:13'], 'none',
                             BUILD + ['cpu_level', 'J.cpu_level', 'initiative', 'J.army1_count',
                                      'J.army2_count', 'J.population', 'J.taler']),
+    # segments 8 and 9: the menu actions with their dialog types (DIALOG_TESTS)
+    'Do_LandHandeln': ('1040:7e4b', ['Wnd', 'A', 'I', 'N'], 'none',
+                       ['taler', 'land', 'land_used', 'land_price', 'J.land']),
     # segment 1: the turn loop, a whole round of computer players
     'CmNeuesSpiel': ('1000:0ce6', ['NIL', 'SELF'], 'none',
                      ['h.immortality', 'h.goods_trade_enabled', 'h.initiative_enabled']),
@@ -1095,6 +1098,46 @@ HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
                       'Battle_CmAufgeben', 'Battle_CombatOptionsMenu', 'Battle_WMLButtonDown')
 
 
+# menu actions whose dialogs run for real (tools/emu/dlg_driver.py): the
+# templates of their dialogs, in the order they open
+DIALOG_TESTS = {
+    'Do_LandHandeln': ['LANDDLG'],
+}
+
+
+def dialog_script(emu, rng, template):
+    """Random user events for a dialog from its template."""
+    from dlg_driver import DialogDriver
+    probe = DialogDriver.__new__(DialogDriver)
+    probe.emu = emu
+    probe.set_template(template)
+    clicks, scrolls, lists, edits = [], [], [], []
+    for cid, (cls, style, _) in probe.template.items():
+        if cid in (1, 2, 999, -1):
+            continue
+        if cls == 'BUTTON' and style & 0xF != 7:
+            clicks.append(cid)
+        elif cls == 'SCROLLBAR':
+            scrolls.append(cid)
+        elif cls in ('LISTBOX', 'COMBOBOX'):
+            lists.append(cid)
+        elif cls == 'EDIT':
+            edits.append(cid)
+    events = []
+    for _ in range(rng.choice([0, rng.randint(1, 4), rng.randint(1, 12)])):
+        k = rng.random()
+        if scrolls and k < 0.3:
+            events.append(f's{rng.choice(scrolls)}:{rng.randint(-5, 120)}')
+        elif lists and k < 0.5:
+            events.append(f'l{rng.choice(lists)}:{rng.randint(-1, 6)}')
+        elif edits and k < 0.6:
+            events.append(f't{rng.choice(edits)}:{rng.choice([b"", b"Hugo", b"x" * 20]).hex()}')
+        elif clicks:
+            events.append(f'c{rng.choice(clicks)}')
+    events.append('ok' if rng.random() < 0.75 else 'cancel')
+    return ';'.join(events)
+
+
 def kind_bw(args):
     return any(a == 'BW' for a in args)
 
@@ -1105,7 +1148,9 @@ def main():
     rng = random.Random(int(sys.argv[3]) if len(sys.argv) > 3 else 7)
     emu = KaiserEmu()
     sp = emu.scratch_para
-    ui = UILayer(emu, sp, None)
+    real = [f for f in funcs if f in DIALOG_TESTS]
+    ui = UILayer(emu, sp, None, unstub=real)
+    emu.api_fallback = bool(real)
     for func in funcs:
         addr, args, ret, fields = SPECS[func][:4]
         clamps = SPECS[func][4] if len(SPECS[func]) > 4 else {}
@@ -1143,10 +1188,12 @@ def main():
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
+            dlg = '/'.join(dialog_script(emu, rng, t) for t in DIALOG_TESTS.get(func, []))
             emu.reset_ds()
             emu.write(emu.ds_para, 0x6794, struct.pack('<H', 400))   # INI Schlacht-Timer
             ui.reset()
             ui.chooser = make_chooser(func, rng, num)
+            ui.driver.scripts = dlg.split('/') if dlg else []
             emu.write(emu.ds_para, HDR_DS, bytes(header))
             emu.write(sp, 0, bytes(10 * PSIZE))     # no players of an earlier vector
             emu.write(sp, 0, bytes(players))
@@ -1377,6 +1424,7 @@ def main():
                   f'ret={rv} out={",".join(out_vals) or "-"} '
                   f'seedout={emu.rand_seed()} diff={diff(players, after) or "-"} '
                   f'hdiff={diff(header, hafter) or "-"}{bw_fields} '
+                  f'{"dlg=" + (dlg or "-") + " " if func in DIALOG_TESTS else ""}'
                   f'ui={"|".join(ui.log) or "-"}')
 
 

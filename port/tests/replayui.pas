@@ -9,7 +9,7 @@ unit ReplayUI;
 interface
 
 uses
-  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserUI;
+  SysUtils, Classes, KaiserTypes, KaiserDS, KaiserUI, NERes, ScriptControls;
 
 type
   TReplayUI = class(TGameUI)
@@ -25,6 +25,8 @@ type
     function Answer(const R: string; D: TDialog): SmallInt;
   public
     PlayersBase: PByte;
+    Exe: TNEFile;                    { the templates of the ported dialog types }
+    DlgScripts: TStringList;         { the user events per real dialog (dlg=) }
     BattleBase: PByte;               { the battle window object: B<offset> }
     constructor Create;
     destructor Destroy; override;
@@ -36,6 +38,7 @@ type
     function ExecDialog(D: TDialog): SmallInt; override;
     function GetText(D: TDialog): PChar; override;
     function Call(const Name: string; const Args: array of TUIArg): SmallInt; override;
+    procedure Note(const Entry: string); override;
   end;
 
 implementation
@@ -52,6 +55,9 @@ end;
 constructor TReplayUI.Create;
 begin
   inherited Create;
+  DlgScripts := TStringList.Create;
+  DlgScripts.Delimiter := '/';
+  DlgScripts.StrictDelimiter := True;
   FExpected := TStringList.Create;
   FExpected.Delimiter := '|';
   FExpected.StrictDelimiter := True;
@@ -189,7 +195,12 @@ var
   Entry: string;
 begin
   Result := inherited Dialog(Name, VMT, Args);
-  Entry := Format('%s[%s](%s)', [Name, LowerCase(IntToHex(VMT, 1)), FormatArgs(Args)]);
+  if Result.Logic <> nil then
+    { a ported dialog type: the emulator sees its constructor's call of
+      KaiserDlg.Init (parent, name) as an inherited constructor }
+    Entry := Format('KaiserDlg[0](%s)', [FormatArgs(Slice(Args, 2))])
+  else
+    Entry := Format('%s[%s](%s)', [Name, LowerCase(IntToHex(VMT, 1)), FormatArgs(Args)]);
   if Take(Entry) = '!' then
     FLog.Add(Entry + '!')
   else
@@ -202,8 +213,8 @@ var
   N: Integer;
 begin
   N := D.Size;
-  if N > SizeOf(D.Data) then
-    N := SizeOf(D.Data);
+  if N > Length(D.Data) then
+    N := Length(D.Data);
   while (N > 2) and (D.Data[N - 1] = 0) do
     Dec(N);
   if N <= 2 then
@@ -213,8 +224,19 @@ end;
 
 function TReplayUI.Execute(D: TDialog): SmallInt;
 var
-  Entry, R: string;
+  Entry, R, Script: string;
 begin
+  if D.Logic <> nil then
+  begin
+    { play the recorded user events on the ported dialog type }
+    Script := '';
+    if DlgScripts.Count > 0 then
+    begin
+      Script := DlgScripts[0];
+      DlgScripts.Delete(0);
+    end;
+    Exit(RunScript(D, Exe.Dialog(PChar(TDialogLogic(D.Logic).Args[1].P)), Script));
+  end;
   Entry := 'Execute(O' + IntToStr(D.Index) + ');d:' + Contents(D);
   R := Take(Entry);
   if R = '!' then
@@ -260,6 +282,14 @@ begin
     Entry := Entry + '!';
   FLog.Add(Entry);
   Result := D.Text;
+end;
+
+procedure TReplayUI.Note(const Entry: string);
+begin
+  if Take(Entry) = '!' then
+    FLog.Add(Entry + '!')
+  else
+    FLog.Add(Entry);
 end;
 
 function TReplayUI.Call(const Name: string; const Args: array of TUIArg): SmallInt;

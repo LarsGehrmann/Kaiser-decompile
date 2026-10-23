@@ -8,7 +8,7 @@ program RuleTest;
 
 uses
   SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
-  Battle, War, ReplayUI;
+  Battle, War, NERes, Actions, ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -156,6 +156,7 @@ begin
   UI.Free;
   UI := Replay;
   Window := Pointer(PtrUInt($0EEE1234));
+  Replay.Exe := TNEFile.Create(IncludeTrailingPathDelimiter(ParamStr(1)) + 'kaiser.exe');
   SaveDir := IncludeTrailingPathDelimiter(ParamStr(1));
   Lines := TStringList.Create;
   Lines.LoadFromFile(ParamStr(2));
@@ -207,6 +208,9 @@ begin
     if UIField = '' then
       UIField := '-';
     Replay.Start(UIField);
+    Replay.DlgScripts.Clear;
+    if (Field(S, 'dlg') <> '') and (Field(S, 'dlg') <> '-') then
+      Replay.DlgScripts.DelimitedText := Field(S, 'dlg');
     if Field(S, 'args') = '-' then
       Args.Clear
     else
@@ -593,6 +597,7 @@ begin
               Move(WRes, OutBuf[SizeOf(WInfo)], SizeOf(WRes));
               OutSize := -1;                            { two records }
             end;
+          'Do_LandHandeln': begin Do_LandHandeln(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
           'BattleInit':
             begin
               BattleInit(BW, Window, nil, Pl^, Save.Players[ArgI(0)], ArgI(1), ArgI(2));

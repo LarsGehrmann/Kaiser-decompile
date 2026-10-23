@@ -236,6 +236,7 @@ DS = [
     (0x052a, 'u8[0..4]', 'ai_king_reward_type', 'unit types a computer player may get as the first Koenig (Ai_FirstKingReward 1008:2e1a)'),
     (0x0530, 'u8[0..4]', 'ai_king_reward_bonus', 'their rank bonus'),
     (0x0e60, 'u8[0..35]', 'ai_max_units', 'computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9)'),
+    (0x1bc8, 's32[0..4]', 'land_trade_amounts', 'LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen'),
     (0x2b83, 'u8[0..14]', 'battle_hardness', 'AttackObject: Random(hardness) per terrain code (wall 5, market 5, mill 4, palace 8, cathedral 10, ...)'),
     (0x2b92, 'u8[0..1]', 'battle_side_code_b', 'the same as battle_side_code (AiTryAttack)'),
     (0x2b94, 'u8[1..8]', 'battle_att_city_x', 'start positions, army slot 1..8: attacker in a city battle'),
