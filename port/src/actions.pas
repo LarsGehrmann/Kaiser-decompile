@@ -35,6 +35,9 @@ procedure Do_DemographischeDaten(Parent: Pointer; HWnd: Word; P: TPlayer);
 procedure Do_Finanzhaushalt(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
 { Internationaler Vergleich (1040:5f7f): RANGLISTENDLG, the players by score }
 procedure Do_InternationalerVergleich(Parent: Pointer; var Players: TPlayers; NumPlayers: Byte);
+{ Karriereberatung (1040:3a9d): KARRIEREDLG with the promotion criteria, or
+  KARRIEREOKDLG when the next title is reached }
+procedure Do_Karriereberatung(Parent: Pointer; P: TPlayer);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -128,6 +131,14 @@ type
     all players at +0x2f; statics 301+i rank, 101+i title and name, 201+i
     score }
   TRankingDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+  end;
+
+  { KARRIEREDLG (VMT DS:1ed8, 1040:3bd1, a HelpDlg): the player at +0x34;
+    check boxes 101..107 population, happiness, land, army, palace,
+    cathedral, Taler }
+  TCareerDlg = class(TDialogLogic)
   public
     procedure SetupWindow; override;
   end;
@@ -911,6 +922,58 @@ begin
   end;
 end;
 
+{ -- Do_Karriereberatung ---------------------------------------------------- }
+
+procedure Do_Karriereberatung(Parent: Pointer; P: TPlayer);
+var
+  D: TDialog;
+  S: array[0..79] of Char;
+  T: Word;
+begin
+  if not CanBePromoted(P) then
+  begin
+    D := UI.Dialog('CareerDlg', $1ED8, [APtr(Parent), AStr(DSText($246B))]);
+    Move(P, D.Data[$34], SizeOf(TPlayer));
+    UI.Execute(D);
+    UI.Done(D, 1);
+    Exit;
+  end;
+  { "... you may now call yourself <next title>" }
+  T := Word(Byte(P.Title + 1));
+  StrCopy(S, DSText($2442));
+  if P.IsFemale = 0 then
+  begin
+    StrCat(S, DSText($2453));
+    StrCat(S, DSText(T * 25 + $58E8));
+  end
+  else
+  begin
+    StrCat(S, DSText($2458));
+    StrCat(S, DSText(T * 25 + $59FC));
+  end;
+  D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText($245D)), AStr(S)]);
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+{ -- KARRIEREDLG ----------------------------------------------------------- }
+
+procedure TCareerDlg.SetupWindow;
+var
+  P: PPlayer;
+  T: Byte;
+begin
+  P := PPlayer(@D.Data[$34]);
+  T := Byte(P^.Title + 1);
+  C.SetCheck(101, Ord(P^.Population >= DS.PromotionPopulation[T]));
+  C.SetCheck(102, Ord(R48Cmp(DS.PromotionHappiness[T], P^.Happiness) <= 0));
+  C.SetCheck(103, Ord(P^.Land >= DS.PromotionLand[T]));
+  C.SetCheck(104, Ord(ArmyStrength(P^, 1) >= DS.PromotionArmyStrength[T]));
+  C.SetCheck(105, Ord(P^.PalaceParts >= DS.PromotionPalaceParts[T]));
+  C.SetCheck(106, Ord(P^.CathedralParts >= DS.PromotionCathedralParts[T]));
+  C.SetCheck(107, Ord(P^.Taler >= DS.PromotionTaler[T]));
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1084,4 +1147,5 @@ initialization
   RegisterDialogLogic('DemographyDlg', TDemographyDlg);
   RegisterDialogLogic('BudgetDlg', TBudgetDlg);
   RegisterDialogLogic('RankingDlg', TRankingDlg);
+  RegisterDialogLogic('CareerDlg', TCareerDlg);
 end.

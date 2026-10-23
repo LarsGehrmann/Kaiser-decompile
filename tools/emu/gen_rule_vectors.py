@@ -455,6 +455,8 @@ SPECS = {
     'Do_InternationalerVergleich': ('1040:5f7f', ['Wnd', 'A', 'N'], 'none',
                                     ECON + ['J.population', 'J.land', 'J.taler', 'J.title',
                                             'J.palace_parts', 'fame', 'J.fame']),
+    'Do_Karriereberatung': ('1040:3a9d', ['Wnd', 'P'], 'none',
+                            ECON + ['is_female', 'maximize_taxes', 'army1_count', 'army2_count']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1155,6 +1157,7 @@ DIALOG_TESTS = {
     'Do_DemographischeDaten': ['BEVDLG'],
     'Do_Finanzhaushalt': ['HAUSHALTSDLG'],
     'Do_InternationalerVergleich': ['RANGLISTENDLG'],
+    'Do_Karriereberatung': ['KARRIEREDLG'],
 }
 
 
