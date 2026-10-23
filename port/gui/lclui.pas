@@ -30,7 +30,7 @@ type
 implementation
 
 uses
-  Process;
+  {$ifdef windows}MMSystem,{$endif} Process;
 
 { the port writes its annals and records next to its KAISER.INI; it reads
   the original's next to kaiser.exe until it has its own }
@@ -54,7 +54,8 @@ begin
     Result := '';
 end;
 
-{ PlaySound (1070:0002): WAVEDATA resource N with afplay when "Krach &
+{ PlaySound (1070:0002): WAVEDATA resource N (macOS: afplay, Windows:
+  sndPlaySound) when "Krach &
   Geschrei" is on; Async = 0 (the battle) waits for its end (sndPlaySound
   SND_SYNC): the battle's animations show their frames meanwhile. Without
   sound the original counts 500,000 loops instead. (Silent under the
@@ -88,6 +89,13 @@ begin
       S.Free;
     end;
   end;
+  {$ifdef windows}
+  { what the original calls: sndPlaySound (MMSYSTEM.2) }
+  if Async then
+    sndPlaySound(PChar(FN), SND_ASYNC or SND_NODEFAULT)
+  else
+    sndPlaySound(PChar(FN), SND_SYNC or SND_NODEFAULT);
+  {$else}
   with TProcess.Create(nil) do
   try
     Executable := '/usr/bin/afplay';
@@ -100,6 +108,7 @@ begin
   finally
     Free;
   end;
+  {$endif}
 end;
 
 function TLclUI.FormOf(D: TDialog): TKaiserDialog;

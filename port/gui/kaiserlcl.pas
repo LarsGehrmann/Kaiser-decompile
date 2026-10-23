@@ -75,7 +75,8 @@ var
 
 { kaiser.exe next to the program, in ../Kaiser or given as -exe PATH }
 function FindExe: string;
-{ the port's KAISER.INI (Application Support); the original's next to
+{ the port's KAISER.INI (macOS: Application Support, Windows: %APPDATA%\Kaiser);
+  the original's next to
   kaiser.exe is read when the port has none yet }
 function SettingsFile: string;
 function OwnSettingsFile: string;
@@ -113,7 +114,15 @@ end;
 
 function OwnSettingsFile: string;
 begin
+  {$ifdef windows}
+  Result := IncludeTrailingPathDelimiter(GetEnvironmentVariable('APPDATA')) + 'Kaiser\KAISER.INI';
+  {$else}
+  {$ifdef darwin}
   Result := GetUserDir + 'Library/Application Support/Kaiser/KAISER.INI';
+  {$else}
+  Result := GetUserDir + '.config/kaiser/KAISER.INI';
+  {$endif}
+  {$endif}
 end;
 
 function SettingsFile: string;

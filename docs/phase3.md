@@ -102,9 +102,14 @@ GUI links with `-k-ld_classic`.
   aufstellen), granary, warehouse, smithy and tavern.
 - **Info** (502) is the `ABOUTBOX` dialog (DS:04f2; the port had looked for `INFO`). **Hilfe**
   (501, 503: WinHelp KAISER.HLP) opens `docs/manual.md` (tools/help_to_md.py) when found next to
-  the program or in a parent folder, else a message.
-- **Not ported / different:** the right-click unit popups (`ShowUnitLookDlg` 1040:330f) and the
-  toolbar's right-click context help (WinHelp HELP_CONTEXTPOPUP, command + 1000); map clicks do
+  the program or in a parent folder, else a message. The **"?" buttons** of the dialogs and the
+  battle's right click (WinHelp HELP_CONTEXT, topic n) show the topic in a window
+  (`port/gui/helpview.pas`: the number → context string map of `extracted/help/KAISER.hpj`
+  [MAP], the anchor of `docs/manual.md`); the dialog types whose port does not keep the help
+  context (+0x2e) take the constants of their `HelpDlg.Init` calls.
+- **Right click** on a unit of the map: `ShowUnitLookDlg` (1040:330f).
+- **Not ported / different:** the toolbar's right-click context help (WinHelp
+  HELP_CONTEXTPOPUP, command + 1000); map clicks do
   nothing without a running game (the original reads the stale player); the MIDI music; for
   1024×768 the original enables toolbar indices up to DS:4556 = 72 and stops with runtime error
   213 (ui-infra.md), the port clamps to the last tool; after a resolution change the window keeps
@@ -120,6 +125,31 @@ GUI links with `-k-ld_classic`.
   1000:1136), plus `*_live_*` (the form as LCL paints it), then closes; e.g.
   `KAISER_LOAD=$PWD/Kaiser/LARS23.KSR KAISER_AUTOPILOT=/tmp/s KAISER_MAINSHOT=/tmp/s
   port/bin/Kaiser.app/Contents/MacOS/Kaiser`.
+
+### The visual check
+
+An autopilot sweep (every menu command on LARS23.KSR, a new game, a won game, raids, the
+battles; `KAISER_AUTOMENU`, `KAISER_AUTOANSWER=NAME=ID/N`, `KAISER_AUTOMOUSE=NAME=X:Y`, the
+window captured with `screencapture -l`) compared with the templates and the original's paint
+code found, and fixed:
+
+| Where | Problem | Cause, fix |
+|---|---|---|
+| SPIELERNAMEDLG (sex) | the other radio button had to be clicked | LCL unchecks the other radio buttons of a form itself; the original's BS_RADIOBUTTONs change only by program: the port keeps the state the game set (`kaiserlcl.pas`) |
+| ANORDNENDLG | white grids with a black frame, Garde gate at the top | `DrawHeer`/`DrawGarde` (1038:84a1 / 8699) fill with the dialog brush and NULL_PEN; the walls of the disassembly (gate on the left) |
+| ANORDNENDLG | the empty top area | the unit card under the mouse (`DrawUnitInfo` 1038:8921) was missing |
+| GEGNERDLG | an empty right half | the country map (`GegnerDlg.DrawMap` 1038:462f, DS:1526/1530) was missing |
+| UNITLOOKDLG, REKRUTDLG, the unit editor, KROENUNGSDLG | no picture | `DrawUnitPicture` 1040:367b / 1040:55b5, `DrawPortrait` 1038:56b9, the crown of `WMPaint` 1040:4d8c |
+| WIRTSTATDLG, MILSTATDLG, HIGHSCOREDLG | lines through the labels | Windows draws a group box's frame half a text line below its top, also without a caption |
+| SABOTAGEBUDGETDLG | a knob without arrows | 9 × 9 vertical scroll bars are spin controls (`TSpinBar`, the upper arrow = SB_LINEUP) |
+| GEHEIMDLG and others | a squeezed "?" | buttons narrower than 24 pixels are drawn by LCL, not by Cocoa |
+| "?" buttons | nothing happened | the help window (above) |
+| a won game | the coronation every turn | `Victory` (1000:3459) ends with `EndGame` (game state 0) |
+| Kaiser.app | killed at start after a rebuild | `build.sh` writes a new executable and signs the bundle ad hoc |
+
+Kept as in the original: the "⌘"-like `ORNAMENTICON` and the "U" of `UNIICON` (the icons look
+so), the Lagerhalle count 4 units lower (INVESTDLG template), the clipped descender of the
+fourth line of RANGLISTENDLG (7 units high in the template).
 
 ## Running
 
