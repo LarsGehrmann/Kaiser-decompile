@@ -232,6 +232,9 @@ UNIT_SIZE = 0x3d
 # 'header' = the global game record (HEADER). Unit tables are indexed by unit type
 # 0..35 (docs/rules/military.md), promotion tables by the next title 1..10.
 DS = [
+    (0x0500, 'real[0..6]', 'ai_income_factor', 'by cpu_level 1..6: 1.5, 1.3, 1.1, 0.8, 0.7, 0.6 times a positive net income (Ai_Budget 1008:1131)'),
+    (0x052a, 'u8[0..4]', 'ai_king_reward_type', 'unit types a computer player may get as the first Koenig (Ai_FirstKingReward 1008:2e1a)'),
+    (0x0530, 'u8[0..4]', 'ai_king_reward_bonus', 'their rank bonus'),
     (0x0e60, 'u8[0..35]', 'ai_max_units', 'computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9)'),
     (0x2bec, 'u8[0..35]', 'unit_attack_sound', 'battle sound per unit type'),
     (0x2c10, 'u8[0..35]', 'unit_move_sound', ''),

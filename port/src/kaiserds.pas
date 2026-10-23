@@ -16,7 +16,12 @@ type
   { The original data segment (segment 27): tables and globals at their
     original offsets, e.g. DS.Game = DS:6108. Offsets in the comments. }
   TDataSegment = packed record
-    Pad000: array[0..3679] of Byte;
+    Pad000: array[0..1279] of Byte;
+    AiIncomeFactor: array[0..6] of TReal48;  { +0x500 by cpu_level 1..6: 1.5, 1.3, 1.1, 0.8, 0.7, 0.6 times a positive net income (Ai_Budget 1008:1131) }
+    AiKingRewardType: array[0..4] of Byte;  { +0x52a unit types a computer player may get as the first Koenig (Ai_FirstKingReward 1008:2e1a) }
+    Pad52F: array[0..0] of Byte;
+    AiKingRewardBonus: array[0..4] of Byte;  { +0x530 their rank bonus }
+    Pad535: array[0..2346] of Byte;
     AiMaxUnits: array[0..35] of Byte;  { +0xe60 computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9) }
     PadE84: array[0..7527] of Byte;
     UnitAttackSound: array[0..35] of Byte;  { +0x2bec battle sound per unit type }

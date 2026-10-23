@@ -88,6 +88,11 @@ SABOTAGE = ['taverns', 'spell', 'title', 'taler', 'sabotage_agents',
 UNITF = ['U.type', 'U.level', 'U.experience', 'U.ability', 'U.range',
          'U.max_steps', 'U.attack', 'U.defence', 'U.max_hp', 'U.pay',
          'U.hero_portrait', 'spell', 'fame']
+AIM = ['cpu_level', 'ai_aggression_q', 'attitude_q', 'trade_agreement', 'peace_years',
+       'spell', 'title', 'fame', 'income_buildings', 'J.title', 'J.income_buildings',
+       'J.cpu_level']
+AI_CLAMPS = {'cpu_level': (1, 6), 'ai_aggression_q': (1, 6), 'army1_count': (0, 8),
+             'army2_count': (0, 8), 'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}
 SPECS = {
     'GrainCapacity': ('1068:0885', ['P'], 'long', ECON),
     'SmithyOutput': ('1068:0bd3', ['P'], 'long', ECON),
@@ -323,6 +328,54 @@ SPECS = {
                       ARMY + ['population', 'J.population', 'J.army1_count', 'J.army2_count'],
                       {'army1_count': (0, 8), 'army2_count': (0, 8),
                        'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
+    # segment 2: the computer player's year
+    'Ai_Turn': ('1008:0002', ['Wnd', 'W:0:65535', 'A', 'I', 'N', 'Y'], 'none',
+                AIM + ECON + ARMY + ['event', 'h.immortality', 'h.goods_trade_enabled',
+                                     'skip_turn', 'lifetime'], AI_CLAMPS),
+    'Ai_YearlySimulation': ('n1008:01fd', ['A', 'I', 'N', 'W:0:300'], 'none',
+                            AIM + ECON + ARMY + GOODS + ['event', 'flags_5bd_q', 'news_count',
+                                                         'initiative'], AI_CLAMPS),
+    'Ai_Diplomacy': ('n1008:0843', ['A', 'I', 'N', 'W:0:300'], 'none', AIM + ECON, AI_CLAMPS),
+    'Ai_PopulationModel': ('n1008:0ff7', ['P'], 'none', POP + ['immigrants', 'emigrants']),
+    'Ai_Budget': ('n1008:1131', ['A', 'I', 'N'], 'none',
+                  ECON + ['event', 'event', 'cpu_level', 'taler'], AI_CLAMPS),
+    'Ai_GrainPolicy': ('n1008:13b9', ['P'], 'none',
+                       ['grain', 'grain', 'population', 'land', 'land_used', 'grain_price',
+                        'cpu_level', 'taler', 'mills', 'granaries'], AI_CLAMPS),
+    'Ai_LandPolicy': ('n1008:1594', ['A', 'I', 'N', 'W:0:300'], 'none',
+                      BUILD + ['land_price', 'land_price', 'taler', 'population', 'cpu_level',
+                               'J.land'], dict(AI_CLAMPS, land_price=(10, 400))),
+    'Ai_SellGoods': ('n1008:17a5', ['P', 'W:0:300'], 'none', GOODS),
+    'Ai_BuildingPolicy': ('n1008:18ca', ['A', 'I', 'N'], 'none',
+                          BUILD + ['taler', 'taler', 'title', 'spell', 'population',
+                                   'palace_built_this_turn', 'cathedral_built_this_turn',
+                                   'h.goods_trade_enabled'],
+                          dict(AI_CLAMPS, **{b: (0, 400) for b in ('markets', 'mills', 'granaries',
+                                                                    'warehouses', 'taverns',
+                                                                    'smithies')})),
+    'Ai_MilitaryPolicy': ('n1008:2006', ['Wnd', 'A', 'I', 'N'], 'none',
+                          AIM + ARMY + ['taler', 'taler', 'title', 'taverns', 'land_used',
+                                        'u.level', 'u.pay', 'sabotage_agents', 'J.taler',
+                                        'J.land'], AI_CLAMPS),
+    'Ai_ChooseWarTarget': ('1008:24eb', ['Wnd', 'A', 'I', 'N', 'OB:1'], 'byte',
+                           AIM + ARMY + ['title', 'title', 'initiative', 'initiative', 'land',
+                                         'population', 'taler', 'J.cpu_level', 'J.title',
+                                         'J.army1_count'], AI_CLAMPS),
+    'Ai_HoldManoeuvre': ('n1008:296c', ['P'], 'none', ARMY + ['ai_aggression_q', 'initiative'],
+                         AI_CLAMPS),
+    'Ai_EndTurn': ('1008:29ea', ['A', 'I', 'N'], 'none',
+                   POP + ECON + ARMY + ['first_king_bonus', 'skip_turn', 'lifetime',
+                                        'land_price'], dict(AI_CLAMPS, land_price=(10, 400))),
+    'Ai_FirstKingReward': ('n1008:2e1a', ['A', 'I', 'N'], 'none', ARMY + ['spell'], AI_CLAMPS),
+    'Ai_FirstYear': ('n1008:3088', ['P'], 'none', ARMY + ['title', 'title', 'spell'], AI_CLAMPS),
+    'Ai_ReceiveAid': ('n1008:33ad', ['A', 'I', 'J', 'B:0:4', 'L:0:50000'], 'none',
+                      ['attitude_q', 'immigrants']),
+    'Ai_AnswerTrade': ('n1008:34f4', ['A', 'I', 'J', 'N', 'B:5:8'], 'none',
+                       AIM + ['income_buildings', 'J.income_buildings', 'J.cpu_level'], AI_CLAMPS),
+    'Ai_AnswerPeace': ('n1008:37a5', ['A', 'I', 'J', 'N', 'B:9:11', 'L:-5:40'], 'none',
+                       AIM + ARMY + ['J.title', 'J.cpu_level'], AI_CLAMPS),
+    'Ai_AnswerTribute': ('n1008:3abb', ['A', 'I', 'J', 'N', 'B:2:4', 'B:0:6', 'L:-100:50000'],
+                         'none', AIM + ECON + ARMY + ['J.spell'], AI_CLAMPS),
     'PlayerTurnStart': ('1010:37b6', ['Wnd', 'W:0:65535', 'A', 'I', 'N', 'Y'], 'byte',
                         ECON + POP + ARMY + ['cpu_level', 'army_away', 'lifetime', 'report_flags',
                                              'report_flags', 'event', 'event', 'initiative',
@@ -361,6 +414,8 @@ UI_SCRIPTS = {
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'Ai_Turn': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'Ai_MilitaryPolicy': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'PlayerTurnEnd': [('Execute(', lambda rng: (rng.choice([1, 2]), {0x100: b'Neuheld\0'}))],
     'PlayerTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
                         ('Email_AskPassword(', lambda rng: (rng.choice([0, 1, 1, 1]), {})),
@@ -494,10 +549,109 @@ def preset_knights(rng, players, p, num):
     return m
 
 
+def preset_ai(rng, players, p, num):
+    """A computer player: messages from the others, attitudes, treaties."""
+    m = preset_mailbox(rng, players, p, num)
+    aoff, _ = field_info(ks.PLAYER, 'attitude_q')
+    toff, _ = field_info(ks.PLAYER, 'trade_agreement')
+    for j in range(num):
+        a = p * PSIZE + aoff + 2 * j
+        v = struct.pack('<h', rng.choice([rng.randint(-10, 120), 100, rng.randint(0, 60)]))
+        players[a:a + 2] = v
+        m.append((a, v))
+        a = p * PSIZE + toff + j
+        v = bytes([rng.choice([0, 0, 1])])
+        players[a:a + 1] = v
+        m.append((a, v))
+        if j != p and rng.random() < 0.5:          # answers waiting in the others' boxes
+            mail = random_mail(rng)
+            off, _ = field_info(ks.PLAYER, 'mailbox')
+            a = j * PSIZE + off + 6 * p
+            players[a:a + 6] = mail
+            m.append((a, mail))
+    return m
+
+
+def preset_ai_kinds(kinds):
+    """preset_ai, with every message in the test player's box of these kinds."""
+    def preset(rng, players, p, num):
+        m = preset_ai(rng, players, p, num)
+        off, _ = field_info(ks.PLAYER, 'mailbox')
+        for j in range(num):
+            if j == p:
+                continue
+            mail = random_mail(rng)
+            while mail[0] not in kinds:
+                mail = random_mail(rng)
+            a = p * PSIZE + off + 6 * j
+            players[a:a + 6] = mail
+            m.append((a, mail))
+        return m
+    return preset
+
+
+def preset_war(rng, players, p, num):
+    """A strong, aggressive computer player among weak, hated neighbours."""
+    m = preset_ai(rng, players, p, num)
+    for name, v in (('initiative', rng.randint(1, 30)), ('title', rng.randint(2, 9)),
+                    ('army_away', 0), ('army1_count', rng.randint(3, 8)),
+                    ('ai_aggression_q', rng.randint(1, 6)), ('cpu_level', rng.randint(1, 6))):
+        m += set_field(players, p, name, v)
+    poff, _ = field_info(ks.PLAYER, 'peace_years')
+    aoff, _ = field_info(ks.PLAYER, 'attitude_q')
+    for j in range(num):
+        a = p * PSIZE + poff + j
+        players[a:a + 1] = b'\0'
+        m.append((a, b'\0'))
+        a = p * PSIZE + aoff + 2 * j
+        v = struct.pack('<h', rng.randint(-5, 15))
+        players[a:a + 2] = v
+        m.append((a, v))
+        if j != p:
+            m += set_field(players, j, 'cpu_level', rng.choice([0, 1, 2, 3]))
+            m += set_field(players, j, 'army1_count', rng.randint(0, 3))
+            m += set_field(players, j, 'army2_count', rng.randint(0, 2))
+    for i in range(1, 9):                          # strong Heer units
+        base = p * PSIZE + ARMY_BASE[1] + i * ks.UNIT_SIZE
+        u = bytes([rng.randint(1, 8), 0, rng.randint(15, 40), rng.randint(15, 40)])
+        players[base + 0x19:base + 0x1d] = u
+        m.append((base + 0x19, u))
+    return m
+
+
+def preset_land(rng, players, p, num):
+    """Land prices around the computer's valuation (margin 0..15)."""
+    m = preset_ai(rng, players, p, num)
+    # the valuation is 17 + 15 with much unclaimed land, 60 + 15 with little
+    m += set_field(players, p, 'land_price', rng.choice([rng.randint(17, 32), rng.randint(60, 75),
+                                                        rng.randint(15, 80)]))
+    if rng.random() < 0.5:                         # little population: land to sell
+        m += set_field(players, p, 'population', rng.randint(100, 3000))
+    return m
+
+
+def preset_goods(rng, players, p, num):
+    """Goods in stock, prices around the selling thresholds."""
+    m = []
+    for good, price, lo, hi in (('salt', 'price_salt', 5, 15), ('beer', 'price_beer', 35, 55),
+                                ('wine', 'price_wine', 85, 115)):
+        m += set_field(players, p, good, rng.choice([0, rng.randint(1, 5000)]))
+        m += set_field(players, p, price, rng.randint(lo, hi))
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
     'DiplomacyTurnStart': preset_mailbox,
     'PlayerTurnStart': preset_mailbox,
+    **{f: preset_ai for f in ('Ai_Turn', 'Ai_Diplomacy', 'Ai_YearlySimulation',
+                              'Ai_MilitaryPolicy', 'Ai_EndTurn', 'Ai_ReceiveAid')},
+    'Ai_AnswerTrade': preset_ai_kinds((5, 6, 7, 8)),
+    'Ai_AnswerPeace': preset_ai_kinds((9, 10, 11)),
+    'Ai_AnswerTribute': preset_ai_kinds((2, 3, 4)),
+    'Ai_ChooseWarTarget': preset_war,
+    'Ai_LandPolicy': preset_land,
+    'Ai_SellGoods': preset_goods,
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'PlayerTurnEnd': preset_promotion,

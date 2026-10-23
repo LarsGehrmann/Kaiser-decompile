@@ -416,6 +416,61 @@ begin
           'Ai_ArrangeArmies': begin Ai_ArrangeArmies(Pl^, ArgI(0)); Got := '-'; end;
           'Ai_BanditBattle': Got := IntToStr(Ai_BanditBattle(Pl^));
           'Ai_AutoBattle': Got := IntToStr(Ai_AutoBattle(Pl^, Players[ArgI(0)]));
+          'Ai_Turn':
+            begin
+              Ai_Turn(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3));
+              Got := '-';
+            end;
+          'Ai_YearlySimulation':
+            begin
+              Ai_YearlySimulation(Players, ArgI(0), ArgI(1), ArgI(2));
+              Got := '-';
+            end;
+          'Ai_Diplomacy': begin Ai_Diplomacy(Players, ArgI(0), ArgI(1), ArgI(2)); Got := '-'; end;
+          'Ai_PopulationModel': begin Ai_PopulationModel(Pl^); Got := '-'; end;
+          'Ai_Budget': begin Ai_Budget(Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Ai_GrainPolicy': begin Ai_GrainPolicy(Pl^); Got := '-'; end;
+          'Ai_LandPolicy': begin Ai_LandPolicy(Players, ArgI(0), ArgI(1), ArgI(2)); Got := '-'; end;
+          'Ai_SellGoods': begin Ai_SellGoods(Pl^, ArgI(0)); Got := '-'; end;
+          'Ai_BuildingPolicy': begin Ai_BuildingPolicy(Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Ai_MilitaryPolicy':
+            begin
+              Ai_MilitaryPolicy(Window, Players, ArgI(0), ArgI(1));
+              Got := '-';
+            end;
+          'Ai_ChooseWarTarget':
+            begin
+              OutSize := 1;
+              Got := B2S(Ai_ChooseWarTarget(Window, Players, ArgI(0), ArgI(1), OutBuf[0]));
+            end;
+          'Ai_HoldManoeuvre': begin Ai_HoldManoeuvre(Pl^); Got := '-'; end;
+          'Ai_EndTurn': begin Ai_EndTurn(Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Ai_FirstKingReward':
+            begin
+              Ai_FirstKingReward(Players, ArgI(0), ArgI(1));
+              Got := '-';
+            end;
+          'Ai_FirstYear': begin Ai_FirstYear(Pl^); Got := '-'; end;
+          'Ai_ReceiveAid':
+            begin
+              Ai_ReceiveAid(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3));
+              Got := '-';
+            end;
+          'Ai_AnswerTrade':
+            begin
+              Ai_AnswerTrade(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3));
+              Got := '-';
+            end;
+          'Ai_AnswerPeace':
+            begin
+              Ai_AnswerPeace(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3), ArgI(4));
+              Got := '-';
+            end;
+          'Ai_AnswerTribute':
+            begin
+              Ai_AnswerTribute(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3), ArgI(4), ArgI(5));
+              Got := '-';
+            end;
           'PlayerTurnStart':
             Got := B2S(PlayerTurnStart(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3)));
           'PlayerTurnEnd':
