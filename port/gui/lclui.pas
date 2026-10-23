@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census;
+  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports;
 
 type
   TLclUI = class(TGameUI)
@@ -138,6 +138,14 @@ begin
   end
   else if Name = 'Do_UnitEditDlg' then
     Census.Do_UnitEditDlg(Args[0].P, PPlayer(Args[1].P)^, PUnit(Args[2].P)^)
+  else if Name = 'ShowBuildingLossDlg' then
+    Reports.ShowBuildingLossDlg(Args[0].P, PChar(Args[1].P), Args[2].P^, Byte(Args[3].V))
+  else if Name = 'AskWarehousesFull' then
+    Reports.AskWarehousesFull(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
+  else if Name = 'TradeCaravan' then
+    Reports.TradeCaravan(Args[0].P, PPlayer(Args[1].P)^, Word(Args[2].V))
+  else if Name = 'ShowHeroLevelUp' then
+    Reports.ShowHeroLevelUp(Args[0].P, THeroGains(Args[1].P^))
   else if Name = 'Victory' then
     Annals.Victory(Args[0].P, Players^)
   else if Name = 'Annals_Load' then
