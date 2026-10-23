@@ -449,7 +449,7 @@ those tests actually execute: `tools/emu/coverage.py run 150 7` generates 150 ve
 tested function (all `SPECS` and dialog types of `gen_rule_vectors.py`) plus the whole-battle and
 simulator comparisons, with the emulator recording each executed basic block
 (`KAISER_COVERAGE`); `coverage.py report` maps them to the functions of
-`ghidra_out/functions.csv`. Result of 2026-10-23 (44,549 vectors, all identical with the port;
+`ghidra_out/functions.csv`. Result of 2026-10-23 (44,849 vectors, all identical with the port;
 334 whole battles identical; 34 of 34 games identical over 30 turns):
 
 | Segment | Role | Functions | reached | Code bytes | executed | Share |
@@ -457,26 +457,27 @@ simulator comparisons, with the emulator recording each executed basic block
 | 1 | main window, turn loop | 76 | 10 | 15,032 | 1,835 | 12.2 % |
 | 2 | AI | 20 | 19 | 17,113 | 16,938 | 99.0 % |
 | 3 | turn processing | 36 | 35 | 24,385 | 23,890 | 98.0 % |
-| 4 | war | 7 | 3 | 4,520 | 2,300 | 50.9 % |
+| 4 | war | 7 | 5 | 4,520 | 3,921 | 86.7 % |
 | 5 | e-mail game | 7 | 0 | 823 | 5 | 0.6 % |
 | 6 | battle aftermath | 20 | 20 | 5,083 | 5,053 | 99.4 % |
 | 7 | AI | 18 | 17 | 4,377 | 4,318 | 98.7 % |
 | 8 | menu actions (military, diplomacy) | 149 | 140 | 38,148 | 32,433 | 85.0 % |
 | 9 | menu actions (economy, reports) | 194 | 167 | 38,781 | 32,923 | 84.9 % |
-| 10 | battle window | 78 | 57 | 39,788 | 25,767 | 64.8 % |
+| 10 | battle window | 78 | 58 | 39,788 | 25,968 | 65.3 % |
 | 11 | files (INI, annals) | 15 | 1 | 4,996 | 123 | 2.5 % |
 | 12 | dialog base types | 47 | 36 | 3,988 | 2,976 | 74.6 % |
 | 13 | main window drawing | 11 | 1 | 8,838 | 331 | 3.7 % |
-| 14 | rule library | 104 | 103 | 28,549 | 27,909 | 97.8 % |
-| | **segments 1–14** | **782** | **609** | **234,421** | **176,801** | **75.4 %** |
+| 14 | rule library | 104 | 103 | 28,549 | 28,006 | 98.1 % |
+| | **segments 1–14** | **782** | **612** | **234,421** | **178,720** | **76.2 %** |
 
 The game logic (segments 2, 3, 6, 7, 14) runs to 98–99 %; what the tests do not run is mostly
 drawing and window code that the GUI reimplements on the LCL (segments 1, 10, 13; in 8 and 9 the
 `Draw*`/`WMPaint` methods), the file code (11: checked by the round trip of all savegames and
-the annals/records format), the e-mail game (5, not ported) and, in segment 4, `Battle` and
-`FightRaiders`: they open the battle window, so the tests take their parts (BattleSetup, the
-battle window's logic, BattleAftermath, BattleFameAndXp, the raider generation) one by one and
-the GUI's autopilot plays them whole. Segments 15–27 are the Borland runtime and OWL (the Real48
+the annals/records format) and the e-mail game (5 and `BattleEmail` in 4, not ported).
+`Battle` and `FightRaiders` (segment 4) are tested with their battle window's modal run
+scripted (`War_Battle`, `War_FightRaiders`: the BattleWnd's `TDialog.Execute` answers a result
+code 10..13 as the port's UI call `Battle_Execute`, its `Done` does nothing); the window itself
+is the battle tests' and the GUI's. Segments 15–27 are the Borland runtime and OWL (the Real48
 core of segment 26 is tested on its own: `real48.vec`).
 
 ## The headless simulator

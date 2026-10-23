@@ -686,6 +686,10 @@ begin
               Move(WInfo, OutBuf, SizeOf(WInfo));
               OutSize := SizeOf(WInfo);
             end;
+          'War_Battle':
+            Got := IntToStr(War.Battle(Window, Pl^, Save.Players[ArgI(0)], ArgI(1), ArgI(2), ArgI(3)));
+          'War_FightRaiders':
+            Got := IntToStr(FightRaiders(Window, Pl^, ArgI(0), ArgI(1)));
           'War_BattleAftermath':
             begin
               Hx := HexBytes(Args[1]);

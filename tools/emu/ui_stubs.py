@@ -63,6 +63,12 @@ METHODS = {
     0x58: ('GetText', [], 'ptr'),            # HeroNameDlg: the entered name (at +0x100)
 }
 APP_PTR = 0x5bde           # DS: pointer to the OWL application object
+# Battle / FightRaiders under test: the modal run of their BattleWnd
+# (TDialog.Execute, VMT +0x4c, redirected by the DialogDriver) is the port's
+# UI call 'Battle_Execute' (its result code 10..13 from the script);
+# BattleWnd.Done (cursors, bitmaps, timer) does nothing
+BATTLE_DONE = '1048:9a57'
+BATTLE_VMT = 0x2d2c
 TEXT_OFS = 0x100           # where a fake dialog keeps its text result
 # whole functions: name -> (address, far?, argument kinds, returns a value)
 FUNCS = {
@@ -214,6 +220,7 @@ class UILayer:
         self.players_para = players_para
         self.window_alias = None         # a fake window object standing for W
         self.battle_alias = None         # the battle window object: B<offset>
+        self.battle_obj = None           # Battle / FightRaiders: their BattleWnd
         self.chooser = chooser
         self.log = []
         self.objects = []
@@ -235,6 +242,10 @@ class UILayer:
         from kaiser_structs import PLAYER_SIZE
         if (seg, off) == WINDOW or (seg, off) == self.window_alias:
             return 'W'
+        if self.battle_obj is not None:
+            bseg, boff = self.battle_obj
+            if 0 <= seg * 16 + off - (bseg * 16 + boff) < 0xfa7:
+                return 'S'                # (War_Battle / War_FightRaiders: not O<n>)
         if self.battle_alias is not None:
             bseg, boff = self.battle_alias
             rel = seg * 16 + off - (bseg * 16 + boff)
@@ -319,6 +330,12 @@ class UILayer:
             if name not in self.unstub:
                 emu.redirect(addr, self._func_handler(name, far, kinds, has_ret))
         emu.redirect(DRAW_UNIT_STATUS[0], self._draw_unit_status_handler())
+        battle = []
+        self.battle_execute = None       # DialogDriver._execute asks for a BattleWnd
+        if self.unstub & {'Battle', 'FightRaiders'}:
+            self.battle_execute = self._battle_execute_handler()
+            emu.redirect(BATTLE_DONE, lambda: emu.stub_return(6, True))
+            battle = [BATTLE_DONE]
         self.vmt = bytearray(0x80)
         for slot, (name, kinds, has_ret) in METHODS.items():
             para, off = emu.new_stub(self._method_handler(name, kinds, has_ret))
@@ -333,7 +350,7 @@ class UILayer:
         emu.guard_allow = []
         redirected = ([a for n, (a, _) in CTORS.items() if n not in self.unstub] +
                       [f[0] for n, f in FUNCS.items() if n not in self.unstub] +
-                      [DRAW_UNIT_STATUS[0]])
+                      [DRAW_UNIT_STATUS[0]] + battle)
         for addr, size in ALLOWED + [(a, 5) for a in redirected]:   # 5: the patched jump
             si, off = ghidra_seg(addr)
             b = emu.lin(emu.para[si], off)
@@ -345,6 +362,7 @@ class UILayer:
         self.log = []
         self.objects = []
         self.sizes = []
+        self.battle_obj = None
         if hasattr(self, 'driver'):
             self.driver.reset()
         emu.write(emu.ds_para, FAKE_VMT, bytes(self.vmt))
@@ -373,6 +391,9 @@ class UILayer:
                     if hasattr(self, 'driver'):
                         self.driver.set_template(nm.decode('latin-1'), obj)
                 size = 0
+                if self.battle_execute is not None and \
+                        struct.unpack('<H', emu.read(obj[0], obj[1], 2))[0] == BATTLE_VMT:
+                    self.battle_obj = obj        # the port's battle window is its own record
                 self.objects.append(obj)
                 self.sizes.append(size)
                 self.log.append(f'{entry}=O{k + 1}')
@@ -423,6 +444,19 @@ class UILayer:
                 entry += f'={ax}' + ''.join(f'+{o:x}:{b.hex()}' for o, b in sorted(data.items()))
             self.log.append(entry)
             emu.stub_return(4 + n, True, ax, dx)
+        return handler
+
+    def _battle_execute_handler(self):
+        def handler():
+            emu = self.emu
+            off, seg = emu.stack_words(2, 4)
+            vmt = struct.unpack('<H', emu.read(seg, off, 2))[0]
+            if vmt != BATTLE_VMT:
+                raise RuntimeError(f'TDialog.Execute of VMT {vmt:#x}')
+            entry = f'Battle_Execute({self.sym(seg, off)})'
+            ax, _ = self.chooser(entry, 'func')
+            self.log.append(f'{entry}={ax}')
+            emu.stub_return(4, True, ax)
         return handler
 
     def _draw_unit_status_handler(self):

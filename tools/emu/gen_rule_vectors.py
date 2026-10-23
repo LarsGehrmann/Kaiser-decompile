@@ -434,6 +434,13 @@ SPECS = {
     'War_BattleAftermath': ('n1018:0664', ['Wnd', 'P', 'PJ', 'INFO', 'RES', 'B:10:13'], 'none',
                             BUILD + ['cpu_level', 'J.cpu_level', 'initiative', 'J.army1_count',
                                      'J.army2_count', 'J.population', 'J.taler']),
+    # Battle / FightRaiders: the battle window's modal run is answered by the
+    # UI script (Execute of the BattleInit object: its result code)
+    'War_Battle': ('1018:0558', ['Wnd', 'P', 'PJ', 'I', 'J', 'B:0:1'], 'byte',
+                   ARMY + ['J.army1_count', 'J.army2_count', 'J.cpu_level', 'cpu_level',
+                           'J.army_away', 'title', 'J.title', 'fame', 'J.fame']),
+    'War_FightRaiders': ('1018:0c5f', ['Wnd', 'P', 'I', 'B:1:2'], 'byte',
+                         ARMY + ['army_away', 'fame', 'weapons', 'cpu_level', 'title']),
     # segments 8 and 9: the menu actions with their dialog types (DIALOG_TESTS)
     'Do_LandHandeln': ('1040:7e4b', ['Wnd', 'A', 'I', 'N'], 'none',
                        ['taler', 'land', 'land_used', 'land_price', 'J.land']),
@@ -650,6 +657,10 @@ UI_SCRIPTS = {
                          ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
                          ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
     'TradeCaravan': [('Execute(', lambda rng: (rng.choice([1, 1, 2]), {}))],
+    # the battle window's result codes (EndBattle: 10..13)
+    **{f: [('Battle_Execute(', lambda rng: (rng.choice([10, 11, 12, 13]), {})),
+           ('Execute(', lambda rng: (rng.choice([1, 2]), {}))]
+       for f in ('War_Battle', 'War_FightRaiders')},
     'NextPlayer': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
                    ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
                    ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
@@ -1351,6 +1362,10 @@ HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
 
 # menu actions whose dialogs run for real (tools/emu/dlg_driver.py): the
 # templates of their dialogs, in the order they open
+# specs whose function is a UI stub for its callers (ui_stubs.FUNCS): it runs
+# for real when it is the tested function
+UNSTUB = {'War_Battle': ['Battle'], 'War_FightRaiders': ['FightRaiders']}
+
 DIALOG_TESTS = {
     'Do_LandHandeln': ['LANDDLG'],
     'Do_KornVerteilen': ['KORNDLG'],
@@ -1823,6 +1838,7 @@ def main():
     emu = KaiserEmu()
     sp = emu.scratch_para
     real = [f for f in funcs if f in DIALOG_TESTS]
+    real += [n for f in funcs for n in UNSTUB.get(f, [])]
     # Dlg_<type>: that constructor runs for real (KaiserDlg's stays: its
     # inherited path builds every dialog object)
     real += [f[4:] for f in funcs if f.startswith('Dlg_') and f != 'Dlg_KaiserDlg']

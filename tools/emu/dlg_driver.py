@@ -338,6 +338,10 @@ class DialogDriver:
         ss = emu.uc.reg_read(UC_X86_REG_SS)
         sp = emu.uc.reg_read(UC_X86_REG_SP)
         ip, cs, so, sseg = struct.unpack('<4H', emu.read(ss, sp, 8))
+        from ui_stubs import BATTLE_VMT
+        if self.ui.battle_execute is not None and \
+                struct.unpack('<H', emu.read(sseg, so, 2))[0] == BATTLE_VMT:
+            return self.ui.battle_execute()          # the battle window: scripted
         if self.run is not None:                     # a dialog opened by a dialog
             self.stack.append((self.run, self.script, self.end_code))
         ctx = self.dialogs.get((sseg, so))
