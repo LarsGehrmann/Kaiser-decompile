@@ -60,6 +60,11 @@ procedure Do_Abkommen(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: By
 { Tribut fordern (1038:2ca5): demand Taler, land, people, a trade agreement
   or peace from another player }
 procedure Do_TributFordern(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+{ Sabotage (1038:3564): SABOTAGEBUDGETDLG on a copy of all players }
+procedure Do_Sabotage(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+{ 'Zuschlagen!' against Target (1038:35bf): SABOTAGEWAHLDLG, SabotageAction
+  and its report }
+procedure SabotageStrike(Parent: Pointer; var Players: TPlayers; Me, NumPlayers, Target: Byte);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -236,6 +241,30 @@ type
     procedure UpdateRadios;
     function Handle(Id: SmallInt): Boolean; override;
     function CanClose: Boolean; override;
+  end;
+
+  { SABOTAGEBUDGETDLG (VMT DS:13d2, 1038:38ef, a HelpDlg): all players at
+    +0x34, Me +0x4486, the number of players +0x4487, the other players
+    +0x4488; per row i: statics 101+i country, 201+i agents, 401+i budget,
+    601+i years to the next strike, scroll bar 301+i budget, 501+i strike }
+  TSabotageBudgetDlg = class(TDialogLogic)
+  public
+    function Players: PPlayers;
+    function Me: PPlayer;
+    function Row(I: Integer): Byte;
+    procedure SetupWindow; override;
+    procedure UpdateRows;
+    procedure ShowYears(I: Integer; Empty: Word);
+    function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { SABOTAGEWAHLDLG (VMT DS:1306, 1038:3411, a HelpDlg): the target's name
+    +0x34; buttons 201..205 end with 1..5, 206 with 0 }
+  TSabotageWahlDlg = class(TDialogLogic)
+  public
+    procedure Init; override;
+    procedure SetupWindow; override;
+    function Handle(Id: SmallInt): Boolean; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -1675,6 +1704,243 @@ begin
   end;
 end;
 
+{ -- Sabotage --------------------------------------------------------------- }
+
+function ResId(Id: Word): PChar; inline;
+begin
+  Result := PChar(PtrUInt(Id));
+end;
+
+procedure Do_Sabotage(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  D: TDialog;
+  I, K, Last: Byte;
+begin
+  D := UI.Dialog('SabotageBudgetDlg', $13D2, [APtr(Parent), AStr(DSText($142A))]);
+  Move(Players, D.Data[$34], SizeOf(TPlayers));
+  D.Data[$4486] := Me;
+  D.Data[$4487] := NumPlayers;
+  K := 0;
+  Last := Byte(NumPlayers - 1);
+  I := 0;
+  repeat
+    if I <> Me then
+    begin
+      D.Data[$4488 + K] := I;
+      Inc(K);
+    end;
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+  UI.Execute(D);
+  Move(D.Data[$34], Players, SizeOf(TPlayers));
+  UI.Done(D, 1);
+end;
+
+function TSabotageBudgetDlg.Players: PPlayers;
+begin
+  Result := PPlayers(@D.Data[$34]);
+end;
+
+function TSabotageBudgetDlg.Me: PPlayer;
+begin
+  Result := @Players^[D.Data[$4486]];
+end;
+
+function TSabotageBudgetDlg.Row(I: Integer): Byte;
+begin
+  Result := D.Data[$4488 + I];
+end;
+
+procedure TSabotageBudgetDlg.SetupWindow;
+var
+  I, Last: Byte;
+begin
+  Last := Byte(D.Data[$4487] - 2);
+  I := 0;
+  repeat
+    C.SetText(101 + I, DS.CountryNamesRt[Players^[Row(I)].Country]);
+    C.SetRange(301 + I, 0, (Me^.Title + 1) * 5);
+    C.SetPosition(301 + I, PByte(@Me^.SabotageBudget)[Row(I)]);
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+  I := Byte(D.Data[$4487] - 1);
+  if I <= 8 then
+    repeat
+      C.Show(301 + I, 0);                    { the unused rows' scroll bars }
+      if I = 8 then
+        Break;
+      Inc(I);
+    until False;
+  UpdateRows;
+end;
+
+{ the years until the next strike is possible ('' when ready) }
+procedure TSabotageBudgetDlg.ShowYears(I: Integer; Empty: Word);
+var
+  Buf: array[0..31] of Char;
+  Y: SmallInt;
+  M, T: Byte;
+begin
+  M := D.Data[$4486];
+  T := Row(I);
+  Y := SabotageYearsToNextOp(Players^, M, T);
+  if Y < 1 then
+    StrCopy(Buf, DSText(Empty))
+  else
+    IntToPChar(Buf, Y);
+  C.SetText(601 + I, Buf);
+end;
+
+procedure TSabotageBudgetDlg.UpdateRows;
+var
+  I, Last: Byte;
+  Buf: array[0..31] of Char;
+begin
+  Last := Byte(D.Data[$4487] - 2);
+  I := 0;
+  repeat
+    SetNumber(C, 201 + I, PByte(@Me^.SabotageAgents)[Row(I)]);
+    IntToPChar(Buf, PByte(@Me^.SabotageBudget)[Row(I)] * 100);
+    StrCat(Buf, DSText($1474));                  { ' Taler' }
+    C.SetText(401 + I, Buf);
+    if PByte(@Me^.SabotageAgents)[Row(I)] = 0 then
+      C.Show(501 + I, 0)
+    else
+      C.Show(501 + I, 5);
+    ShowYears(I, $147A);
+    if I = Last then
+      Break;
+    Inc(I);
+  until False;
+end;
+
+function TSabotageBudgetDlg.Handle(Id: SmallInt): Boolean;
+var
+  I: Integer;
+  Buf: array[0..31] of Char;
+begin
+  Result := True;
+  case Id of
+    301..309:
+      begin
+        I := Id - 301;
+        PByte(@Me^.SabotageBudget)[Row(I)] := Byte(C.GetPosition(Id));
+        IntToPChar(Buf, PByte(@Me^.SabotageBudget)[Row(I)] * 100);
+        StrCat(Buf, DSText($147C));
+        C.SetText(401 + I, Buf);
+        ShowYears(I, $1482);
+      end;
+    501..509:
+      begin
+        SabotageStrike(D, Players^, D.Data[$4486], D.Data[$4487], Row(Id - 501));
+        UpdateRows;
+      end;
+  else
+    Result := False;
+  end;
+end;
+
+procedure TSabotageWahlDlg.Init;
+begin
+  StrCopy(PChar(@D.Data[$34]), PChar(Args[2].P));
+end;
+
+procedure TSabotageWahlDlg.SetupWindow;
+begin
+  C.SetText(101, PChar(@D.Data[$34]));
+end;
+
+function TSabotageWahlDlg.Handle(Id: SmallInt): Boolean;
+begin
+  case Id of
+    201..205: C.EndDlg(Id - 200);
+    206: C.EndDlg(0);
+  else
+    Exit(False);
+  end;
+  Result := True;
+end;
+
+procedure SabotageStrike(Parent: Pointer; var Players: TPlayers; Me, NumPlayers, Target: Byte);
+var
+  Name: array[0..127] of Char;
+  D: TDialog;
+  Code: SmallInt;
+  Kind, Caught: Byte;
+  Amount: LongInt;
+  Ok: Boolean;
+begin
+  FormatPlayerTitle(Players[Target], Name, 0, 0);
+  D := UI.Dialog('SabotageWahlDlg', $1306, [APtr(Parent), AStr(DSText($143C)), AStr(Name)]);
+  Kind := 0;
+  Code := UI.Execute(D);
+  if Code = 0 then
+    Exit;                                       { no Done: as the original }
+  case Code of
+    1:                                          { Zuendeln und Kokeln }
+      if Players[Target].PalaceParts < 2 then
+        case Random(3) of
+          0: Kind := 1;
+          1: Kind := 3;
+          2: Kind := 4;
+        end
+      else
+        Kind := 2;
+    2:                                          { Diffamieren }
+      case Random(3) of
+        0: Kind := 7;
+        1: Kind := 8;
+        2: Kind := 9;
+      end;
+    3:                                          { Kampfkraft zersetzen }
+      case Random(4) of
+        0: Kind := 4;
+        1: Kind := 5;
+        2: Kind := 6;
+        3: Kind := $0B;
+      end;
+    4:                                          { Ruinieren }
+      if Random(5) = 0 then
+        Kind := $0D
+      else
+        Kind := $0E;
+    5:                                          { Anschlag auf Leib und Leben }
+      case Random(3) of
+        0: Kind := 10;
+        1: Kind := $0B;
+        2: Kind := $0C;
+      end;
+  end;
+  UI.Done(D, 1);
+  Ok := SabotageAction(Players, NumPlayers, Me, Target, Kind, Amount, Caught);
+  if not Ok then
+  begin
+    if Caught = 0 then
+      D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($1460))])   { VERSAGT1 }
+    else
+      D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($144C))]);  { VERSAGT2 }
+  end
+  else
+  begin
+    if Amount <= 0 then
+      StrCopy(Name, DSText($144B))
+    else if (Kind = 5) or (Kind = 6) then
+      StrCopy(Name, DSText($4BBC + Amount * 25))          { a unit type }
+    else
+      IntToPChar(Name, Amount);
+    if Caught = 0 then
+      D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(ResId(700 + Kind)), AStr(Name)])
+    else
+      D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(ResId(750 + Kind)), AStr(Name)]);
+  end;
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1857,4 +2123,6 @@ initialization
   RegisterDialogLogic('AmountDlg', TAmountDlg);
   RegisterDialogLogic('AbkommenDlg', TAbkommenDlg);
   RegisterDialogLogic('TributDlg', TTributDlg);
+  RegisterDialogLogic('SabotageBudgetDlg', TSabotageBudgetDlg);
+  RegisterDialogLogic('SabotageWahlDlg', TSabotageWahlDlg);
 end.

@@ -613,6 +613,7 @@ begin
           'CmSpiel': begin Do_Spiel(Window); Got := '-'; end;
           'Do_Abkommen': begin Do_Abkommen(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
           'Do_TributFordern': begin Do_TributFordern(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Do_Sabotage': begin Do_Sabotage(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin

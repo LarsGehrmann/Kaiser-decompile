@@ -478,6 +478,9 @@ SPECS = {
     'Do_TributFordern': ('1038:2ca5', ['Wnd', 'A', 'I', 'N'], 'none',
                          ['J.peace_years', 'J.trade_agreement', 'fame', 'J.mailbox', 'spell',
                           'J.land', 'J.population', 'J.taler', 'h.initiative_enabled']),
+    'Do_Sabotage': ('1038:3564', ['Wnd', 'A', 'I', 'N'], 'none',
+                    ['sabotage_agents', 'sabotage_budget', 'sabotage_funds', 'title',
+                     'J.palace_parts', 'taler', 'J.fame', 'J.army1_count']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1199,6 +1202,7 @@ DIALOG_TESTS = {
     'CmSpiel': ['SZENARIENINFODLG'],
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
     'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
+    'Do_Sabotage': ['SABOTAGEBUDGETDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG'],
 }
 
 
