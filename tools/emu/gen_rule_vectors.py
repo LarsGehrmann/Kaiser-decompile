@@ -907,6 +907,7 @@ def main():
             ui.reset()
             ui.chooser = make_chooser(func, rng)
             emu.write(emu.ds_para, HDR_DS, bytes(header))
+            emu.write(sp, 0, bytes(10 * PSIZE))     # no players of an earlier vector
             emu.write(sp, 0, bytes(players))
             emu.write(sp, OUT_AREA, bytes(0x1000))
             # runtime country adjectives (DS:6696) as a new game sets them
