@@ -238,6 +238,7 @@ DS = [
     (0x0e60, 'u8[0..35]', 'ai_max_units', 'computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9)'),
     (0x1bb8, 's32[0..3]', 'grain_trade_amounts', 'KORNDLG buttons: 100000, 10000, 1000, 100 Scheffel'),
     (0x1bc8, 's32[0..4]', 'land_trade_amounts', 'LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen'),
+    (0x22b6, 's16[1..4]', 'prokurist_ranges', 'PROKURADLG slider ranges: salt 100, beer 200, wine 500, weapons 1000'),
     (0x2b83, 'u8[0..14]', 'battle_hardness', 'AttackObject: Random(hardness) per terrain code (wall 5, market 5, mill 4, palace 8, cathedral 10, ...)'),
     (0x2b92, 'u8[0..1]', 'battle_side_code_b', 'the same as battle_side_code (AiTryAttack)'),
     (0x2b94, 'u8[1..8]', 'battle_att_city_x', 'start positions, army slot 1..8: attacker in a city battle'),

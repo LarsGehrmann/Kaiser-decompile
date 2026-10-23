@@ -193,6 +193,12 @@ begin
         Do_SteuernFestsetzen(Self, 0, FSave.Players[DS.Game.CurrentPlayer]);
         Invalidate;
       end;
+    205:                                        { CmHandelMitGuetern 1000:168c }
+      if (DS.Game.GameState = 1) and (DS.Game.GoodsTradeEnabled <> 0) then
+      begin
+        Do_HandelMitGuetern(Self, FSave.Players[DS.Game.CurrentPlayer]);
+        Invalidate;
+      end;
     203:                                        { CmGebaeude 1000:1611 }
       if DS.Game.GameState = 1 then
       begin

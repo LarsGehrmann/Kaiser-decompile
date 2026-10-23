@@ -337,7 +337,7 @@ class UILayer:
                     off_s, seg_s = args[len(args) - 4 + 0], args[len(args) - 4 + 1]
                     nm = self.cstring(seg_s, off_s) if seg_s else b''
                     if hasattr(self, 'driver'):
-                        self.driver.set_template(nm.decode('latin-1'))
+                        self.driver.set_template(nm.decode('latin-1'), obj)
                 size = 0
                 self.objects.append(obj)
                 self.sizes.append(size)

@@ -23,6 +23,9 @@ procedure Do_Gebaeude(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: By
 { Steuern festsetzen (1040:669d): STEUERDLG on a copy of the player; HWnd
   is the main window's handle (for the help) }
 procedure Do_SteuernFestsetzen(Parent: Pointer; HWnd: Word; var P: TPlayer);
+{ Handel mit Guetern (1040:1439): GUETERHANDELDLG on a copy of the player,
+  the Prokurist (PROKURADLG) from its button 601 }
+procedure Do_HandelMitGuetern(Parent: Pointer; var P: TPlayer);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -70,6 +73,31 @@ type
     procedure SetPositions;
     procedure SetupWindow; override;
     procedure UpdateLabels;
+    function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { GUETERHANDELDLG (VMT DS:1ab8, 1040:14a9, a HelpDlg): the player at
+    +0x34, sold this time +0x709 (4 longints); scroll bars 301..304 sell
+    salt, beer, wine, weapons; statics 101..104 prices, 201..204 stock,
+    401..404 sold, 501 free warehouse space, 502 Taler; 601 Prokurist }
+  TGoodsDlg = class(TDialogLogic)
+  public
+    function Me: PPlayer;
+    function Sold(I: Integer): PLongInt;
+    procedure SetupWindow; override;
+    procedure UpdateLabels;
+    procedure SellGood(I: Integer);
+    function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { PROKURADLG (VMT DS:1a3a, 1040:1a39, a HelpDlg): the player at +0x34;
+    scroll bars 301..304 the minimum prices (ranges DS:22b6), statics
+    101..104, check boxes 201..204 sell automatically }
+  TProkuristDlg = class(TDialogLogic)
+  public
+    function Me: PPlayer;
+    procedure SetupWindow; override;
+    procedure Update;
     function Handle(Id: SmallInt): Boolean; override;
   end;
 
@@ -502,6 +530,163 @@ begin
   UpdateLabels;
 end;
 
+{ -- Do_HandelMitGuetern ----------------------------------------------------- }
+
+procedure Do_HandelMitGuetern(Parent: Pointer; var P: TPlayer);
+var
+  D: TDialog;
+begin
+  D := UI.Dialog('GoodsDlg', $1AB8, [APtr(Parent), AStr(DSText($229A))]);
+  Move(P, D.Data[$34], SizeOf(TPlayer));
+  if UI.Execute(D) = 1 then
+    Move(D.Data[$34], P, SizeOf(TPlayer));
+  UI.Done(D, 1);
+end;
+
+{ -- GUETERHANDELDLG ------------------------------------------------------- }
+
+{ good I = 1..4 (salt, beer, wine, weapons): stock and price }
+function GoodStock(P: PPlayer; I: Integer): PLongInt;
+begin
+  Result := PLongInt(@PByte(@P^.Salt)[4 * (I - 1)]);
+end;
+
+function GoodPrice(P: PPlayer; I: Integer): LongInt;
+begin
+  Result := PLongInt(@PByte(@P^.PriceSalt)[4 * (I - 1)])^;
+end;
+
+function TGoodsDlg.Me: PPlayer;
+begin
+  Result := PPlayer(@D.Data[$34]);
+end;
+
+function TGoodsDlg.Sold(I: Integer): PLongInt;
+begin
+  Result := PLongInt(@D.Data[$705 + 4 * I]);
+end;
+
+procedure TGoodsDlg.SetupWindow;
+var
+  I: Integer;
+begin
+  for I := 1 to 4 do
+  begin
+    if GoodStock(Me, I)^ = 0 then
+      C.Enable(300 + I, False)
+    else
+      C.SetRange(300 + I, 0, SmallInt(GoodStock(Me, I)^));
+    SetNumber(C, 100 + I, GoodPrice(Me, I));
+    Sold(I)^ := 0;
+  end;
+  C.Enable(601, Me^.Warehouses > 0);
+  UpdateLabels;
+end;
+
+procedure TGoodsDlg.UpdateLabels;
+var
+  I: Integer;
+begin
+  for I := 1 to 4 do
+  begin
+    SetNumber(C, 200 + I, GoodStock(Me, I)^);
+    SetNumber(C, 400 + I, Sold(I)^);
+  end;
+  SetNumber(C, 501, WarehouseFreeSpace(Me^));
+  SetNumber(C, 502, Me^.Taler);
+end;
+
+{ the scroll bar of good I says how much is sold in all }
+procedure TGoodsDlg.SellGood(I: Integer);
+var
+  Delta, Gain: LongInt;
+begin
+  Delta := LongInt(C.GetPosition(300 + I) - Sold(I)^);
+  GoodStock(Me, I)^ := LongInt(GoodStock(Me, I)^ - Delta);
+  Gain := LongInt(Int64(GoodPrice(Me, I)) * Delta);
+  Me^.Taler := LongInt(Me^.Taler + Gain);
+  Me^.TotalGoodsSales := LongInt(Me^.TotalGoodsSales + Gain);
+  Sold(I)^ := LongInt(Sold(I)^ + Delta);
+  UpdateLabels;
+end;
+
+function TGoodsDlg.Handle(Id: SmallInt): Boolean;
+var
+  E: TDialog;
+begin
+  Result := True;
+  case Id of
+    301..304: SellGood(Id - 300);
+    601:
+      begin
+        E := UI.Dialog('ProkuristDlg', $1A3A, [APtr(D), AStr(DSText($22AA))]);
+        Move(D.Data[$34], E.Data[$34], SizeOf(TPlayer));
+        if UI.Execute(E) = 1 then
+          Move(E.Data[$34], D.Data[$34], SizeOf(TPlayer));
+        UI.Done(E, 1);
+      end;
+  else
+    Result := False;
+  end;
+end;
+
+{ -- PROKURADLG ------------------------------------------------------------ }
+
+function TProkuristDlg.Me: PPlayer;
+begin
+  Result := PPlayer(@D.Data[$34]);
+end;
+
+procedure TProkuristDlg.SetupWindow;
+var
+  I: Integer;
+begin
+  for I := 1 to 4 do
+  begin
+    C.SetRange(300 + I, 0, DS.ProkuristRanges[I]);
+    C.SetPosition(300 + I, PSmallInt(@PByte(@Me^.ProkuristMinSalt)[2 * (I - 1)])^);
+  end;
+  Update;
+end;
+
+procedure TProkuristDlg.Update;
+var
+  I: Integer;
+  MinPrice: PSmallInt;
+begin
+  for I := 1 to 4 do
+  begin
+    MinPrice := PSmallInt(@PByte(@Me^.ProkuristMinSalt)[2 * (I - 1)]);
+    MinPrice^ := C.GetPosition(300 + I);
+    SetNumber(C, 100 + I, MinPrice^);
+    if PByte(@Me^.ProkuristSalt)[I - 1] = 0 then
+    begin
+      C.SetCheck(200 + I, 0);
+      C.Enable(300 + I, False);
+    end
+    else
+    begin
+      C.SetCheck(200 + I, 1);
+      C.Enable(300 + I, True);
+    end;
+  end;
+end;
+
+function TProkuristDlg.Handle(Id: SmallInt): Boolean;
+begin
+  Result := True;
+  case Id of
+    301..304: Update;
+    201..204:
+      begin
+        PByte(@Me^.ProkuristSalt)[Id - 201] := Ord(PByte(@Me^.ProkuristSalt)[Id - 201] = 0);
+        Update;
+      end;
+  else
+    Result := False;
+  end;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -670,4 +855,6 @@ initialization
   RegisterDialogLogic('GrainDlg', TGrainDlg);
   RegisterDialogLogic('InvestDlg', TInvestDlg);
   RegisterDialogLogic('TaxDlg', TTaxDlg);
+  RegisterDialogLogic('GoodsDlg', TGoodsDlg);
+  RegisterDialogLogic('ProkuristDlg', TProkuristDlg);
 end.

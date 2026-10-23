@@ -437,6 +437,15 @@ SPECS = {
     'Do_SteuernFestsetzen': ('1040:669d', ['Wnd', 'W:0:0', 'P'], 'none',
                              ['tax_rate', 'justice', 'asylum_law', 'maximize_taxes', 'title',
                               'population', 'happiness', 'taler']),
+    'Do_HandelMitGuetern': ('1040:1439', ['Wnd', 'P'], 'none',
+                            ['salt', 'beer', 'wine', 'weapons', 'warehouses', 'taler',
+                             'prokurist_salt', 'prokurist_beer', 'prokurist_wine',
+                             'prokurist_weapons', 'prokurist_min_wine'],
+                            # the labels are formatted into an 11-byte buffer
+                            # next to the loop counter: below -999,999,999
+                            # the counter is overwritten (an endless loop)
+                            {'salt': (0, 3000000), 'beer': (0, 3000000), 'wine': (0, 3000000),
+                             'weapons': (0, 3000000), 'taler': (-99999999, 999999999)}),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1133,6 +1142,7 @@ DIALOG_TESTS = {
     'Do_KornVerteilen': ['KORNDLG'],
     'Do_Gebaeude': ['INVESTDLG'],
     'Do_SteuernFestsetzen': ['STEUERDLG'],
+    'Do_HandelMitGuetern': ['GUETERHANDELDLG', 'PROKURADLG', 'PROKURADLG'],
 }
 
 
@@ -1428,6 +1438,8 @@ def main():
                     rv = '-'
             except EmuError:
                 if emu.last_runerror is None:
+                    if os.environ.get('KAISER_DEBUG_UI'):
+                        print('|'.join(ui.log), file=sys.stderr)
                     raise
                 rv = f'E{emu.last_runerror}'
             out_vals = []

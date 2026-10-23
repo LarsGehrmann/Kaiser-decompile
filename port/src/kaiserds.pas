@@ -26,7 +26,9 @@ type
     PadE84: array[0..3379] of Byte;
     GrainTradeAmounts: array[0..3] of LongInt;  { +0x1bb8 KORNDLG buttons: 100000, 10000, 1000, 100 Scheffel }
     LandTradeAmounts: array[0..4] of LongInt;  { +0x1bc8 LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen }
-    Pad1BDC: array[0..4006] of Byte;
+    Pad1BDC: array[0..1753] of Byte;
+    ProkuristRanges: array[1..4] of SmallInt;  { +0x22b6 PROKURADLG slider ranges: salt 100, beer 200, wine 500, weapons 1000 }
+    Pad22BE: array[0..2244] of Byte;
     BattleHardness: array[0..14] of Byte;  { +0x2b83 AttackObject: Random(hardness) per terrain code (wall 5, market 5, mill 4, palace 8, cathedral 10, ...) }
     BattleSideCodeB: array[0..1] of Byte;  { +0x2b92 the same as battle_side_code (AiTryAttack) }
     BattleAttCityX: array[1..8] of Byte;  { +0x2b94 start positions, army slot 1..8: attacker in a city battle }

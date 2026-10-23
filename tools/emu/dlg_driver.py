@@ -90,10 +90,13 @@ class DialogDriver:
         self.reset()
         self._install()
 
-    def set_template(self, name):
-        """The dialog being built: its template gives the control styles
-        and initial texts."""
+    def set_template(self, name, obj=None):
+        """The dialog being built (object obj = (seg, off)): its template
+        gives the control styles and initial texts."""
         self.template = {}
+        self.by_id = {}
+        if obj is not None:
+            self.dialogs[obj] = {'template': self.template, 'by_id': self.by_id}
         for r in self.emu.ne.resources:
             if r.type_id == 5 and str(r.res_id).upper() == name.upper():
                 d = r.data
@@ -135,6 +138,9 @@ class DialogDriver:
         self.scripts = []            # one event list per real dialog (in order)
         self.end_code = None
         self.template = {}           # id -> (class, style) of the running dialog
+        self.dialogs = {}            # dialog object -> its template and controls
+        self.run = None
+        self.stack = []              # the runs of the dialogs a nested dialog interrupts
 
     # -- helpers ------------------------------------------------------------
     def _stack(self, n, skip=4):
@@ -194,12 +200,15 @@ class DialogDriver:
                 cid -= 0x10000
             k = len(self.controls)
             seg, off = emu.scratch_para + CTL_SEG, 0x10 + 0x20 * k
-            cls, style, text = self.template.get(cid, ('', 0, b''))
+            ctx = self.dialogs.get((args[-1], args[-2]))     # the parent dialog
+            template = ctx['template'] if ctx else self.template
+            by_id = ctx['by_id'] if ctx else self.by_id
+            cls, style, text = template.get(cid, ('', 0, b''))
             c = Control(kind, cid, style)
             if kind in ('static', 'edit'):
                 c.text = text
             self.controls[(seg, off)] = c
-            self.by_id[cid] = c
+            by_id[cid] = c
             emu.stub_return(6 + n, True, off, seg)
         return handler
 
@@ -296,6 +305,11 @@ class DialogDriver:
         ss = emu.uc.reg_read(UC_X86_REG_SS)
         sp = emu.uc.reg_read(UC_X86_REG_SP)
         ip, cs, so, sseg = struct.unpack('<4H', emu.read(ss, sp, 8))
+        if self.run is not None:                     # a dialog opened by a dialog
+            self.stack.append((self.run, self.script, self.end_code))
+        ctx = self.dialogs.get((sseg, so))
+        if ctx:
+            self.by_id, self.template = ctx['by_id'], ctx['template']
         self.run = {'ret': (cs, ip), 'sp': sp + 8, 'self': (sseg, so), 'step': 0,
                     'base': sp - 0x40, 'pending': None}
         self.end_code = None
@@ -327,6 +341,13 @@ class DialogDriver:
         emu.uc.reg_write(UC_X86_REG_CS, cs)
         emu.uc.reg_write(UC_X86_REG_IP, ip)
         self.ui.log.append(f'=>{code}')
+        if self.stack:
+            self.run, self.script, self.end_code = self.stack.pop()
+            ctx = self.dialogs.get(self.run['self'])
+            if ctx:
+                self.by_id, self.template = ctx['by_id'], ctx['template']
+        else:
+            self.run = None
 
     def _next(self):
         """A dialog method returned into the driver: the next event."""

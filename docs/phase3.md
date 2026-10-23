@@ -189,13 +189,16 @@ their templates:
   (`c<id>` click, `s<id>:<pos>` scroll, `l<id>:<idx>` list selection, `t<id>:<hex>` typed
   text, `ok`, `cancel`, dialogs separated by `/`) through the type's DMT handlers. OK runs
   `CanClose` and ends with 1, Cancel ends with 2; events on disabled controls are ignored.
-  Memory comes from a bump allocator; GDI calls (drawing) return 0 unlogged.
+  Memory comes from a bump allocator; GDI calls (drawing) return 0 unlogged. A dialog
+  opened by a dialog's handler (the Prokurist from the goods dialog) runs nested with the next
+  script; each dialog object keeps its own controls.
 - The port: dialog types are `TDialogLogic` classes in `port/src/actions.pas`, registered by
   the constructor name; they work on `D.Data` laid out like the original object and reach the
   controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
   and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`).
 
-`port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100).
+`port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
+`Do_HandelMitGuetern` with the Prokurist (100).
 
 ## The headless simulator
 

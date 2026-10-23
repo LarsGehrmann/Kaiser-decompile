@@ -107,6 +107,8 @@ begin
     Do_LandHandeln(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
   else if Name = 'Do_Gebaeude' then
     Do_Gebaeude(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
+  else if Name = 'Do_HandelMitGuetern' then
+    Do_HandelMitGuetern(Args[0].P, PPlayer(Args[1].P)^)
   else if Name = 'PlaySound' then
   begin
     { WAVEDATA resource n, played by afplay (sndPlaySound, asynchronous) }

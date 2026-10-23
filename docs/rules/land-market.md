@@ -107,6 +107,18 @@ Large own stocks depress the own selling price; bad harvests raise beer and wine
 For each good with `prokurist_<good>` set and `price ≥ prokurist_min_<good>`:
 `taler += stock × price`, `total_goods_sales += …`, stock = 0.
 
+### Selling – GUETERHANDELDLG (`GoodsDlg` 1040:14a9)
+
+One scroll bar per good (range 0..stock, disabled at 0); its position is the amount sold in
+this dialog: moving it sells `position − sold so far` at the current price (`taler` and
+`total_goods_sales` += amount × price, a move back buys back at the same price). The
+Prokurist button needs a warehouse; `PROKURADLG` sets the minimum prices (ranges 0..100,
+200, 500, 1000 for salt, beer, wine, weapons, DS:22b6) and the auto-sell switches.
+
+Original bug: the labels are formatted into an 11-byte buffer next to the loop counter; a
+number below −999,999,999 (12 characters with the terminator) overwrites the counter and the
+dialog never opens (endless loop).
+
 ### Caravans – TradeCaravan (1040:08a2)
 
 With goods trade enabled, a caravan (salt, beer, wine or weapons) visits with probability
