@@ -168,7 +168,7 @@ type
     News: array[0..29] of Byte;  { +0x5f8 10 x (actor, target, kind) bytes for the gossip report }
     SabotageLogCount: Byte;  { +0x616 entries in sabotage_log, at most 15 }
     SabotageLog: array[0..89] of Byte;  { +0x617 15 x (attacker byte, kind byte, amount longint); kind 0 = agent caught (LogSabotageReport 1068:696f) }
-    Diplomacy671Q: array[0..59] of Byte;  { +0x671 6 bytes per player (pending offers?) }
+    Mailbox: array[0..59] of Byte;  { +0x671 diplomatic message from each player, 6 bytes: kind, sub, data long (DiplomacyTurnStart 1010:00e5) }
     TradeAgreement: array[0..9] of Byte;  { +0x6ad byte per player: trade agreement with that player }
     PeaceYears: array[0..9] of Byte;  { +0x6b7 byte per player: years left on a peace treaty }
     AttitudeQ: array[0..19] of Byte;  { +0x6c1 word per player, 100 at game start }

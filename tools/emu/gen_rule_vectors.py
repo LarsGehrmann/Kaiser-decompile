@@ -232,7 +232,7 @@ SPECS = {
                                'W:-200:200'], 'word', []),
     'ClearHighScores': ('1068:67c5', ['OB:2750'], 'none', []),
     'SortHighScoreTable': ('1068:67db', ['F:name'], 'none', []),
-    'ClearMailboxSlot': ('1068:68b0', ['F:diplomacy_671_q'], 'none', []),
+    'ClearMailboxSlot': ('1068:68b0', ['F:mailbox'], 'none', []),
     'AddNews': ('1068:68c5', ['A', 'N', 'B:0:9', 'B:0:9', 'B:0:40'], 'none',
                 ['news_count']),
     'LogSabotageReport': ('1068:696f', ['A', 'B:0:3', 'I', 'J', 'B:0:14',
@@ -283,6 +283,10 @@ SPECS = {
                          'warehouses': (0, 1000)}),
     'Report_Gossip': ('n1010:1bf0', ['Wnd', 'A', 'I'], 'none',
                       ['title', 'is_female', 'spell', 'country']),
+    'DiplomacyTurnStart': ('n1010:00e5', ['Wnd', 'A', 'I', 'N', 'W:0:300'], 'none',
+                           ['fame', 'lifetime', 'taler', 'land', 'land_used', 'population',
+                            'immigrants', 'emigrants', 'total_tribute', 'J.fame', 'J.taler',
+                            'J.news_count', 'title', 'is_female', 'country']),
     'Bankruptcy': ('n1010:4f9f', ['Wnd', 'P'], 'none',
                    BUILD + ['taler', 'taler', 'title'],
                    dict({'taler': (-3000000, 100000)},
@@ -302,6 +306,7 @@ UI_SCRIPTS = {
     'OfferUnitsAtTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
+    'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'GrantFirstHero': [('Execute(', lambda rng: (1, {0x49: bytes([rng.choice([0, 0, 1])]),
                                                     0x100: rng.choice([b'Testheld', b'', b'Ab'])
                                                     + b'\0'}))],
@@ -373,8 +378,53 @@ def preset_news(rng, players, p, num):
     return m
 
 
+def random_mail(rng):
+    """One diplomatic message (kind, sub, data) as the senders write them."""
+    kind = rng.choice([0, 0] + list(range(1, 12)))
+    sub, data = 0, 0
+    if kind == 1:                             # gift: Taler, land, a unit, settlers
+        sub = rng.choice([0, 1, 2, 3, 3, 4])
+        data = rng.randint(1, 35) if sub == 2 else rng.randint(1, 50000)
+    elif kind == 2:                           # tribute demand (other subs crash)
+        sub = rng.choice([0, 1, 1, 3, 4, 5])
+        data = {0: rng.randint(1, 100000), 1: rng.randint(1, 60000),
+                3: rng.randint(1, 20000), 4: rng.randint(1, 20), 5: 0}[sub]
+    elif kind in (3, 4):                      # answer to our demand
+        sub = rng.choice([0, 1, 3, 4, 5])
+        data = rng.randint(1, 20) if sub == 4 else rng.randint(1, 20000)
+    elif kind in (9, 10):                     # peace for n years
+        data = rng.randint(1, 20)
+    return bytes([kind, sub]) + struct.pack('<i', data)
+
+
+def preset_mailbox(rng, players, p, num):
+    """Messages from the other players and running peace treaties."""
+    m = []
+    off, _ = field_info(ks.PLAYER, 'mailbox')
+    poff, _ = field_info(ks.PLAYER, 'peace_years')
+    for j in range(num):
+        if j == p:
+            continue
+        mail = random_mail(rng)
+        a = p * PSIZE + off + 6 * j
+        players[a:a + 6] = mail
+        m.append((a, mail))
+        a = p * PSIZE + poff + j
+        b = bytes([rng.choice([0, 0, 1, 2, 5, 0xFF])])
+        players[a:a + 1] = b
+        m.append((a, b))
+    # TransferLand divides by the land; with land - land_used = 2000 a land
+    # tribute becomes 0 and the original shows a stale stack record
+    land = struct.unpack_from('<i', players, p * PSIZE + field_info(ks.PLAYER, 'land')[0])[0]
+    used = struct.unpack_from('<i', players, p * PSIZE + field_info(ks.PLAYER, 'land_used')[0])[0]
+    if land < 1000 or land - used == 2000:
+        m += set_field(players, p, 'land', rng.randint(2001, 200000) + max(used, 0))
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
+    'DiplomacyTurnStart': preset_mailbox,
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
     'SabotageEnd': preset_sabotage_log,

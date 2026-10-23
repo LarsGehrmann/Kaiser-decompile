@@ -33,6 +33,16 @@ procedure OfferUnitsAtTurnStart(Parent: Pointer; var P: TPlayer);  { 1010:22d4 }
 procedure RollYearlyEvent(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
   Year: Word);                                              { 1010:2ce5 }
 procedure Report_Gossip(Parent: Pointer; var Players: TPlayers; Me: Byte);  { 1010:1bf0 }
+procedure DiplomacyTurnStart(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);                                              { 1010:00e5 }
+procedure Msg_ReceiveAid(Parent: Pointer; var Players: TPlayers; Me, Sender: Byte;
+  Data: LongInt);                                           { 1010:0467 }
+procedure Msg_Negotiation(Parent: Pointer; var Players: TPlayers; Me, Sender, NumPlayers,
+  Kind: Byte; Year: Word);                                  { 1010:06f6 }
+procedure Msg_TributeDemand(Parent: Pointer; var Players: TPlayers; Me, Sender: Byte;
+  Data: LongInt);                                           { 1010:0ead }
+procedure Msg_TributeAnswer(Parent: Pointer; var Players: TPlayers; Me, Sender, Sub: Byte;
+  Data: LongInt; Paid: Byte);                               { 1010:17c6 }
 
 implementation
 
@@ -948,6 +958,347 @@ begin
     end;
   end;
   P^.NewsCount := 0;
+end;
+
+{ ---- diplomatic messages ---------------------------------------------------
+
+  Players[X].Mailbox holds one message from every other player Y (6 bytes at
+  6*Y): Kind, Sub, Data. The sender writes it during its turn, the receiver
+  handles it in DiplomacyTurnStart and answers into the sender's mailbox. }
+
+type
+  PMailSlot = ^TMailSlot;
+  TMailSlot = packed record
+    Kind, Sub: Byte;
+    Data: LongInt;
+  end;
+
+{ the message player From left for player Owner }
+function Mail(var Players: TPlayers; Owner, From: Byte): PMailSlot;
+begin
+  Result := PMailSlot(@Players[Owner].Mailbox[6 * From]);
+end;
+
+procedure SetMail(S: PMailSlot; Kind, Sub: Byte; Data: LongInt);
+begin
+  S^.Kind := Kind;
+  S^.Sub := Sub;
+  S^.Data := Data;
+end;
+
+function MsgDlg(Parent: Pointer; NameOfs: Word; Text: PChar): TDialog;
+begin
+  Result := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText(NameOfs)), AStr(Text)]);
+end;
+
+function Msg2Dlg(Parent: Pointer; NameOfs: Word; Text1, Text2: PChar): TDialog;
+begin
+  Result := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText(NameOfs)), AStr(Text1),
+    AStr(Text2)]);
+end;
+
+procedure Msg_ReceiveAid(Parent: Pointer; var Players: TPlayers; Me, Sender: Byte;
+  Data: LongInt);
+var
+  Title, Buf: array[0..81] of Char;
+  D: TDialog;
+begin
+  { a gift: the sender already gave it away, only settlers arrive here }
+  FormatPlayerTitle(Players[Sender], Title, 0, 0);
+  case Mail(Players, Me, Sender)^.Sub of
+    0:
+      begin
+        IntToPChar(Buf, Data);
+        StrCat(Buf, DSText($066E));                    { ' Taler' }
+      end;
+    1:
+      begin
+        IntToPChar(Buf, Data);
+        StrCat(Buf, DSText($0683));                    { ' Hufe fruchtbarsten Bodens' }
+      end;
+    2:
+      begin
+        StrCopy(Buf, DSText($069E));                   { 'eine Einheit ' }
+        StrCat(Buf, DS.UnitNames[SmallInt(Data)]);
+      end;
+    3:
+      begin
+        Players[Me].Immigrants := Players[Me].Immigrants + Data;
+        IntToPChar(Buf, Data);
+        StrCat(Buf, DSText($06AC));                    { ' "Siedler"' }
+      end;
+  else
+    Exit;
+  end;
+  D := Msg2Dlg(Parent, $0675, Title, Buf);             { MSGSPENDENDLG }
+  UI.Execute(D);
+  UI.Done(D, 1);
+  ClearMailboxSlot(Mail(Players, Me, Sender)^);
+end;
+
+procedure Msg_Negotiation(Parent: Pointer; var Players: TPlayers; Me, Sender, NumPlayers,
+  Kind: Byte; Year: Word);
+var
+  Title, Buf: array[0..81] of Char;
+  Inbox, Reply: PMailSlot;
+  D: TDialog;
+begin
+  { trade agreements (5..8) and peace treaties (9..11) }
+  FormatPlayerTitle(Players[Sender], Title, 0, 0);
+  Inbox := Mail(Players, Me, Sender);
+  Reply := Mail(Players, Sender, Me);
+  case Kind of
+    6:                                                 { trade agreement cancelled }
+      begin
+        D := MsgDlg(Parent, $06B8, Title);             { MSGTRADEENDDLG }
+        UI.Execute(D);
+        ClearMailboxSlot(Inbox^);
+        Players[Me].TradeAgreement[Sender] := 0;
+        UI.Done(D, 1);
+      end;
+    5:                                                 { trade agreement offered }
+      begin
+        D := MsgDlg(Parent, $06C7, Title);             { MSGTRADEDLG }
+        if UI.Execute(D) = 1 then
+          SetMail(Reply, 7, 0, 0)
+        else
+          SetMail(Reply, 8, 0, 0);
+        UI.Done(D, 1);
+        ClearMailboxSlot(Inbox^);
+        ShowKaiserDlg(Parent, DSText($06D3));          { KURIERDLG }
+      end;
+    7:                                                 { offer accepted }
+      begin
+        D := MsgDlg(Parent, $06DD, Title);             { MSGTRADEOKDLG }
+        UI.Execute(D);
+        ClearMailboxSlot(Inbox^);
+        Players[Me].TradeAgreement[Sender] := 1;
+        Players[Sender].TradeAgreement[Me] := 1;
+        GainFame(Players[Me].Fame, 2);
+        AddNews(Players, NumPlayers, Me, Sender, 6);
+        UI.Done(D, 1);
+      end;
+    8:                                                 { offer declined }
+      begin
+        D := MsgDlg(Parent, $06EB, Title);             { MSGTRADENODLG }
+        UI.Execute(D);
+        ClearMailboxSlot(Inbox^);
+        Players[Me].TradeAgreement[Sender] := 0;
+        Players[Sender].TradeAgreement[Me] := 0;
+        UI.Done(D, 1);
+      end;
+    9:                                                 { peace for Data years offered }
+      begin
+        IntToPChar(Buf, Inbox^.Data);
+        D := Msg2Dlg(Parent, $06F9, Title, Buf);       { MSGPEACEDLG }
+        if UI.Execute(D) = 1 then
+        begin
+          Reply^.Kind := $0A;
+          Reply^.Sub := 0;
+          Reply^.Data := Inbox^.Data;
+          GainFame(Players[Me].Fame, SmallInt(Reply^.Data div 5 + 1));
+          Players[Me].Lifetime := SmallInt(Players[Me].Lifetime + Random(2));
+          { one year more when Me moves after the sender }
+          if Me < Sender then
+            Players[Me].PeaceYears[Sender] := Byte(Reply^.Data)
+          else
+            Players[Me].PeaceYears[Sender] := Byte(Reply^.Data + 1);
+        end
+        else
+          SetMail(Reply, $0B, 0, 0);
+        UI.Done(D, 1);
+        ClearMailboxSlot(Inbox^);
+        ShowKaiserDlg(Parent, DSText($06D3));          { KURIERDLG }
+      end;
+    $0A:                                               { peace accepted: until year ... }
+      begin
+        IntToPChar(Buf, LongInt(Inbox^.Data + Year + 1400 - 1));
+        D := Msg2Dlg(Parent, $0705, Title, Buf);       { MSGPEACEOKDLG }
+        UI.Execute(D);
+        Players[Me].PeaceYears[Sender] := Byte(Inbox^.Data);
+        UI.Done(D, 1);
+        AddNews(Players, NumPlayers, Me, Sender, 5);
+        GainFame(Players[Me].Fame, SmallInt(Inbox^.Data div 5));
+        Players[Me].Lifetime := SmallInt(Players[Me].Lifetime + Random(2));
+        ClearMailboxSlot(Inbox^);
+      end;
+    $0B:                                               { peace declined }
+      begin
+        D := MsgDlg(Parent, $0713, Title);             { MSGPEACENODLG }
+        UI.Execute(D);
+        ClearMailboxSlot(Inbox^);
+        UI.Done(D, 1);
+      end;
+  end;
+end;
+
+procedure Msg_TributeDemand(Parent: Pointer; var Players: TPlayers; Me, Sender: Byte;
+  Data: LongInt);
+var
+  P: PPlayer;
+  Title, Buf: array[0..81] of Char;
+  Reply: PMailSlot;
+  L: TLandLoss;
+  D: TDialog;
+begin
+  { pay the demanded tribute (answer 4) or refuse it (answer 3) }
+  FormatPlayerTitle(Players[Sender], Title, 0, 0);
+  IntToPChar(Buf, Data);
+  P := @Players[Me];
+  Reply := Mail(Players, Sender, Me);
+  FillChar(L, SizeOf(L), 0);
+  case Mail(Players, Me, Sender)^.Sub of
+    0:                                                 { Taler }
+      begin
+        StrCat(Buf, DSText($0722));                    { ' Taler' }
+        D := Msg2Dlg(Parent, $0729, Title, Buf);       { MSGTRIBUTDLG }
+        if UI.Execute(D) = 1 then
+        begin
+          SetMail(Reply, 4, 0, Data);
+          P^.Taler := P^.Taler - Data;
+          P^.TotalTribute := P^.TotalTribute - Data;
+          Players[Sender].Taler := Players[Sender].Taler + Data;
+          Players[Sender].TotalTribute := Players[Sender].TotalTribute + Data;
+          LoseFame(P^.Fame, 5);
+        end
+        else
+          SetMail(Reply, 3, 0, Data);
+      end;
+    1:                                                 { land, at least 2000 free land is kept }
+      begin
+        if LongInt(P^.Land - P^.LandUsed - Data) < 2000 then
+          Data := LongInt(P^.Land - P^.LandUsed - 2000);
+        IntToPChar(Buf, Data);
+        StrCat(Buf, DSText($0736));                    { ' Hufe Eures Bodens' }
+        D := Msg2Dlg(Parent, $0729, Title, Buf);       { MSGTRIBUTDLG }
+        if UI.Execute(D) = 1 then
+        begin
+          SetMail(Reply, 4, 1, Data);
+          { (with Data = 0 the original shows its stale stack record) }
+          TransferLand(P^, Players[Sender], L, Data, 0);
+          if L.Total > 0 then
+            UI.Call('ShowBuildingLossDlg', [APtr(Parent), AStr(DSText($0749)),   { VERLUSTDLG }
+              ARec(@L, SizeOf(L)), AByte(0)]);
+          LoseFame(P^.Fame, 5);
+        end
+        else
+          SetMail(Reply, 3, 1, Data);
+      end;
+    3:                                                 { workers, at least 50 people are kept }
+      begin
+        if LongInt(P^.Population - Data) < 50 then
+          Data := LongInt(P^.Population - 50);
+        IntToPChar(Buf, Data);
+        StrCat(Buf, DSText($0754));                    { ' "Arbeitskräfte"' }
+        D := Msg2Dlg(Parent, $0729, Title, Buf);       { MSGTRIBUTDLG }
+        if UI.Execute(D) = 1 then
+        begin
+          SetMail(Reply, 4, 3, Data);
+          P^.Emigrants := P^.Emigrants + Data;
+          LoseFame(P^.Fame, 5);
+        end
+        else
+          SetMail(Reply, 3, 3, Data);
+      end;
+    5:                                                 { a trade agreement }
+      begin
+        StrCopy(Buf, DSText($0765));                   { 'ein Handelsabkommen' }
+        D := Msg2Dlg(Parent, $0729, Title, Buf);       { MSGTRIBUTDLG }
+        if UI.Execute(D) = 1 then
+          SetMail(Reply, 4, 5, 0)
+        else
+          SetMail(Reply, 3, 5, 0);
+      end;
+    4:                                                 { Data years of peace }
+      begin
+        StrCat(Buf, DSText($0779));                    { ' Jahre Frieden' }
+        D := Msg2Dlg(Parent, $0729, Title, Buf);       { MSGTRIBUTDLG }
+        if UI.Execute(D) = 1 then
+        begin
+          SetMail(Reply, 4, 4, Data);
+          if Me < Sender then
+            P^.PeaceYears[Sender] := Byte(Data)
+          else
+            P^.PeaceYears[Sender] := Byte(Data + 1);
+        end
+        else
+          SetMail(Reply, 3, 4, Data);
+      end;
+  else
+    Exit;      { (the original frees an uninitialised dialog pointer here) }
+  end;
+  UI.Done(D, 1);
+  ClearMailboxSlot(Mail(Players, Me, Sender)^);
+  ShowKaiserDlg(Parent, DSText($0788));                { KURIERDLG }
+end;
+
+procedure Msg_TributeAnswer(Parent: Pointer; var Players: TPlayers; Me, Sender, Sub: Byte;
+  Data: LongInt; Paid: Byte);
+var
+  Title: array[0..81] of Char;
+  D: TDialog;
+begin
+  { the answer to our demand; Taler and land were already handed over by
+    the payer, workers arrive as immigrants }
+  FormatPlayerTitle(Players[Sender], Title, 0, 0);
+  if Paid <> 0 then
+  begin
+    D := MsgDlg(Parent, $0792, Title);                 { MSGTRIBUTOKDLG }
+    UI.Execute(D);
+    case Sub of
+      3: Players[Me].Immigrants := Players[Me].Immigrants + Data;
+      5:
+        begin
+          Players[Sender].TradeAgreement[Me] := 1;
+          Players[Me].TradeAgreement[Sender] := 1;
+        end;
+      4: Players[Me].PeaceYears[Sender] := Byte(Data);
+    end;
+    UI.Done(D, 1);
+  end
+  else
+  begin
+    D := MsgDlg(Parent, $07A1, Title);                 { MSGTRIBUTNODLG }
+    UI.Execute(D);
+    UI.Done(D, 1);
+  end;
+  ClearMailboxSlot(Mail(Players, Me, Sender)^);
+end;
+
+procedure DiplomacyTurnStart(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
+  Year: Word);
+var
+  I, Last: Byte;
+  Title: array[0..81] of Char;
+  S: PMailSlot;
+  D: TDialog;
+begin
+  { peace treaties run out }
+  Last := Byte(NumPlayers - 1);
+  for I := 0 to Last do
+    if ShortInt(Players[Me].PeaceYears[I]) > 0 then
+    begin
+      if Players[Me].PeaceYears[I] = 1 then
+      begin
+        FormatPlayerTitle(Players[I], Title, 0, 0);
+        D := MsgDlg(Parent, $0662, Title);             { PEACEENDDLG }
+        UI.Execute(D);
+        UI.Done(D, 1);
+      end;
+      Dec(Players[Me].PeaceYears[I]);
+    end;
+  { the messages of the other players }
+  for I := 0 to Last do
+  begin
+    S := Mail(Players, Me, I);
+    case S^.Kind of
+      1: Msg_ReceiveAid(Parent, Players, Me, I, S^.Data);
+      2: Msg_TributeDemand(Parent, Players, Me, I, S^.Data);
+      3: Msg_TributeAnswer(Parent, Players, Me, I, S^.Sub, S^.Data, 0);
+      4: Msg_TributeAnswer(Parent, Players, Me, I, S^.Sub, S^.Data, 1);
+      5..$0B: Msg_Negotiation(Parent, Players, Me, I, NumPlayers, S^.Kind, Year);
+    end;
+  end;
 end;
 
 end.

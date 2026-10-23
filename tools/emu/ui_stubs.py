@@ -53,7 +53,7 @@ APP_PTR = 0x5bde           # DS: pointer to the OWL application object
 TEXT_OFS = 0x100           # where a fake dialog keeps its text result
 # whole functions: name -> (address, far?, argument kinds, returns a value)
 FUNCS = {
-    'ShowBuildingLossDlg': ('1040:0565', True, ['p', 's', 'r44', 'b'], False),
+    'ShowBuildingLossDlg': ('1040:0565', True, ['p', 's', 'L', 'b'], False),
     'Do_KornVerteilen': ('1040:8551', True, ['p', 'p', 'b'], False),
     'Do_TruppenAufstellen': ('1038:6a30', True, ['p', 'p', 'b'], False),
     'PlaySound': ('1070:0002', True, ['w', 'w'], False),
@@ -77,7 +77,7 @@ ALLOWED = [('1060:03d9', 0x14e)]           # FormatPlayerTitle
 def arg_bytes(kinds):
     n = 0
     for k in kinds:
-        n += 4 if k[0] in 'pslr' else 2
+        n += 4 if k[0] in 'pslrL' else 2
     return n
 
 
@@ -129,7 +129,7 @@ class UILayer:
         """words: the argument words from the stack, last argument first."""
         out, i = [], 0
         for k in reversed(kinds):            # walk from the last argument
-            if k[0] in 'pslr':
+            if k[0] in 'pslrL':
                 off, seg = words[i], words[i + 1]
                 i += 2
                 if k == 'p':
@@ -140,6 +140,12 @@ class UILayer:
                     out.append('s:' + self.cstring(seg, off).hex())
                 elif k == 'l':
                     out.append(str(struct.unpack('<i', struct.pack('<HH', off, seg))[0]))
+                elif k == 'L':
+                    # TLandLoss: BuildingsLostForLand never writes bytes 4..7,
+                    # they keep whatever the stack held (the port zeroes them)
+                    data = bytearray(self.emu.read(seg, off, 44))
+                    data[4:8] = bytes(4)
+                    out.append('r44:' + data.hex())
                 else:
                     n = int(k[1:])
                     out.append(f'r{n}:' + self.emu.read(seg, off, n).hex())

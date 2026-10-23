@@ -187,7 +187,7 @@ PLAYER = [
     (0x5f8, 'raw30', 'news', '10 x (actor, target, kind) bytes for the gossip report'),
     (0x616, 'u8', 'sabotage_log_count', 'entries in sabotage_log, at most 15'),
     (0x617, 'raw90', 'sabotage_log', '15 x (attacker byte, kind byte, amount longint); kind 0 = agent caught (LogSabotageReport 1068:696f)'),
-    (0x671, 'raw60', 'diplomacy_671_q', '6 bytes per player (pending offers?)'),
+    (0x671, 'raw60', 'mailbox', 'diplomatic message from each player, 6 bytes: kind, sub, data long (DiplomacyTurnStart 1010:00e5)'),
     (0x6ad, 'raw10', 'trade_agreement', 'byte per player: trade agreement with that player'),
     (0x6b7, 'raw10', 'peace_years', 'byte per player: years left on a peace treaty'),
     (0x6c1, 'raw20', 'attitude_q', 'word per player, 100 at game start'),

@@ -366,7 +366,7 @@ begin
               Got := '-';
             end;
           'SortHighScoreTable': begin SortHighScoreTable(Pl^); Got := '-'; end;
-          'ClearMailboxSlot': begin ClearMailboxSlot(Pl^.Diplomacy671Q); Got := '-'; end;
+          'ClearMailboxSlot': begin ClearMailboxSlot(Pl^.Mailbox); Got := '-'; end;
           'AddNews': begin AddNews(Players, ArgI(0), ArgI(1), ArgI(2), ArgI(3)); Got := '-'; end;
           'LogSabotageReport':
             begin
@@ -395,6 +395,11 @@ begin
           'ShowStartTurnDialog': Got := B2S(ShowStartTurnDialog(Window, Pl^, ArgI(0), ArgI(1)));
           'OfferUnitsAtTurnStart': begin OfferUnitsAtTurnStart(Window, Pl^); Got := '-'; end;
           'Report_Gossip': begin Report_Gossip(Window, Players, ArgI(0)); Got := '-'; end;
+          'DiplomacyTurnStart':
+            begin
+              DiplomacyTurnStart(Window, Players, ArgI(0), ArgI(1), ArgI(2));
+              Got := '-';
+            end;
           'RollYearlyEvent':
             begin
               RollYearlyEvent(Window, Players, ArgI(0), ArgI(1), ArgI(2));
