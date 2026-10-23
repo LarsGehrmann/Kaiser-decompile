@@ -74,6 +74,53 @@ clone of Lazarus 3.6, built with `make lazbuild` and `make lcl LCL_PLATFORM=coco
 Objective-C metadata is rejected by Apple's current linker ("malformed method list atom"); the
 GUI links with `-k-ld_classic`.
 
+### 7d: the main window
+
+`port/gui/mainpaint.pas` ports the painting of segment 13 and the toolbar of segment 17;
+`mainform.pas` calls it from `FormPaint` (= `KaiserWindow::Paint` 1000:0b5d).
+
+- **Pictures.** `PaintTitleScreen` (1060:064b), `DrawPlayerBuildings` (1060:0868) and
+  `PaintPatternBackground` (1060:0527) draw like the original into an off-screen bitmap of
+  (W − 33) × (H − 40) that goes to x = 32; GDI is reproduced pixel for pixel (Rectangle with
+  the pen inside the rectangle, LineTo without the end point, 8×8 pattern brushes aligned to the
+  memory DC, BitBlt/StretchBlt nearest neighbour, the masked sprites). All coordinates, tables
+  (map origin DS:41a2/41a8, villages DS:395c/398c, markets DS:37cc/3894, mills DS:3754/3790,
+  palace/cathedral pieces DS:3e89/3e95, Garde DS:39ce/39de, limits DS:39be/39c4/39ca) and texts
+  come from the data segment; the scale of the title (1.0/1.25/1.6) is Real48 like the original.
+  The map font is Comic Sans MS −12 px bold (LOGFONT DS:60c8).
+- **Window.** Client area (ResolutionWidth − 2) × (ResolutionHeight − 40) (no thick frame, a
+  one-pixel border; SetupWindow fixes the client height), black class background, commands
+  610–612 resize it (the hidden 1024×768 keeps the current tool set, like
+  `CmResolution1024`). Caption `Kaiser` or `FormatPlayerTitle(…, 1, 1)`.
+- **Toolbar** (`TKaiserToolbar`): `TOOLBARDATA` KAISERTOOLS_640/800 from kaiser.exe, the layout
+  of `LoadTools`/`AdvanceToolPos` (tools from (2, 2), 24×24 buttons with shared borders, the
+  window at (−1, −1) with a black border, so the picture starts at 32 after a black column),
+  `ToolButton::Draw` (3-D edges, pressed offset 3, disabled = ROP 00A803A9 with GrayingBitmap).
+  Buttons 0..DS:4554[res] are enabled with the game like `Menu_EnableGameCommands`; a release
+  inside a button posts its command, also for a disabled button (as in the original).
+- **Map clicks** (`HandleMapClick` 1000:03d9): double clicks on the Heer strip (Truppen
+  aufstellen), granary, warehouse, smithy and tavern.
+- **Info** (502) is the `ABOUTBOX` dialog (DS:04f2; the port had looked for `INFO`). **Hilfe**
+  (501, 503: WinHelp KAISER.HLP) opens `docs/manual.md` (tools/help_to_md.py) when found next to
+  the program or in a parent folder, else a message.
+- **Not ported / different:** the right-click unit popups (`ShowUnitLookDlg` 1040:330f) and the
+  toolbar's right-click context help (WinHelp HELP_CONTEXTPOPUP, command + 1000); map clicks do
+  nothing without a running game (the original reads the stale player); the MIDI music; for
+  1024×768 the original enables toolbar indices up to DS:4556 = 72 and stops with runtime error
+  213 (ui-infra.md), the port clamps to the last tool; after a resolution change the window keeps
+  its position instead of moving to (0, 0), and the client height stays H − 40 (the original's
+  MoveWindow gives the window, not the client, the height H + Delta Y).
+- **A side effect kept:** at 800×600 and 1024×768 every paint of a running game calls
+  `UpdateBirthDeathRates` and `UpdateHappiness` for the current player (the Zufriedenheit
+  line). With the sabotage flag 0x800 set, `UpdateBirthDeathRates` draws a `RandomReal`, so in
+  the original the random sequence depends on how often the main window is repainted.
+- **Checks:** `KAISER_MAINSHOT=DIR` saves the window for every resolution as
+  `DIR/title_WxH.png` (start) and `DIR/game_WxH.png` (after `KAISER_AUTOGAME` or
+  `KAISER_LOAD=FILE`; a savegame as the first argument is loaded like `LoadFromCommandLine`
+  1000:1136), plus `*_live_*` (the form as LCL paints it), then closes; e.g.
+  `KAISER_LOAD=$PWD/Kaiser/LARS23.KSR KAISER_AUTOPILOT=/tmp/s KAISER_MAINSHOT=/tmp/s
+  port/bin/Kaiser.app/Contents/MacOS/Kaiser`.
+
 ## Running
 
 ```sh

@@ -8,8 +8,8 @@ unit MainForm;
 interface
 
 uses
-  SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census;
+  SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
+  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census;
 
 type
   TKaiserForm = class(TForm)
@@ -18,6 +18,8 @@ type
   private
     FMenu: TMainMenu;
     FSaveFile: string;
+    FToolbar: TKaiserToolbar;
+    FBuffer: TBitmap;
     procedure BuildMenu;
     procedure AddItems(Into: TMenuItem; const M: TMenuTemplate);
     procedure MenuClick(Sender: TObject);
@@ -27,7 +29,21 @@ type
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormPaint(Sender: TObject);
     procedure AutoStart(Sender: TObject);
+    procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
+    procedure ApplyWindowSize;
+    procedure SetResolution(R: Byte);
+    procedure UpdateWindowState;
+    procedure HandleMapClick(Dbl: Boolean; X, Y: Integer);
+    procedure CmHilfe;
+    procedure MainShots(const Dir, Prefix: string);
   public
+    { KaiserWindow::Paint (1000:0b5d) without its menu/caption side effects:
+      the client area (without the toolbar) as the original paints it }
+    procedure RenderMain(C: TCanvas);
+    { the whole client area with the toolbar, for snapshots }
+    procedure RenderWindow(B: TBitmap);
+    function LoadGameFile(const FileName: string): Boolean;
     constructor Create(AOwner: TComponent); override;
     procedure Command(Id: Word);
     procedure EnableCommand(Id: Word; On: Boolean);
@@ -52,24 +68,231 @@ procedure TKaiserForm.AutoStart(Sender: TObject);
 var
   T: Integer;
   Cmds: TStringList;
+  Shots, LoadFile: string;
 begin
   { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game, the menu
-    commands of KAISER_AUTOMENU (e.g. 201,203), TURNS turns }
+    commands of KAISER_AUTOMENU (e.g. 201,203), TURNS turns.
+    KAISER_LOAD=FILE (or a savegame as the first argument, like the
+    original's LoadFromCommandLine 1000:1136) loads it instead.
+    KAISER_MAINSHOT=DIR saves the main window as DIR/title_WxH.png before
+    and DIR/game_WxH.png after, for each resolution, then closes }
   TTimer(Sender).Enabled := False;
-  CmNeuesSpiel;
-  Invalidate;
-  Cmds := TStringList.Create;
-  try
-    Cmds.CommaText := GetEnvironmentVariable('KAISER_AUTOMENU');
-    for T := 0 to Cmds.Count - 1 do
-      Command(StrToIntDef(Cmds[T], 0));
-  finally
-    Cmds.Free;
+  Shots := GetEnvironmentVariable('KAISER_MAINSHOT');
+  if Shots <> '' then
+    MainShots(Shots, 'title');
+  LoadFile := GetEnvironmentVariable('KAISER_LOAD');
+  if (LoadFile = '') and (ParamCount > 0) and (Copy(ParamStr(1), 1, 1) <> '-') and
+     FileExists(ParamStr(1)) then
+    LoadFile := ParamStr(1);
+  if LoadFile <> '' then
+  begin
+    { autosave.ksr and boss.ksr are not kept as the file to save to }
+    if LoadGameFile(LoadFile) and
+       ((CompareText(ExtractFileName(LoadFile), 'autosave.ksr') = 0) or
+        (CompareText(ExtractFileName(LoadFile), 'boss.ksr') = 0)) then
+      FSaveFile := '';
+  end
+  else if GetEnvironmentVariable('KAISER_AUTOGAME') <> '' then
+  begin
+    CmNeuesSpiel;
+    Invalidate;
+    Cmds := TStringList.Create;
+    try
+      Cmds.CommaText := GetEnvironmentVariable('KAISER_AUTOMENU');
+      for T := 0 to Cmds.Count - 1 do
+        Command(StrToIntDef(Cmds[T], 0));
+    finally
+      Cmds.Free;
+    end;
+    for T := 1 to StrToIntDef(GetEnvironmentVariable('KAISER_AUTOGAME'), 0) do
+      if DS.Game.GameState = 1 then
+        CmBeenden;
   end;
-  for T := 1 to StrToIntDef(GetEnvironmentVariable('KAISER_AUTOGAME'), 0) do
-    if DS.Game.GameState = 1 then
-      CmBeenden;
-  Close;
+  if Shots <> '' then
+    MainShots(Shots, 'game');
+  if (Shots <> '') or (GetEnvironmentVariable('KAISER_AUTOGAME') <> '') then
+    Close;
+end;
+
+procedure TKaiserForm.MainShots(const Dir, Prefix: string);
+var
+  R, Orig: Byte;
+  B: TBitmap;
+  P: TPortableNetworkGraphic;
+begin
+  Orig := DS.OptResolution;
+  ForceDirectories(Dir);
+  for R := 0 to 2 do
+  begin
+    Command(610 + R);
+    Application.ProcessMessages;
+    B := TBitmap.Create;
+    P := TPortableNetworkGraphic.Create;
+    try
+      RenderWindow(B);
+      P.Assign(B);
+      P.SaveToFile(IncludeTrailingPathDelimiter(Dir) + Format('%s_%dx%d.png',
+        [Prefix, ResolutionWidth, ResolutionHeight]));
+    finally
+      P.Free;
+      B.Free;
+    end;
+    { the form as LCL paints it (FormPaint and the toolbar control) }
+    B := GetFormImage;
+    P := TPortableNetworkGraphic.Create;
+    try
+      P.Assign(B);
+      P.SaveToFile(IncludeTrailingPathDelimiter(Dir) + Format('%s_live_%dx%d.png',
+        [Prefix, ResolutionWidth, ResolutionHeight]));
+    finally
+      P.Free;
+      B.Free;
+    end;
+  end;
+  Command(610 + Orig);
+end;
+
+procedure TKaiserForm.RenderWindow(B: TBitmap);
+begin
+  B.SetSize(MainClientWidth, MainClientHeight);
+  UpdateWindowState;
+  RenderMain(B.Canvas);
+  FToolbar.PaintTo(B.Canvas, MainClientHeight);
+end;
+
+procedure TKaiserForm.RenderMain(C: TCanvas);
+begin
+  { the class background: BLACK_BRUSH (KaiserWindow::GetWindowClass) }
+  C.Brush.Style := bsSolid;
+  C.Brush.Color := clBlack;
+  C.FillRect(0, 0, MainClientWidth, MainClientHeight);
+  case DS.Game.GameState of
+    0: PaintTitleScreen(C);
+    1: DrawPlayerBuildings(C, FSave.Players[DS.Game.CurrentPlayer], DS.Game.Year);
+    2, 6, 7: PaintPatternBackground(C);
+  end;
+end;
+
+procedure TKaiserForm.UpdateWindowState;
+var
+  Buf: array[0..127] of Char;
+  S: string;
+begin
+  { the menu/toolbar and caption part of KaiserWindow::Paint }
+  case DS.Game.GameState of
+    0, 2, 6, 7:
+      begin
+        FToolbar.EnableTools(LastGameTool(FToolbar), False);
+        S := Utf8(DSText($02CE));                  { 'Kaiser' }
+      end;
+    1:
+      begin
+        FToolbar.EnableTools(LastGameTool(FToolbar), True);
+        FormatPlayerTitle(FSave.Players[DS.Game.CurrentPlayer], Buf, 1, 1);
+        S := Utf8(Buf);
+      end;
+  else
+    S := Caption;
+  end;
+  if Caption <> S then
+    Caption := S;
+end;
+
+procedure TKaiserForm.ApplyWindowSize;
+begin
+  { SetupWindow / Cm640x480 (1000:0268 / 1ed4): the window by the
+    resolution, the client height ResolutionHeight - 40 }
+  ClientWidth := MainClientWidth;
+  ClientHeight := MainClientHeight;
+  FToolbar.SetBounds(0, 0, FToolbar.BarWidth - 1, ClientHeight);
+end;
+
+procedure TKaiserForm.SetResolution(R: Byte);
+begin
+  { Cm640x480 / Cm800x600 load the matching tool set; the hidden 1024x768
+    (CmResolution1024 1000:1fc8) keeps the current one }
+  if DS.OptResolution = R then
+    Exit;
+  DS.OptResolution := R;
+  case R of
+    0: FToolbar.SetResource(DSText($0224));       { KAISERTOOLS_640 }
+    1: FToolbar.SetResource(DSText($0234));       { KAISERTOOLS_800 }
+  end;
+  ApplyWindowSize;
+  Invalidate;
+end;
+
+procedure TKaiserForm.FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+begin
+  { WMLButtonDblClk / WMRButtonDown (1000:039d / 03bb) }
+  if (Button = mbLeft) and (ssDouble in Shift) then
+    HandleMapClick(True, X, Y)
+  else if Button = mbRight then
+    HandleMapClick(False, X, Y);
+end;
+
+procedure TKaiserForm.HandleMapClick(Dbl: Boolean; X, Y: Integer);
+var
+  P: ^TPlayer;
+  OX, OY, I: Integer;
+begin
+  { 1000:03d9, in client coordinates (the picture starts at x = 32). The
+    right-click unit popups (ShowUnitLookDlg 1040:330f) are not ported;
+    unlike the original nothing reacts without a running game }
+  if DS.Game.GameState <> 1 then
+    Exit;
+  P := @FSave.Players[DS.Game.CurrentPlayer];
+  OX := PSmallInt(@PByte(@DS)[$0270 + 2 * DS.OptResolution])^;
+  OY := PSmallInt(@PByte(@DS)[$0276 + 2 * DS.OptResolution])^;
+  if (P^.ArmyAway = 0) and (Y >= ResolutionHeight - $4C) and (Y <= ResolutionHeight - $28) then
+  begin
+    I := (ResolutionWidth - $90 - X) div 32;
+    if (I >= 0) and (I < P^.Army1Count) and Dbl then
+      Command(211);                                 { Truppen aufstellen }
+    Exit;
+  end;
+  if not Dbl then
+    Exit;
+  if (P^.Granaries > 0) and (X >= (OX + 9) * 32) and (X < (OX + 10) * 32) and
+     (Y >= (OY + 4) * 32 - 16) and (Y < (OY + 5) * 32 - 16) then
+    Command(201);                                   { Korn verteilen }
+  if (DS.Game.GoodsTradeEnabled <> 0) and (P^.Warehouses > 0) and (X >= (OX + 7) * 32) and
+     (X < (OX + 8) * 32) and (Y >= (OY + 8) * 32 + 16) and (Y < (OY + 9) * 32 + 16) then
+    Command(205);                                   { Handel mit Guetern }
+  if (P^.Smithies > 0) and (X >= (OX + 8) * 32) and (X < (OX + 9) * 32) and
+     (Y >= (OY + 7) * 32) and (Y < (OY + 8) * 32) then
+    Command(306);                                   { Hofschmiede }
+  if (P^.Taverns > 0) and (X >= (OX + 8) * 32) and (X < (OX + 9) * 32) and
+     (Y >= (OY + 5) * 32) and (Y < (OY + 6) * 32) then
+    Command(224);                                   { Sabotage }
+end;
+
+procedure TKaiserForm.CmHilfe;
+var
+  Dir, F: string;
+  I: Integer;
+begin
+  { CmHilfe / CmUeberDieHilfe (1000:38ed / 38cf) call WinHelp on
+    KAISER.HLP; here the manual converted by tools/help_to_md.py }
+  if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
+    Exit;
+  Dir := ExtractFilePath(ParamStr(0));
+  F := '';
+  for I := 0 to 6 do
+  begin
+    if FileExists(Dir + 'docs/manual.md') then
+    begin
+      F := ExpandFileName(Dir + 'docs/manual.md');
+      Break;
+    end;
+    Dir := Dir + '../';
+  end;
+  if F <> '' then
+    OpenDocument(F)
+  else
+    Application.MessageBox('Die Hilfe (KAISER.HLP) ist in dieser Fassung nicht enthalten; ' +
+      'docs/manual.md wurde nicht gefunden.', 'Kaiser', MB_OK);
 end;
 
 constructor TKaiserForm.Create(AOwner: TComponent);
@@ -78,16 +301,31 @@ var
 begin
   inherited CreateNew(AOwner);
   Caption := 'Kaiser';
-  Width := 800;
-  Height := 600;
+  BorderStyle := bsSingle;                        { no thick frame, no maximize box }
+  BorderIcons := [biSystemMenu, biMinimize];
   Position := poScreenCenter;
-  Color := DialogBackground;
+  Color := clBlack;
   OnPaint := @FormPaint;
   OnClose := @FormClose;
+  OnMouseDown := @FormMouseDown;
   FillChar(FSave, SizeOf(FSave), 0);
+  FBuffer := TBitmap.Create;
+  { the toolbar KAISERTOOLS_640 / _800, docked on the left (1000:0045) }
+  FToolbar := TKaiserToolbar.Create(Self);
+  FToolbar.Parent := Self;
+  if DS.OptResolution = 0 then
+    FToolbar.SetResource(DSText($0224))
+  else
+    FToolbar.SetResource(DSText($0234));
+  FToolbar.OnCommand := @Command;
+  FToolbar.EnableTools(LastGameTool(FToolbar), False);    { SetupWindow }
+  ApplyWindowSize;
   BuildMenu;
   UpdateMenu;
-  if GetEnvironmentVariable('KAISER_AUTOGAME') <> '' then
+  if (GetEnvironmentVariable('KAISER_AUTOGAME') <> '') or
+     (GetEnvironmentVariable('KAISER_MAINSHOT') <> '') or
+     (GetEnvironmentVariable('KAISER_LOAD') <> '') or
+     ((ParamCount > 0) and (Copy(ParamStr(1), 1, 1) <> '-')) then
   begin
     Tm := TTimer.Create(Self);
     Tm.Interval := 200;
@@ -299,7 +537,8 @@ begin
     601: DS.OptAutosave := Ord(DS.OptAutosave = 0);        { Geschichtsschreibung }
     602: DS.OptSound := Ord(DS.OptSound = 0);              { Krach und Geschrei }
     603: DS.OptMusic := Ord(DS.OptMusic = 0);              { Schalmeienklaenge (MIDI not played) }
-    610..612: DS.OptResolution := Id - 610;
+    610..612: SetResolution(Id - 610);              { Cm640x480, Cm800x600, CmResolution1024 }
+    501, 503: CmHilfe;                              { Hilfe, Ueber die Hilfe }
     701..708:                                   { Berichte: the reports at turn start }
       if DS.Game.GameState = 1 then
         with FSave.Players[DS.Game.CurrentPlayer] do
@@ -339,9 +578,9 @@ begin
         Invalidate;
       end;
     CmdExit: Close;
-    CmdInfo:
+    CmdInfo:                                    { CmInfo 1000:390b: KaiserDlg ABOUTBOX }
       begin
-        D := UI.Dialog('KaiserDlg', $3364, [APtr(Self), AStr('INFO')]);
+        D := UI.Dialog('KaiserDlg', $3364, [APtr(Self), AStr(DSText($04F2))]);
         UI.Execute(D);
         UI.Done(D, 1);
       end;
@@ -362,7 +601,6 @@ end;
 procedure TKaiserForm.CmFileOpen;
 var
   OD: TOpenDialog;
-  S: TSaveGame;
 begin
   { 1000:0e3c: a running game is given up only after asking }
   if (DS.Game.GameState = 1) and
@@ -374,25 +612,35 @@ begin
     OD.Filter := 'Kaiser-Spielstand (*.ksr)|*.ksr;*.KSR';
     if not OD.Execute then
       Exit;
-    if LoadSaveGame(OD.FileName, S) <> lrOk then
-    begin
-      Application.MessageBox(PChar('Kann Datei ' + OD.FileName + ' nicht laden.'), 'Kaiser', MB_OK);
-      Exit;
-    end;
-    FSave := S;
-    FSaveFile := OD.FileName;
-    DS.Game := FSave.Header;
-    if DS.Game.EmailGameQ = 0 then
-    begin
-      DS.Game.GameState := 6;
-      Invalidate;
-      ShowStartTurnDialog(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.CurrentPlayer,
-        DS.Game.Year);
-      DS.Game.GameState := 1;
-    end;
+    LoadGameFile(OD.FileName);
   finally
     OD.Free;
   end;
+end;
+
+function TKaiserForm.LoadGameFile(const FileName: string): Boolean;
+var
+  S: TSaveGame;
+begin
+  Result := LoadSaveGame(FileName, S) = lrOk;
+  if not Result then
+  begin
+    Application.MessageBox(PChar('Kann Datei ' + FileName + ' nicht laden.'), 'Kaiser', MB_OK);
+    Exit;
+  end;
+  FSave := S;
+  FSaveFile := FileName;
+  DS.Game := FSave.Header;
+  if DS.Game.EmailGameQ = 0 then
+  begin
+    DS.Game.GameState := 6;
+    Invalidate;
+    ShowStartTurnDialog(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.CurrentPlayer,
+      DS.Game.Year);
+    DS.Game.GameState := 1;
+  end;
+  UpdateMenu;
+  Invalidate;
 end;
 
 procedure TKaiserForm.CmSpeichern(AskName: Boolean);
@@ -424,36 +672,12 @@ begin
 end;
 
 procedure TKaiserForm.FormPaint(Sender: TObject);
-var
-  Logo: TBitmap;
-  P: ^TPlayer;
-  Y: Integer;
-
-  procedure Line(const S: string);
-  begin
-    Canvas.TextOut(20, Y, S);
-    Inc(Y, Canvas.TextHeight(S) + 4);
-  end;
-
 begin
-  Canvas.Brush.Color := Color;
-  Canvas.FillRect(ClientRect);
-  if DS.Game.GameState <> 1 then
-  begin
-    Logo := ResBitmap('BIGLOGO');
-    if Logo <> nil then
-      Canvas.Draw((ClientWidth - Logo.Width) div 2, (ClientHeight - Logo.Height) div 2, Logo);
-    Exit;
-  end;
-  { (the original status display is milestone 7d) }
-  P := @FSave.Players[DS.Game.CurrentPlayer];
-  Canvas.Font.Size := 12;
-  Y := 20;
-  Line(Utf8(PChar(@P^.Name)) + ' - Jahr ' + IntToStr(DS.Game.Year));
-  Line('Taler: ' + IntToStr(P^.Taler));
-  Line('Land: ' + IntToStr(P^.Land) + ' Hufen');
-  Line('Bevoelkerung: ' + IntToStr(P^.Population));
-  Line('Ruhm: ' + IntToStr(P^.Fame));
+  { KaiserWindow::Paint (1000:0b5d), drawn off screen and blitted }
+  UpdateWindowState;
+  FBuffer.SetSize(MainClientWidth, MainClientHeight);
+  RenderMain(FBuffer.Canvas);
+  Canvas.Draw(0, 0, FBuffer);
 end;
 
 end.
