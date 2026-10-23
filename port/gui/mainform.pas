@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel;
+  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Real48, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel;
 
 type
   TKaiserForm = class(TForm)
@@ -27,12 +27,14 @@ type
     procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormPaint(Sender: TObject);
     procedure AutoStart(Sender: TObject);
+    procedure AutoWar(const Cmd: string);
   public
     constructor Create(AOwner: TComponent); override;
     procedure Command(Id: Word);
     procedure EnableCommand(Id: Word; On: Boolean);
     procedure CmNeuesSpiel;
     procedure CmFileOpen;
+    function LoadGame(const FileName: string): Boolean;
     procedure CmSpeichern(AskName: Boolean);
     procedure CmBeenden;
   end;
@@ -53,16 +55,23 @@ var
   T: Integer;
   Cmds: TStringList;
 begin
-  { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game, the menu
-    commands of KAISER_AUTOMENU (e.g. 201,203), TURNS turns }
+  { KAISER_AUTOPILOT with KAISER_AUTOGAME=TURNS: a new game (or the
+    savegame KAISER_AUTOLOAD), the menu commands of KAISER_AUTOMENU (e.g.
+    201,203; 214 Krieg fuehren), TURNS turns }
   TTimer(Sender).Enabled := False;
-  CmNeuesSpiel;
+  if GetEnvironmentVariable('KAISER_AUTOLOAD') <> '' then
+    LoadGame(GetEnvironmentVariable('KAISER_AUTOLOAD'))
+  else
+    CmNeuesSpiel;
   Invalidate;
   Cmds := TStringList.Create;
   try
     Cmds.CommaText := GetEnvironmentVariable('KAISER_AUTOMENU');
     for T := 0 to Cmds.Count - 1 do
-      Command(StrToIntDef(Cmds[T], 0));
+      if (Copy(Cmds[T], 1, 4) = 'war:') or (Copy(Cmds[T], 1, 5) = 'raid:') then
+        AutoWar(Cmds[T])
+      else
+        Command(StrToIntDef(Cmds[T], 0));
   finally
     Cmds.Free;
   end;
@@ -70,6 +79,36 @@ begin
     if DS.Game.GameState = 1 then
       CmBeenden;
   Close;
+end;
+
+{ KAISER_AUTOMENU item war:A:D: player A (a computer) attacks D as in
+  NextPlayer (ResolveWar: the UI call 'Battle'); raid:P:M: the marauders
+  (M = 1) or the Lindwurm (2) attack P (the UI call 'FightRaiders' of the
+  turn start) }
+procedure TKaiserForm.AutoWar(const Cmd: string);
+var
+  Parts: TStringList;
+  Cur: Byte;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := ':';
+    Parts.DelimitedText := Cmd;
+    if Parts.Count < 3 then
+      Exit;
+    if Parts[0] = 'raid' then
+    begin
+      UI.Call('FightRaiders', [APtr(Self), APtr(@FSave.Players[StrToInt(Parts[1])]),
+        AByte(StrToInt(Parts[1])), AByte(StrToInt(Parts[2]))]);
+      Exit;
+    end;
+    Cur := DS.Game.CurrentPlayer;
+    DS.Game.CurrentPlayer := StrToInt(Parts[1]);
+    ResolveWar(Self, FSave.Players, StrToInt(Parts[2]));
+    DS.Game.CurrentPlayer := Cur;
+  finally
+    Parts.Free;
+  end;
 end;
 
 constructor TKaiserForm.Create(AOwner: TComponent);
@@ -356,7 +395,6 @@ end;
 procedure TKaiserForm.CmFileOpen;
 var
   OD: TOpenDialog;
-  S: TSaveGame;
 begin
   { 1000:0e3c: a running game is given up only after asking }
   if (DS.Game.GameState = 1) and
@@ -366,26 +404,38 @@ begin
   OD := TOpenDialog.Create(Self);
   try
     OD.Filter := 'Kaiser-Spielstand (*.ksr)|*.ksr;*.KSR';
-    if not OD.Execute then
-      Exit;
-    if LoadSaveGame(OD.FileName, S) <> lrOk then
-    begin
-      Application.MessageBox(PChar('Kann Datei ' + OD.FileName + ' nicht laden.'), 'Kaiser', MB_OK);
-      Exit;
-    end;
-    FSave := S;
-    FSaveFile := OD.FileName;
-    DS.Game := FSave.Header;
-    if DS.Game.EmailGameQ = 0 then
-    begin
-      DS.Game.GameState := 6;
-      Invalidate;
-      ShowStartTurnDialog(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.CurrentPlayer,
-        DS.Game.Year);
-      DS.Game.GameState := 1;
-    end;
+    if OD.Execute then
+      LoadGame(OD.FileName);
   finally
     OD.Free;
+  end;
+end;
+
+function TKaiserForm.LoadGame(const FileName: string): Boolean;
+var
+  S: TSaveGame;
+begin
+  Result := LoadSaveGame(FileName, S) = lrOk;
+  if not Result then
+  begin
+    Application.MessageBox(PChar('Kann Datei ' + FileName + ' nicht laden.'), 'Kaiser', MB_OK);
+    Exit;
+  end;
+  FSave := S;
+  FSaveFile := FileName;
+  DS.Game := FSave.Header;
+  { LoadGame (1050:07ed): Randomize, an e-mail game its stored RandSeed }
+  if DS.Game.EmailGameQ = 0 then
+    UI.Call('Randomize', [])
+  else
+    Real48.RandSeed := DS.Game.RandSeed;
+  if DS.Game.EmailGameQ = 0 then
+  begin
+    DS.Game.GameState := 6;
+    Invalidate;
+    ShowStartTurnDialog(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.CurrentPlayer,
+      DS.Game.Year);
+    DS.Game.GameState := 1;
   end;
 end;
 
