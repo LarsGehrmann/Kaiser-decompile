@@ -513,13 +513,13 @@ def main():
                 else:
                     off, typ = field_info(ks.PLAYER, fname)
                 fmt = {'u8': '<B', 's8': '<b', 's16': '<h', 'u16': '<H', 's32': '<i'}[typ]
-                n = struct.calcsize(fmt)
+                size = struct.calcsize(fmt)
                 a = owner * PSIZE + off
-                v, = struct.unpack(fmt, bytes(players[a:a + n]))
+                v, = struct.unpack(fmt, bytes(players[a:a + size]))
                 if not lo <= v <= hi:
                     val = struct.pack(fmt, rng.randint(lo, hi))
                     muts.append((a, val))
-                    players[a:a + n] = val
+                    players[a:a + size] = val
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
