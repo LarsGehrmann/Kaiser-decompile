@@ -292,6 +292,12 @@ SPECS = {
                         {'army1_count': (0, 8), 'army2_count': (0, 8), 'fame': (0, 100),
                          'markets': (0, 1000), 'mills': (0, 1000), 'granaries': (0, 1000),
                          'warehouses': (0, 1000), 'title': (0, 10)}),
+    'PlayerTurnEnd': ('1010:57b2', ['Wnd', 'W:0:65535', 'A', 'I', 'N', 'Y'], 'none',
+                      POP + ECON + ARMY + BUILD + ['first_king_bonus', 'army_away', 'maximize_taxes',
+                                                   'lifetime', 'skip_turn', 'news_count'],
+                      dict({'army1_count': (0, 7), 'army2_count': (0, 7), 'taler': (-3000000, 100000000)},
+                           **{b: (0, 400) for b in ('markets', 'mills', 'granaries',
+                                                    'warehouses', 'taverns', 'smithies')})),
     'DiplomacyTurnStart': ('n1010:00e5', ['Wnd', 'A', 'I', 'N', 'W:0:300'], 'none',
                            ['fame', 'lifetime', 'taler', 'land', 'land_used', 'population',
                             'immigrants', 'emigrants', 'total_tribute', 'J.fame', 'J.taler',
@@ -316,6 +322,7 @@ UI_SCRIPTS = {
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'PlayerTurnEnd': [('Execute(', lambda rng: (rng.choice([1, 2]), {0x100: b'Neuheld\0'}))],
     'PlayerTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
                         ('Email_AskPassword(', lambda rng: (rng.choice([0, 1, 1, 1]), {})),
                         ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
@@ -440,6 +447,7 @@ PRESETS = {
     'PlayerTurnStart': preset_mailbox,
     'Report_Gossip': preset_news,
     'PromotionCheck': preset_promotion,
+    'PlayerTurnEnd': preset_promotion,
     'SabotageEnd': preset_sabotage_log,
 }
 

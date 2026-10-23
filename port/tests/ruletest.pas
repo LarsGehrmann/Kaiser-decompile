@@ -397,6 +397,11 @@ begin
           'Report_Gossip': begin Report_Gossip(Window, Players, ArgI(0)); Got := '-'; end;
           'PlayerTurnStart':
             Got := B2S(PlayerTurnStart(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3)));
+          'PlayerTurnEnd':
+            begin
+              PlayerTurnEnd(Window, ArgI(0), Players, ArgI(1), ArgI(2), ArgI(3));
+              Got := '-';
+            end;
           'DiplomacyTurnStart':
             begin
               DiplomacyTurnStart(Window, Players, ArgI(0), ArgI(1), ArgI(2));

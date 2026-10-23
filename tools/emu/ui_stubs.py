@@ -235,6 +235,11 @@ class UILayer:
                 ax, data = self.chooser(entry, 'method')
                 # result fields go into the executed dialog (for ExecDialog: its argument)
                 seg, off = (words[3], words[2]) if name == 'ExecDialog' else (words[1], words[0])
+                if seg != self.emu.scratch_para + OBJ_SEG and (seg, off) in self.objects:
+                    # an object constructed in place (e.g. a local): nothing
+                    # beyond its instance size
+                    size = self.sizes[self.objects.index((seg, off))]
+                    data = {o: b for o, b in data.items() if o + len(b) <= size}
                 for o, b in sorted(data.items()):
                     emu.write(seg, off + o, b)
                 entry += f'={ax}' + ''.join(f'+{o:x}:{b.hex()}' for o, b in sorted(data.items()))

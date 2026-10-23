@@ -45,6 +45,8 @@ procedure Msg_TributeAnswer(Parent: Pointer; var Players: TPlayers; Me, Sender, 
   Data: LongInt; Paid: Byte);                               { 1010:17c6 }
 function PlayerTurnStart(Parent: Pointer; HWnd: Word; var Players: TPlayers;
   Me, NumPlayers: Byte; Year: Word): Boolean;               { 1010:37b6 }
+procedure PlayerTurnEnd(Parent: Pointer; HWnd: Word; var Players: TPlayers;
+  Me, NumPlayers: Byte; Year: Word);                        { 1010:57b2 }
 
 implementation
 
@@ -1508,6 +1510,26 @@ begin
   if TestBit(P^.ReportFlags, 7) then
     UI.Call('Do_Gebaeude', [APtr(Parent), APtr(@Players), AByte(Me), AByte(NumPlayers)]);
   Result := True;
+end;
+
+procedure PlayerTurnEnd(Parent: Pointer; HWnd: Word; var Players: TPlayers;
+  Me, NumPlayers: Byte; Year: Word);
+var
+  P: PPlayer;
+begin
+  { the end of a human player's year; HWnd is unused }
+  P := @Players[Me];
+  GrainShortageWarning(Parent, P^);
+  UpdateBirthDeathRates(P^);
+  UpdateHappiness(P^);
+  if R48Cmp(P^.Happiness, RC($0080, 0, 0)) < 0 then
+    LoseFame(P^.Fame, 2);
+  LandLossCheck(Parent, P^);
+  PromotionCheck(Parent, Players, Me, NumPlayers, Year);
+  Bankruptcy(Parent, P^);
+  RevolutionCheck(Parent, P^);
+  SkipTurnCheck(Parent, Players, Me, NumPlayers);
+  FillChar(P^.Flags5bdQ, 4, 0);              { cleared as a longint }
 end;
 
 end.
