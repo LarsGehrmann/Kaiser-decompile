@@ -481,6 +481,19 @@ SPECS = {
     'Do_Sabotage': ('1038:3564', ['Wnd', 'A', 'I', 'N'], 'none',
                     ['sabotage_agents', 'sabotage_budget', 'sabotage_funds', 'title',
                      'J.palace_parts', 'taler', 'J.fame', 'J.army1_count']),
+    'Do_Geheimdienst': ('1038:0002', ['Wnd', 'A', 'N', 'I', 'Y'], 'none',
+                        ['spell', 'year_factor_q', 'taler', 'net_income', 'title', 'is_female',
+                         'fame', 'country', 'palace_parts', 'cathedral_parts', 'u.level',
+                         'u.type', 'trade_agreement', 'peace_years', 'sabotage_agents',
+                         'J.population', 'J.land', 'J.markets', 'J.mills', 'J.taler',
+                         'J.net_income', 'J.title', 'J.is_female', 'J.spell', 'J.fame',
+                         'J.country', 'J.palace_parts', 'J.cathedral_parts', 'J.palace_parts'],
+                        # the estimates (value times the year factor) must
+                        # fit a longint, else Round stops (runtime error 207);
+                        # land 0: see preset_intel
+                        {'J.population': (0, 30000000), 'J.land': (1, 100000000),
+                         'J.taler': (-999999999, 999999999),
+                         'J.net_income': (-999999999, 999999999)}),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -641,6 +654,42 @@ def preset_promotion(rng, players, p, num):
         if j != p and rng.random() < 0.9:
             m += set_field(players, j, 'title', rng.randint(0, 8))
             m += set_field(players, j, 'first_king_bonus', 0)
+    return m
+
+
+def preset_intel(rng, players, p, num):
+    """Geheimdienst: trade agreements, peace and agents of the test player
+    towards the others, often the spell Botschafter (exact values), heroes
+    of all levels (above 6 the name shows '(+n)'). Every player has land:
+    the Landausbau divides by it (with 0 the original stops with runtime
+    error 200)."""
+    m = []
+    if rng.random() < 0.7:
+        for name, gen in (('trade_agreement', lambda: rng.choice([0, 0, 1, rng.randrange(256)])),
+                          ('peace_years', lambda: rng.choice([0, 0, rng.randint(1, 30),
+                                                              rng.randrange(256)])),
+                          ('sabotage_agents', lambda: rng.choice([0, 0, rng.randint(1, 5),
+                                                                  rng.randrange(256)]))):
+            off, typ = field_info(ks.PLAYER, name)
+            n = int(typ[3:])
+            val = bytes(gen() for _ in range(n))
+            a = p * PSIZE + off
+            players[a:a + n] = val
+            m.append((a, val))
+    if rng.random() < 0.3:
+        m += set_field(players, p, 'spell', 1)
+    land_off, _ = field_info(ks.PLAYER, 'land')
+    for q in range(num):
+        a = q * PSIZE + land_off
+        if struct.unpack('<i', bytes(players[a:a + 4]))[0] == 0:
+            m += set_field(players, q, 'land', rng.randint(1, 50000))
+        for army, cnt in ((1, 0x137), (2, 0x138)):
+            for i in range(1, min(players[q * PSIZE + cnt], 8) + 1):
+                base = q * PSIZE + ARMY_BASE[army] + i * ks.UNIT_SIZE
+                if players[base + 0x19] == 9 and rng.random() < 0.5:     # a hero
+                    lv = bytes([rng.choice([rng.randint(0, 12), rng.randint(0, 255)])])
+                    players[base + 0x24:base + 0x25] = lv
+                    m.append((base + 0x24, lv))
     return m
 
 
@@ -912,6 +961,7 @@ PRESETS = {
     'Ai_LandToSellForPromotion': preset_promotion,
     'Ai_KnightSquires': preset_knights,
     'SabotageEnd': preset_sabotage_log,
+    'Do_Geheimdienst': preset_intel,
 }
 
 
@@ -1203,6 +1253,9 @@ DIALOG_TESTS = {
     'Do_Abkommen': ['TRADEAUSWAHLDLG', 'ABKOMMENDLG', 'ABFRAGEZEITDLG'],
     'Do_TributFordern': ['TRIBUTAUSWAHLDLG', 'TRIBUTDLG', 'ABFRAGETALERDLG'],
     'Do_Sabotage': ['SABOTAGEBUDGETDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG'],
+    # 701..704: a strike (SABOTAGEWAHLDLG), in the own column the budget
+    'Do_Geheimdienst': ['GEHEIMDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEBUDGETDLG',
+                        'SABOTAGEWAHLDLG'],
 }
 
 

@@ -189,16 +189,17 @@ their templates:
   (`c<id>` click, `s<id>:<pos>` scroll, `l<id>:<idx>` list selection, `t<id>:<hex>` typed
   text, `ok`, `cancel`, dialogs separated by `/`) through the type's DMT handlers. OK runs
   `CanClose` and ends with 1, Cancel ends with 2; events on disabled controls are ignored.
-  Memory comes from a bump allocator; GDI calls (drawing) return 0 unlogged. A dialog
+  Memory comes from a bump allocator (nothing is freed; a full 64 KB segment continues in the
+  next one); GDI calls (drawing) return 0 unlogged. A dialog
   opened by a dialog's handler (the Prokurist from the goods dialog) runs nested with the next
   script; each dialog object keeps its own controls.
-- The port: dialog types are `TDialogLogic` classes in `port/src/actions.pas`, registered by
-  the constructor name; they work on `D.Data` laid out like the original object and reach the
-  controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
+- The port: dialog types are `TDialogLogic` classes in `port/src/actions.pas` (and
+  `intel.pas`), registered by the constructor name; they work on `D.Data` laid out like the
+  original object and reach the controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
   and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`).
 
 `port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
-`Do_HandelMitGuetern` with the Prokurist (100), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each). Segment 9 frames are zeroed like the logic segments.
+`Do_HandelMitGuetern` with the Prokurist (100), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each), `CmWirtschaft` (100), `CmMilitaer` (50), `Do_Laendernamen` (50), `CmSpiel` (60), `Do_Abkommen`, `Do_TributFordern`, `Do_Sabotage`, `Do_Geheimdienst` with strikes and the sabotage budget opened from it (100 each). Segment 9 frames are zeroed like the logic segments.
 
 Original bugs found by the dialog tests (the specs keep the inputs out of their range):
 
@@ -206,6 +207,9 @@ Original bugs found by the dialog tests (the specs keep the inputs out of their 
   divides by it (runtime error 200).
 - GUETERHANDELDLG: labels go into an 11-byte buffer next to the loop counter; a number below
   −999,999,999 overwrites the counter (endless loop).
+- GEHEIMDLG (1038:092a): the Landausbau row divides by the player's land; a shown player
+  without land stops with runtime error 200 (`preset_intel` gives every player land; the port
+  shows 0 %).
 - `FormatThousands` (1068:6b58, Wirtschaft and other statistics): its length table ends at 9
   digits; a 10-digit number makes it write the digits 11,520 bytes off its buffer and show an
   empty string. The port shows the same and skips the stray write.

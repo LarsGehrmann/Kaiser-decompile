@@ -123,8 +123,38 @@ adds an entry with type 0 and goes to `sabotage_agents_returning_q`. On failure 
 escapes (`SABOTAGEVERSAGT1DLG`) or is caught (`…2DLG`). Flags 0x40–0x2000 live in the longint
 at +0x5bd and are cleared in `PlayerTurnEnd`.
 
-## Intelligence – Do_Geheimdienst (1038:0002)
+## Intelligence – Do_Geheimdienst (1038:0002), GEHEIMDLG
 
-Shows trade agreements, active saboteurs, treasury and army strength of the others; only the
-Ambassador (spell 1) always sees everything (manual). Also opened automatically at turn start
-with `report_flags` bit 3.
+Menu "Geheimdienst", or at turn start with `report_flags` bit 3. The dialog (VMT DS:10ca,
+ported in `port/src/intel.pas`) works on a copy of all players, taken over when it closes
+(sabotage started from it changes them). It shows four players side by side, starting at
+player 0; "<-" / "->" move by one player ("->" only while players are left beyond the fourth
+column; columns beyond the last player stay empty). Per player:
+
+| Row | Shows |
+|---|---|
+| Title, name, country | title (female titles for women), name, "von " + country name |
+| Spell | its name, empty for none |
+| Fame | `FameText` word (inexistent … legendär) |
+| Population | estimate, then rounded **up**: to the next 1000 from 2000 on, else to the next 200 |
+| Land | `RealmName` of the estimate (Landstrich … Kaiserreich) |
+| Landausbau | max(markets, mills) × 100,000 div land, down to a multiple of 10, with "%" |
+| Palace, cathedral | `BuildingProgressText` (Grundstein, in Bau, bald fertig, vollendet) |
+| Net income, Taler | rounded down to 1000, estimate, as `MagnitudeText` (Hunderte … Millionen) |
+| Army (button) | `ArmyStrength` with the Garde: < 30 bäuerlich, < 60 tüchtig, < 100 fürstlich, else königlich; opens the army (`Do_TruppenAufstellen`, mode 0 for the own one, 5 = only look); enabled for the own column, or for all with the spell Ambassador |
+| Heavy artillery | "ja" when `ArtilleryClass` (with the Garde) is 2, else "-" |
+| Hero | the first hero (Heer, then Garde); from level 7 on with "(+level − 6)"; "-" without |
+| Agents (button) | own column: "$", opens the sabotage budget (`Do_Sabotage`); others: the number of agents against that player, enabled with at least one: "Zuschlagen!" (`SabotageStrike`, see above) |
+| Trade | with a trade agreement: the volume (markets × 155 + mills × 330) div (number of players + 6), rounded down to 100 (below 1000) or to 500; else "-" |
+| Peace | with a peace treaty: "bis " + (year + 1400 + peace_years − 1); else "-" |
+
+**Estimates.** For the other players four values are multiplied by the viewer's
+`year_factor_q` (+0x5f0, RandomReal × 1.5 + 0.5, new every turn; population-grain.md) and
+rounded, except in year 0 and for a viewer with the spell **Ambassador** (1), who sees all
+exactly. Which value is exact depends on (player index + year): population when it is odd,
+land when it is even; net income when its remainder mod 3 is 1, Taler when it is 2.
+
+Original bugs: a shown player without land stops the game (the Landausbau divides by the
+land: runtime error 200). The hero names are built in 25-byte slots in the dialog object; a
+long name with "(+n)" runs over, for the tenth player into the heavy-artillery flags of the
+first ones (the port keeps the same layout and shows the same).
