@@ -120,6 +120,40 @@ type
     procedure Handle(Id: SmallInt); override;
   end;
 
+  { the controls of a template form for a ported dialog type }
+  TFormControls = class(TDlgControls)
+  public
+    F: TKaiserDialog;
+    procedure SetText(Id: SmallInt; S: PChar); override;
+    function GetText(Id: SmallInt; Buf: PChar; MaxChars: Integer): Integer; override;
+    procedure Enable(Id: SmallInt; On: Boolean); override;
+    procedure Show(Id: SmallInt; Cmd: SmallInt); override;
+    procedure SetCaption(S: PChar); override;
+    procedure SetCheck(Id: SmallInt; V: Word); override;
+    function GetCheck(Id: SmallInt): Word; override;
+    procedure SetRange(Id: SmallInt; Lo, Hi: SmallInt); override;
+    procedure SetPosition(Id: SmallInt; V: SmallInt); override;
+    function GetPosition(Id: SmallInt): SmallInt; override;
+    function AddString(Id: SmallInt; S: PChar): SmallInt; override;
+    function GetSelIndex(Id: SmallInt): SmallInt; override;
+    function SetSelIndex(Id: SmallInt; I: SmallInt): SmallInt; override;
+    procedure ComboSetText(Id: SmallInt; S: PChar); override;
+    procedure EndDlg(Code: SmallInt); override;
+  end;
+
+  { a dialog whose type is ported (KaiserUI.TDialogLogic, port/src) }
+  TLogicDialog = class(TKaiserDialog)
+  private
+    FControls: TFormControls;
+  public
+    destructor Destroy; override;
+    function Logic: TDialogLogic;
+    procedure SetupWindow; override;
+    function CanClose: Boolean; override;
+    procedure Command(Id: SmallInt); override;
+    procedure Notify(Id: SmallInt); override;
+  end;
+
 function DialogClassOf(const Name: string): TKaiserDialogClass;
 
 implementation
@@ -718,8 +752,148 @@ begin
     inherited Handle(Id);
 end;
 
+{ -- ported dialog types ------------------------------------------------------ }
+
+procedure TFormControls.SetText(Id: SmallInt; S: PChar);
+begin
+  F.SetText(Id, S);
+end;
+
+function TFormControls.GetText(Id: SmallInt; Buf: PChar; MaxChars: Integer): Integer;
+var
+  T: RawByteString;
+begin
+  T := Copy(F.GetText(Id), 1, MaxChars - 1);
+  StrPCopy(Buf, T);
+  Result := Length(T);
+end;
+
+procedure TFormControls.Enable(Id: SmallInt; On: Boolean);
+begin
+  F.EnableItem(Id, On);
+end;
+
+procedure TFormControls.Show(Id: SmallInt; Cmd: SmallInt);
+var
+  Ctl: TControl;
+begin
+  Ctl := F.Item(Id);
+  if Ctl <> nil then
+    Ctl.Visible := Cmd <> 0;                 { SW_HIDE = 0 }
+end;
+
+procedure TFormControls.SetCaption(S: PChar);
+begin
+  F.Caption := Utf8(S);
+end;
+
+procedure TFormControls.SetCheck(Id: SmallInt; V: Word);
+begin
+  F.SetCheck(Id, V <> 0);
+end;
+
+function TFormControls.GetCheck(Id: SmallInt): Word;
+begin
+  Result := Ord(F.GetCheck(Id));
+end;
+
+procedure TFormControls.SetRange(Id: SmallInt; Lo, Hi: SmallInt);
+begin
+  F.SetRange(Id, Lo, Hi);
+end;
+
+procedure TFormControls.SetPosition(Id: SmallInt; V: SmallInt);
+begin
+  F.SetPosition(Id, V);
+end;
+
+function TFormControls.GetPosition(Id: SmallInt): SmallInt;
+begin
+  Result := F.GetPosition(Id);
+end;
+
+function TFormControls.AddString(Id: SmallInt; S: PChar): SmallInt;
+var
+  Ctl: TControl;
+begin
+  F.AddString(Id, S);
+  Ctl := F.Item(Id);
+  if Ctl is TComboBox then
+    Result := TComboBox(Ctl).Items.Count - 1
+  else if Ctl is TListBox then
+    Result := TListBox(Ctl).Items.Count - 1
+  else
+    Result := -1;
+end;
+
+function TFormControls.GetSelIndex(Id: SmallInt): SmallInt;
+begin
+  Result := F.GetSelIndex(Id);
+end;
+
+function TFormControls.SetSelIndex(Id: SmallInt; I: SmallInt): SmallInt;
+begin
+  F.SetSelIndex(Id, I);
+  Result := I;
+end;
+
+procedure TFormControls.ComboSetText(Id: SmallInt; S: PChar);
+var
+  Ctl: TControl;
+begin
+  Ctl := F.Item(Id);
+  if Ctl is TComboBox then
+    TComboBox(Ctl).Text := Utf8(S);
+end;
+
+procedure TFormControls.EndDlg(Code: SmallInt);
+begin
+  F.EndWith(Code);
+end;
+
+destructor TLogicDialog.Destroy;
+begin
+  if Logic <> nil then
+    Logic.C := nil;
+  FControls.Free;
+  inherited Destroy;
+end;
+
+function TLogicDialog.Logic: TDialogLogic;
+begin
+  Result := TDialogLogic(D.Logic);
+end;
+
+procedure TLogicDialog.SetupWindow;
+begin
+  FControls := TFormControls.Create;
+  FControls.F := Self;
+  Logic.C := FControls;
+  Logic.SetupWindow;
+end;
+
+function TLogicDialog.CanClose: Boolean;
+begin
+  Result := Logic.CanClose;
+end;
+
+procedure TLogicDialog.Command(Id: SmallInt);
+begin
+  { the type's own handler first; OK and Cancel else as TDialog }
+  if Logic.Handle(Id) then
+    Exit;
+  inherited Command(Id);
+end;
+
+procedure TLogicDialog.Notify(Id: SmallInt);
+begin
+  Logic.Handle(Id);
+end;
+
 function DialogClassOf(const Name: string): TKaiserDialogClass;
 begin
+  if DialogLogicOf(Name) <> nil then
+    Exit(TLogicDialog);
   case Name of
     'KaiserDlg', 'MessageDlg', 'Message2Dlg', 'HelpMessageDlg', 'HelpChoice2Dlg':
       Result := TMessageDlg;

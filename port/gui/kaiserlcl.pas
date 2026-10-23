@@ -46,6 +46,8 @@ type
     { a check box, radio button or scroll bar was used (OWL IdCtlNNN) }
     procedure Notify(Id: SmallInt); virtual;
     function Run: SmallInt;
+    { EndDlg(code) }
+    procedure EndWith(Code: SmallInt);
   private
     FAutoTimer: TTimer;
     procedure AutoTick(Sender: TObject);
@@ -502,6 +504,12 @@ begin
     if (FTemplate.Items[I].ClassName = 'BUTTON') and (FTemplate.Items[I].Style and $F = 1) then
       Def := FTemplate.Items[I].Id;
   Command(Def);
+end;
+
+procedure TTemplateForm.EndWith(Code: SmallInt);
+begin
+  EndId := Code;
+  ModalResult := mrOK;
 end;
 
 function TTemplateForm.Run: SmallInt;

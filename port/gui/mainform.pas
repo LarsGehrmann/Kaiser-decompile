@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, KaiserLCL;
+  NERes, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL;
 
 type
   TKaiserForm = class(TForm)
@@ -165,6 +165,9 @@ begin
     CmdSave: CmSpeichern(FSaveFile = '');
     CmdSaveAs: CmSpeichern(True);
     CmdEndTurn: CmBeenden;
+    202:                                        { CmLandHandeln 1000:15d7 }
+      if DS.Game.GameState = 1 then
+        Do_LandHandeln(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
     CmdExit: Close;
     CmdInfo:
       begin
