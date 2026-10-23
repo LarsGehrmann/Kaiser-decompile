@@ -12,7 +12,7 @@ unit Actions;
 interface
 
 uses
-  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn, War, Game;
+  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn, War, Game, Troops;
 
 { Land handeln (1040:7e4b): LANDDLG on a copy of all players; on OK the
   copy is taken over and buildings that no longer fit are lost }
@@ -78,6 +78,8 @@ procedure Do_KriegFuehren(Parent: Pointer; var Players: TPlayers; Me, NumPlayers
   computer ruler takes over, the next player moves (the e-mail hand-over is
   not ported) }
 procedure Do_Demissionieren(Parent: Pointer; HWnd: Word; var Players: TPlayers);
+{ Entwicklungshilfe (1038:22d5): give Taler, land, a unit or people }
+procedure Do_Entwicklungshilfe(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -292,6 +294,16 @@ type
     procedure UpdateCost;
     function Handle(Id: SmallInt): Boolean; override;
     function CanClose: Boolean; override;
+  end;
+
+  { SPENDENDLG (VMT DS:0ea4, 1038:2ad6, a HelpDlg): the choice +0x34, the
+    giver at +0x35, the recipient at +0x70a, the name +0xde3, the allowed
+    gifts +0xe44 (Taler, land, troops, people); static 101, radios 201..204 }
+  TSpendenDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+    procedure UpdateRadios;
+    function Handle(Id: SmallInt): Boolean; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -2170,6 +2182,173 @@ begin
     DS.Game.EmailGameQ := 0;
 end;
 
+{ -- Entwicklungshilfe ------------------------------------------------------- }
+
+procedure TSpendenDlg.SetupWindow;
+var
+  I: Integer;
+begin
+  D.Data[$34] := 0;
+  C.SetText(101, PChar(@D.Data[$DE3]));
+  for I := 0 to 3 do
+    if D.Data[$E44 + I] = 0 then
+    begin
+      C.Enable(201 + I, False);
+      if D.Data[$34] = I then
+        Inc(D.Data[$34]);
+    end;
+  UpdateRadios;
+end;
+
+procedure TSpendenDlg.UpdateRadios;
+var
+  I: Integer;
+begin
+  for I := 0 to 3 do
+    C.SetCheck(201 + I, Ord(I = D.Data[$34]));
+end;
+
+function TSpendenDlg.Handle(Id: SmallInt): Boolean;
+begin
+  if (Id < 201) or (Id > 204) then
+    Exit(False);
+  D.Data[$34] := Id - 201;
+  UpdateRadios;
+  Result := True;
+end;
+
+procedure Do_Entwicklungshilfe(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  T: SmallInt;
+  D, A, E: TDialog;
+  Sent: Boolean;
+  Count: Byte;
+  P, Q: PPlayer;
+  Buf: array[0..80] of Char;
+  Amount: LongInt;
+  L: TLandLoss;
+  U: TUnit;
+  Gains: THeroGains;
+  Army, Slot: Byte;
+
+  function Ask(Name: Word; Mode: Byte): Boolean;
+  begin
+    A := UI.Dialog('AmountDlg', $0FFA, [APtr(Parent), AStr(DSText(Name))]);
+    Move(P^, A.Data[$2E], SizeOf(TPlayer));
+    A.Data[$70F] := Mode;
+    Result := UI.Execute(A) = 1;
+    Amount := PLongInt(@A.Data[$70B])^;
+  end;
+
+begin
+  Sent := False;
+  T := ChooseDiplomacyTarget(Parent, Players, Me, NumPlayers, 1);
+  if T < 0 then
+    Exit;
+  P := @Players[Me];
+  Q := @Players[T];
+  D := UI.Dialog('SpendenDlg', $0EA4, [APtr(Parent), AStr(DSText($1226))]);
+  Count := 0;
+  D.Data[$E44] := Ord(P^.Taler >= 100);
+  Inc(Count, D.Data[$E44]);
+  D.Data[$E45] := Ord((LongInt(P^.Land - P^.LandUsed) >= 12100) and
+    (AttackInitiativeCost(P^.Country, Q^.Country) <= 2));
+  Inc(Count, D.Data[$E45]);
+  D.Data[$E46] := Ord(HasDesertableUnit(P^, 1) and
+    not ((Q^.Army1Count = 8) and (Q^.Army2Count = 8)));
+  Inc(Count, D.Data[$E46]);
+  D.Data[$E47] := Ord(P^.Population >= 51);
+  Inc(Count, D.Data[$E47]);
+  if Count = 0 then
+  begin
+    UI.Done(D, 1);
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($1231))]);    { SPENDENADADLG }
+    UI.Execute(E);
+    UI.Done(E, 1);
+    Exit;
+  end;
+  FormatPlayerTitle(Q^, Buf, 0, 0);
+  StrCopy(PChar(@D.Data[$DE3]), Buf);
+  Move(P^, D.Data[$35], SizeOf(TPlayer));
+  Move(Q^, D.Data[$70A], SizeOf(TPlayer));
+  if UI.Execute(D) = 1 then
+    case D.Data[$34] of
+      0:                                                        { Taler }
+        begin
+          if Ask($123F, 0) then
+          begin
+            Sent := True;
+            PostMessage(Players, T, Me, 1, Amount);
+            Players[T].Mailbox[Me * 6 + 1] := 0;
+            P^.Taler := LongInt(P^.Taler - Amount);
+            Q^.Taler := LongInt(Q^.Taler + Amount);
+            P^.TotalAid := LongInt(P^.TotalAid - Amount);
+            Q^.TotalAid := LongInt(Q^.TotalAid + Amount);
+          end;
+          UI.Done(A, 1);
+        end;
+      1:                                                        { land }
+        begin
+          if Ask($124F, 1) then
+          begin
+            Sent := True;
+            PostMessage(Players, T, Me, 1, Amount);
+            Players[T].Mailbox[Me * 6 + 1] := 1;
+            FillChar(L, SizeOf(L), 0);
+            TransferLand(P^, Q^, L, Amount, 0);
+            if L.Total > 0 then
+              UI.Call('ShowBuildingLossDlg', [APtr(Parent), AStr(DSText($125E)), ARec(@L, SizeOf(L)),
+                AByte(0)]);
+          end;
+          UI.Done(A, 1);
+        end;
+      3:                                                        { people }
+        begin
+          if Ask($1269, 3) then
+          begin
+            Sent := True;
+            PostMessage(Players, T, Me, 1, Amount);
+            Players[T].Mailbox[Me * 6 + 1] := 3;
+            P^.Population := LongInt(P^.Population - Amount);
+          end;
+          UI.Done(A, 1);
+        end;
+      2:                                                        { a unit }
+        if ChooseUnitToGive(Parent, P^, Army, Slot) then
+        begin
+          Sent := True;
+          if Army = 1 then
+            Move(PByte(P)[$FC + Slot * $3D], U, SizeOf(TUnit))
+          else
+            Move(PByte(P)[$321 + Slot * $3D], U, SizeOf(TUnit));
+          Inc(P^.UnitsGivenOrDismissed);
+          PostMessage(Players, T, Me, 1, ShortInt(U.UnitType));
+          Players[T].Mailbox[Me * 6 + 1] := 2;
+          if (Q^.Spell = 9) and (U.Level = 0) then               { Heldentum }
+          begin
+            FillChar(Gains, SizeOf(Gains), 0);
+            if UnitGainExperience(U, Gains, 10, 9) then
+              UI.Call('ShowHeroLevelUp', [APtr(Parent), ARec(@Gains, SizeOf(Gains))]);
+          end;
+          if (Q^.Army1Count < 8) and (Q^.ArmyAway = 0) then
+            AddUnitToArmy(Q^, 1, U)
+          else
+            AddUnitToArmy(Q^, 2, U);
+          if Army = 1 then
+            RemoveArmy1Unit(P^, Slot)
+          else
+            RemoveArmy2Unit(P^, Slot);
+        end;
+    end;
+  UI.Done(D, 1);
+  if Sent then
+  begin
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($127B))]);    { KURIERDLG }
+    UI.Execute(E);
+    UI.Done(E, 1);
+  end;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -2355,4 +2534,5 @@ initialization
   RegisterDialogLogic('SabotageBudgetDlg', TSabotageBudgetDlg);
   RegisterDialogLogic('SabotageWahlDlg', TSabotageWahlDlg);
   RegisterDialogLogic('GegnerDlg', TGegnerDlg);
+  RegisterDialogLogic('SpendenDlg', TSpendenDlg);
 end.
