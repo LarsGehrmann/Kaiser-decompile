@@ -236,13 +236,16 @@ happiness < 0.25 (humans 0.3); exile costs only 1 year of lifetime (humans 2).
 
 ### Computer players (segment 2 1008, segment 7 1030)
 
+All ported to `port/src/ai.pas` and verified against the original; the exact rules are in
+`docs/rules/ai.md`.
+
 | Address | Name | Purpose |
 |---|---|---|
 | 1008:0002 | `Ai_Turn`  | The computer player's year: ageing, events, simulation, diplomacy, population, budget, grain, land, buildings, military (renamed from Ai_Economy) |
 | 1008:01fd | `Ai_YearlySimulation`  | Harvest, goods, grain price, initiative, experience for a computer player |
-| 1008:0843 | `Ai_Diplomacy`  | Computer player sends offers (types 2, 5, 6, 9) |
+| 1008:0843 | `Ai_Diplomacy`  | Answers the mailbox, then sends offers (types 2, 5, 6, 9) |
 | 1008:0ff7 | `Ai_PopulationModel`  | Birth/death rates, happiness, migration |
-| 1008:1131 | `Ai_Budget`  | Income items like PlayerTurnStart |
+| 1008:1131 | `Ai_Budget`  | Income items like PlayerTurnStart, without army pay and warehouse rent; positive net income × DS:0500[cpu_level] |
 | 1008:13b9 | `Ai_GrainPolicy`  | Distribution band from rating 1030:0002 (<6 min..need, 6-10 need..max, >10 max) |
 | 1008:1594 | `Ai_LandPolicy`  | Land trading |
 | 1008:17a5 | `Ai_SellGoods` * | Sells salt (price >= 10), beer (>= 45), wine (>= 100) completely |

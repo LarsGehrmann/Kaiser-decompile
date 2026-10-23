@@ -211,7 +211,9 @@ class KaiserEmu:
                         self.write(base, site, struct.pack('<H', off))
 
     # -- calling -------------------------------------------------------------
-    def _run(self, para, off, max_insns=5_000_000, until=None):
+    def _run(self, para, off, max_insns=None, until=None):
+        if max_insns is None:
+            max_insns = int(os.environ.get("KAISER_EMU_MAX_INSNS", 50_000_000))
         if until is None:
             until = (self.stub_para, self.return_ip)
         def hook(uc, address, size, user):

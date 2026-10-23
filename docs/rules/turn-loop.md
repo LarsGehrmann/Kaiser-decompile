@@ -1,7 +1,7 @@
 # Turn loop
 
-Status: structure confirmed from the code; the processing inside `PlayerTurnStart` and
-`PlayerTurnEnd` is the next subsystem.
+Status: exact. `NextPlayer`, `CpuTurn`, `ResolveWar` (port: `port/src/game.pas`) and
+`PlayerTurnStart`/`PlayerTurnEnd` (`turn.pas`) are ported and verified against the original.
 
 ## One year
 
@@ -34,8 +34,9 @@ loop:
     human,    skip_turn set   -> clear skip_turn, continue with the next player
     human,    skip_turn clear -> stop: it is this human's turn
     computer, skip_turn set   -> clear skip_turn, continue
-    computer, skip_turn clear -> CpuTurn; stop on game over or title 10 (Victory)
-    advance current (wrap -> year + 1, plus a yearly call 1068:4671 on header+0x15)
+    computer, skip_turn clear -> CpuTurn; stop on game_state 0 (EndGame) or title 10 (Victory)
+    advance current (wrap -> year + 1, and the Avenger (header+0x15) gains 2 experience;
+    the first advance above does not give it)
 ```
 
 So computer players run inside `NextPlayer`, between the human turns, and a skipped
@@ -53,8 +54,48 @@ Ai_EndTurn(num_players, current, players)               ; 1008:29ea
 
 ## War – ResolveWar (1000:37c0)
 
-`Battle(current, target)` (1018:0558); result 3 means "try again once". Result 1 posts
-news item 8 (war won), anything else item 9 (war lost).
+game_state 2, the attacker's armies sorted (`Ai_ArrangeArmies` mode 1), then
+`Battle(current, target)` (1018:0558); result 3 means "try again once" (second call with
+flag 1). Result 1 posts news item 8 (war won), anything else item 9, both with the defender as
+actor; game_state 1 again.
+
+## The human turn in detail
+
+`PlayerTurnStart` (1010:37b6):
+
+```
+UpdateInitiative, lifetime − 1
+ShowStartTurnDialog (e-mail: password; false = wrong password, the game stops)
+year 0: DiplomacyTurnStart, UpdateMarketPrices, MarriageDowry, a first hero (GrantFirstHero)
+        unless one exists, WitchChoosesSpell; Heldentum: fame 0 and all Heer units + 10 experience
+else:
+    event money, immigrants, emigrants, built-this-turn flags cleared
+    year factor := RandomReal × 1.5 + 0.5 (+0x5f0)
+    from Ritter on (or Terror): OfferUnitsAtTurnStart
+    SabotageEnd, DiplomacyTurnStart, gossip (report flag 0), RollYearlyEvent
+    lifetime < 1 (no immortality): RulerFallsIll with chance 25 %
+    event 17: FightRaiders(1) → won: RaiderVictoryReward(1), lost: news 7; event 19: FightRaiders(2)
+    MaximizeTaxes if set; population: births, deaths, immigrants, emigrants, at least 50
+    budget: income items, event money (5: + 1000..5999, 12: − 3 × population,
+            15: + (justice + 0.01) × (0.5..1.5) × 50000, 13: − title × 1000,
+            17: − title × (500..1499)), net income added to the Taler and the running totals
+    harvest quality 1..5 (Gaias Segen 3..5), harvest, grain price, grain − distributed (≥ 0),
+    goods, market prices; goods trade: Prokurist; warehouses full?
+    grain − 5..15 %, poisoned (0x800): halved; event 16 replaces the stock by the harvest,
+    else harvest added; capped by GrainCapacity, rounded down to 100
+    goods trade: a caravan with chance 1 / (20 − fame div 10)
+    army_away cleared when initiative ≥ 0
+    experience: heroes + 1 (level-up dialog), others + 1 (Feldmarschall, ability 24: + 2);
+    all units' field +0x37 := 1
+    fame + 1 with chance 50 % if the Heer has ability 21
+    reports by report_flags: 1 population, 2 budget, 3 intelligence; HarvestReport
+both: goods trade with warehouses and report flag 4: goods dialog, else "warehouses full";
+      report flags 5 grain, 6 land, 7 buildings
+```
+
+`PlayerTurnEnd` (1010:57b2): GrainShortageWarning, birth/death rates, happiness
+(< 0.5: fame − 2), LandLossCheck, PromotionCheck, Bankruptcy, RevolutionCheck, SkipTurnCheck,
+sabotage flags cleared.
 
 ## End of the game
 

@@ -19,7 +19,9 @@ original resources.
   `port/tests` test programs; `tools/gen_pascal_types.py` generates the record types
   (`kaisertypes.pas`) and the data segment (`kaiserds.pas`) from `tools/kaiser_structs.py`;
   the emulator harness lives in `tools/emu/`; `tools/gen_pascal_res.py` generates the string
-  table resources with a `LoadString` (`kaiserres.pas`).
+  table resources with a `LoadString` (`kaiserres.pas`). Engine units by original segment:
+  `rules.pas` (14), `turn.pas` (3), `ai.pas` (2 and 7), `game.pas` (the turn loop of 1);
+  `kaiserui.pas` is the interface to the UI.
 - **Globals stay where they were.** `KaiserDS.DS` is a packed record with the layout of the
   original data segment (0x681c bytes), initialised with its contents from `kaiser.exe`.
   Known tables and globals are named fields at their original offsets (`DS.Game` = DS:6108,
@@ -27,8 +29,12 @@ original resources.
   So an index that runs past a table reads the same neighbouring bytes as in the original
   (`CanBePromoted` reads `PromotionLand[11]` for a Kaiser).
 - **Uninitialised locals.** Some original functions copy partly uninitialised local records
-  (e.g. `RecruitUnit`'s new unit: hit points, steps, motivation). The emulator zeroes its stack
-  before every call and the port zero-initialises these locals, so both agree on 0.
+  (e.g. `RecruitUnit`'s new unit: hit points, steps, motivation; `MarriageDowry` copies it into
+  the army). In the emulator every `ENTER n,0` frame of the logic segments starts zeroed (the
+  instruction is patched to `INT3` and emulated with a zero fill), the stack is zeroed before
+  each call, and the port zero-initialises these locals, so both agree on 0 even deep inside
+  `PlayerTurnStart`. Bytes the original never writes in a record it logs (`TLandLoss` bytes
+  4..7) are masked in the log.
 - **Relocated data.** The port's data segment is the raw image from the file; far pointers that
   the loader fills in (at relocation sites) are 0. Only out-of-range reads that run into such
   pointers differ (e.g. `UnitRankName` for troop levels far past the rank table), and the
@@ -46,7 +52,7 @@ original resources.
 | 1 | Data layer: `TGameHeader`, `TPlayer`, `TUnit`, load/save `.KSR` | all 30 saves round-trip byte-identically | ✅ |
 | 2 | Runtime: `Random`, `RandomReal`, Real48 add/sub/mul/div/compare/round/trunc/from-longint, `Sqrt` | differential test against segment 26 in the emulator | ✅ 300,000 / 300,000 bit-identical (+ 30,000 `Sqrt`) |
 | 3 | Rule library: segment 14 functions (rates, happiness, income, harvest, prices, …) | per-function differential tests | ✅ all 102 functions (`port/src/rules.pas`; `Seg14_UnitInit` is empty, the local `SortUnits`/`UnitLess` are tested through `SortArmy`); 100,000 / 100,000 vectors identical (1,000 per function) |
-| 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | |
+| 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | ✅ segment 3 (`port/src/turn.pas`: all 25 logic functions, the rest are dialog classes, plus `FormatPlayerTitle`), segments 2 and 7 (`ai.pas`, all 36), the turn loop of segment 1 (`game.pas`: `NextPlayer`, `CpuTurn`, `ResolveWar`); UI calls replayed (below); M4_RESULT |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | |
 | 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | |
@@ -59,6 +65,7 @@ port/bin/ksrtool roundtrip Kaiser/*.KSR Kaiser/*.ksr
 port/bin/ksrtool show Kaiser/NILSLARS.KSR
 port/bin/real48test port/tests/real48.vec       # runtime vs. original
 port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
+port/bin/ruletest Kaiser port/tests/turn.vec    # turn processing, AI, turn loop vs. original
 ```
 
 ## How the exact runtime works
@@ -89,3 +96,26 @@ port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
   seed, e.g. `gen_rule_vectors.py FUNCS 2000 12`.
 - The port transliterates each function from the disassembly in the original order of
   operations: Real48 rounding depends on it, and so does the order of the `Random` calls.
+
+## How the UI calls are tested
+
+Turn processing opens dialogs and calls whole UI functions (reports, battles, sounds). The
+port goes through `KaiserUI.UI` at exactly these places; the tests replace both sides with a
+recording:
+
+- **Emulator** (`tools/emu/ui_stubs.py`): dialog constructors (`KaiserDlg`, `MessageDlg`,
+  `Message2Dlg`, `HeroNameDlg`, …) are patched with a jump to a stub that returns a fake
+  object (zeroed, fake VMT at DS:F000). Its `Execute`, `ExecDialog`, `Done` and `GetText`
+  slots are stubs too, as are whole UI functions (`FUNCS`: `ShowBuildingLossDlg`,
+  `FightRaiders`, `Battle`, `Do_*` menus, `PlaySound`, `Victory`, …). Every call is logged with
+  its arguments: pointers as `W` (the parent window), `P<i>:<offset>` (into the player array),
+  `O<n>` (the n-th fake dialog), `D<offset>`; strings as hex (`i:<id>` for resource ids);
+  records as hex. `Execute` also logs what the game wrote into the dialog (`;d:`). The answer
+  (return value and data written into the dialog, e.g. the chosen spell) comes from
+  `UI_SCRIPTS` in `gen_rule_vectors.py` and is recorded with the call. Code of the UI segments
+  that is not stubbed stops the emulation (guard), except plain logic listed in `ALLOWED`
+  (`FormatPlayerTitle`, `NextPlayer`, `CpuTurn`, `ResolveWar`). `InvalidateRect` is emulated as
+  a no-op. For the turn loop a fake main window is passed whose player array lies at +0x41.
+- **Port** (`port/tests/replayui.pas`): `TReplayUI` formats each call the same way, compares it
+  with the next recorded call and returns the recorded answer. A vector passes only if the
+  sequence of UI calls (`ui=`) is identical, too.

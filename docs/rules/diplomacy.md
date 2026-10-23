@@ -1,8 +1,8 @@
 # Diplomacy, treaties and sabotage
 
-Status: message protocol, treaty fields and the sabotage executor from the code. The
-computer players' decisions (segment 2) are in ai.md. Partly open: exact amounts in the
-reply handlers, sabotage costs, intelligence visibility.
+Status: message protocol, the handlers of both sides and the sabotage executor exact (ported
+and verified bit for bit). The computer players' decisions (segment 2) are in ai.md. Open:
+intelligence visibility.
 
 ## Per-player diplomacy fields (TPlayer)
 
@@ -11,7 +11,7 @@ reply handlers, sabotage costs, intelligence visibility.
 | 0x671 | mailbox: 6 bytes per *sender* (`type`, sub-type, 2 words of data) | |
 | 0x6ad | `trade_agreement[10]` – 1 = agreement with that player | income: finances.md |
 | 0x6b7 | `peace_years[10]` – years left on a peace treaty | counts down each turn |
-| 0x6c1 | `attitude_q[10]` – word per player, 100 at game start | |
+| 0x6c1 | `attitude_q[10]` – word per player, 100 at game start; only computer players use it (ai.md) | |
 
 ## Message protocol (mailbox)
 
@@ -35,6 +35,27 @@ immediately** (Taler, land, units); only the message waits for the recipient's t
 people are added to the recipient's immigrants when the message is read. A tribute demand
 costs the demander 1 fame (not with Ambassador). Running totals: `total_aid` (0x9f),
 `total_tribute` (0xa7).
+
+### Slot layout and the human side (exact)
+
+A slot is `kind` (byte), `sub` (byte), `data` (longint). The receiver answers by writing into
+the **sender's** mailbox at its own index and clears its own slot. `DiplomacyTurnStart`
+first counts down the peace treaties (`peace_years > 0`: at 1 the `PEACEENDDLG`, then − 1),
+then handles the slots of all players in index order:
+
+| Kind | Handler | Effect for the human |
+|---|---|---|
+| 1 | `Msg_ReceiveAid` 1010:0467 | sub 0 Taler, 1 land, 2 a unit (data = type), 3 settlers: `MSGSPENDENDLG`; only settlers change anything here (immigrants + data), the rest arrived with the sending. Other sub values leave the slot untouched |
+| 2 | `Msg_TributeDemand` 1010:0ead | `MSGTRIBUTDLG`; *pay* answers 4, *refuse* 3 (with the same sub and data). Taler: taler and `total_tribute` − data, the demander + data; land: at least 2000 free land is kept (data is cut), `TransferLand`, buildings lost on the way show `VERLUSTDLG`; workers: at least 50 people are kept, emigrants + data; peace: data years (+ 1 if the demander moves earlier); trade agreement: nothing yet. Paying costs 5 fame. Then `KURIERDLG` |
+| 3 / 4 | `Msg_TributeAnswer` 1010:17c6 | `MSGTRIBUTNODLG` / `MSGTRIBUTOKDLG`; paid workers arrive as immigrants, a paid trade agreement is set on both sides, paid peace years are set |
+| 5 | `Msg_Negotiation` 1010:06f6 | `MSGTRADEDLG`: accept → answer 7, decline → 8; `KURIERDLG` |
+| 6 | | `MSGTRADEENDDLG`: own agreement flag cleared |
+| 7 / 8 | | `MSGTRADEOKDLG` (both flags, fame + 2, news 6) / `MSGTRADENODLG` (both flags cleared) |
+| 9 | | `MSGPEACEDLG` with the years: accept → answer 10 with the years, fame + (years div 5 + 1), lifetime + Random(2), `peace_years` = years (+ 1 if the receiver moves after the sender); decline → 11 |
+| 10 / 11 | | `MSGPEACEOKDLG` "until year …" (`peace_years`, news 5, fame + years div 5, lifetime + Random(2)) / `MSGPEACENODLG` |
+
+A tribute demand with an unknown sub frees an uninitialised dialog pointer (crash in the
+original); the senders never write one.
 
 ## Treaties
 
