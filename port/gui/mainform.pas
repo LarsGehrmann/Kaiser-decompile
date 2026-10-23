@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
-  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census;
+  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports;
 
 type
   TKaiserForm = class(TForm)
@@ -237,9 +237,9 @@ var
   P: ^TPlayer;
   OX, OY, I: Integer;
 begin
-  { 1000:03d9, in client coordinates (the picture starts at x = 32). The
-    right-click unit popups (ShowUnitLookDlg 1040:330f) are not ported;
-    unlike the original nothing reacts without a running game }
+  { 1000:03d9, in client coordinates (the picture starts at x = 32); a
+    right click on a unit shows it (ShowUnitLookDlg 1040:330f). Unlike the
+    original nothing reacts without a running game }
   if DS.Game.GameState <> 1 then
     Exit;
   P := @FSave.Players[DS.Game.CurrentPlayer];
@@ -248,8 +248,20 @@ begin
   if (P^.ArmyAway = 0) and (Y >= ResolutionHeight - $4C) and (Y <= ResolutionHeight - $28) then
   begin
     I := (ResolutionWidth - $90 - X) div 32;
-    if (I >= 0) and (I < P^.Army1Count) and Dbl then
-      Command(211);                                 { Truppen aufstellen }
+    if (I >= 0) and (I < P^.Army1Count) then
+      if Dbl then
+        Command(211)                                { Truppen aufstellen }
+      else
+        ShowUnitLookDlg(Self, P^, 1, P^.Army1Count - I);
+    Exit;
+  end;
+  if not Dbl and (X >= (OX + 7) * 32) and (X < (OX + 10) * 32) and
+     (Y >= (OY + 5) * 32) and (Y < (OY + 8) * 32) then
+  begin
+    { the Garde in the town: the 3 x 3 cells DS:0266 }
+    I := PByte(@DS)[$0266 + ((X - (OX + 7) * 32) div 32) * 3 + (Y - (OY + 5) * 32) div 32];
+    if I <= P^.Army2Count then
+      ShowUnitLookDlg(Self, P^, 2, I);
     Exit;
   end;
   if not Dbl then
