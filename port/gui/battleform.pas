@@ -26,7 +26,7 @@ interface
 uses
   SysUtils, Classes, Graphics, Controls, Forms, StdCtrls, ExtCtrls, LCLType, LCLIntf,
   Math, IntfGraphics, FPImage, GraphType,
-  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, Rules, Battle, KaiserLCL;
+  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, Rules, Battle, KaiserLCL, HelpView;
 
 const
   MapW = 480;               { 15 cells of 32 pixels }
@@ -429,6 +429,8 @@ end;
 
 procedure TBattleForm.FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
+var
+  Topic: LongInt;
 begin
   if (X < 0) or (Y < 0) or not Enter then
     Exit;
@@ -436,7 +438,11 @@ begin
     if Button = mbLeft then
       Battle.WMLButtonDown(B^, Word(X), Word(Y))
     else if Button = mbRight then
-      Battle.WMRButtonDown(B^, Word(X), Word(Y));     { (the help topic: WinHelp is not ported) }
+    begin
+      Topic := Battle.WMRButtonDown(B^, Word(X), Word(Y));
+      if Topic <> 0 then
+        ShowHelpTopic(Topic);                         { WinHelp(.., HELP_CONTEXT, topic) }
+    end;
   finally
     Leave;
   end;

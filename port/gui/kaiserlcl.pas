@@ -644,6 +644,9 @@ begin
     Free;
   end;
   Command(Def);
+  { a button that did not end the dialog (help, recruit): the next round }
+  if ModalResult = mrNone then
+    FAutoTimer.Enabled := True;
 end;
 
 procedure TTemplateForm.EndWith(Code: SmallInt);

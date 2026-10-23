@@ -130,7 +130,7 @@ function DialogClassOf(const Name: string): TKaiserDialogClass;
 implementation
 
 uses
-  Rules, Real48, Turn, KaiserRes;
+  Rules, Real48, Turn, KaiserRes, HelpView;
 
 { -- TKaiserDialog ----------------------------------------------------------- }
 
@@ -897,11 +897,41 @@ begin
   Result := Logic.CanClose;
 end;
 
+{ the help context of the types whose port does not keep it (the constant
+  the original's Init passes to HelpDlg.Init 1058:01bb, +0x2e); IdHelp
+  (1058:0221) calls WinHelp with it }
+function HelpContextOf(const Name: string; const D: TDialog): Word;
+const
+  Names: array[0..15] of string = ('GrainDlg', 'LandDlg', 'InvestDlg', 'TaxDlg',
+    'GoodsDlg', 'ProkuristDlg', 'DemographyDlg', 'BudgetDlg', 'CareerDlg', 'AbkommenDlg',
+    'SpendenDlg', 'TributDlg', 'SabotageWahlDlg', 'SabotageBudgetDlg', 'TroopDlg', 'GeheimDlg');
+  Contexts: array[0..15] of Word = ($65, $66, $67, $68, $6F, $8C, $71, $72, $73, $6A,
+    $69, $6B, $8D, $6C, $6D, $74);
+var
+  I: Integer;
+begin
+  if Name = 'UnitLookDlg' then
+    Exit(D.Data[$4D] + 200);                        { the unit type + 200 }
+  for I := 0 to High(Names) do
+    if Names[I] = Name then
+      Exit(Contexts[I]);
+  Result := 0;
+end;
+
 procedure TLogicDialog.Command(Id: SmallInt);
+var
+  Ctx: Word;
 begin
   { the type's own handler first; OK and Cancel else as TDialog }
   if Logic.Handle(Id) then
     Exit;
+  if Id = 999 then
+  begin
+    Ctx := HelpContextOf(D.Name, D);
+    if Ctx <> 0 then
+      ShowHelpTopic(Ctx);
+    Exit;
+  end;
   inherited Command(Id);
 end;
 

@@ -10,7 +10,7 @@ interface
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
   KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports, GameDialogs,
-  Battle, War, BattleForm;
+  Battle, War, BattleForm, HelpView;
 
 type
   TLclUI = class(TGameUI)
@@ -201,6 +201,12 @@ begin
     Reports.TradeCaravan(Args[0].P, PPlayer(Args[1].P)^, Word(Args[2].V))
   else if Name = 'ShowHeroLevelUp' then
     Reports.ShowHeroLevelUp(Args[0].P, THeroGains(Args[1].P^))
+  else if Name = 'WinHelp' then
+  begin
+    { WinHelp(KAISER.HLP, HELP_CONTEXT, topic) of the "?" buttons }
+    if Word(Args[1].V) = 8 then
+      ShowHelpTopic(Args[2].V);
+  end
   else if Name = 'TroopDlg_DrawUnitInfo' then
   begin
     F := FormOf(FindDialog(Args[1].P));
