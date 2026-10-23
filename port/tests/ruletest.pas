@@ -602,6 +602,9 @@ begin
           'Do_SteuernFestsetzen': begin Do_SteuernFestsetzen(Window, ArgI(0), Pl^); Got := '-'; end;
           'Do_HandelMitGuetern': begin Do_HandelMitGuetern(Window, Pl^); Got := '-'; end;
           'Do_Hofschmiede': begin Do_Hofschmiede(Window, Pl^); Got := '-'; end;
+          'Do_DemographischeDaten': begin Do_DemographischeDaten(Window, ArgI(0), Pl^); Got := '-'; end;
+          'Do_Finanzhaushalt': begin Do_Finanzhaushalt(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Do_InternationalerVergleich': begin Do_InternationalerVergleich(Window, Save.Players, ArgI(0)); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin

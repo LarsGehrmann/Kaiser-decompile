@@ -12,7 +12,7 @@ unit Actions;
 interface
 
 uses
-  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI;
+  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn;
 
 { Land handeln (1040:7e4b): LANDDLG on a copy of all players; on OK the
   copy is taken over and buildings that no longer fit are lost }
@@ -28,6 +28,13 @@ procedure Do_SteuernFestsetzen(Parent: Pointer; HWnd: Word; var P: TPlayer);
 procedure Do_HandelMitGuetern(Parent: Pointer; var P: TPlayer);
 { Hofschmiede (1040:6bab): SCHMIEDEDLG, the smithies' output }
 procedure Do_Hofschmiede(Parent: Pointer; var P: TPlayer);
+{ Demographische Daten (1040:62f8): BEVDLG on a copy of the player }
+procedure Do_DemographischeDaten(Parent: Pointer; HWnd: Word; P: TPlayer);
+{ Finanzhaushalt (1040:5b3a): HAUSHALTSDLG, the budget of the coming year
+  (computes the player's rates and happiness first, like the year end) }
+procedure Do_Finanzhaushalt(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+{ Internationaler Vergleich (1040:5f7f): RANGLISTENDLG, the players by score }
+procedure Do_InternationalerVergleich(Parent: Pointer; var Players: TPlayers; NumPlayers: Byte);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -101,6 +108,28 @@ type
     procedure SetupWindow; override;
     procedure Update;
     function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { BEVDLG (VMT DS:1dbc, 1040:6385, a HelpDlg): the player at +0x36, the
+    happiness +0x70b; statics 101..107 }
+  TDemographyDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+  end;
+
+  { HAUSHALTSDLG (VMT DS:27ce, 1040:5d7d, a HelpDlg): the budget lines
+    +0x34 .. +0x54 (longints); statics 101..109 }
+  TBudgetDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
+  end;
+
+  { RANGLISTENDLG (VMT DS:2834, 1040:5fc7): the number of players +0x2e,
+    all players at +0x2f; statics 301+i rank, 101+i title and name, 201+i
+    score }
+  TRankingDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -720,6 +749,168 @@ begin
   UI.Done(D, 1);
 end;
 
+{ -- Do_DemographischeDaten -------------------------------------------------- }
+
+procedure Do_DemographischeDaten(Parent: Pointer; HWnd: Word; P: TPlayer);
+var
+  D: TDialog;
+begin
+  if P.MaximizeTaxes <> 0 then
+    MaximizeTaxes(P);
+  D := UI.Dialog('DemographyDlg', $1DBC, [APtr(Parent), AStr(DSText($2896))]);
+  Move(P, D.Data[$36], SizeOf(TPlayer));
+  PWord(@D.Data[$34])^ := HWnd;
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+{ -- BEVDLG ---------------------------------------------------------------- }
+
+{ Str(R * 100:4:1) }
+procedure SetPercent(C: TDlgControls; Id: SmallInt; const R: TReal48);
+var
+  Buf: array[0..255] of Char;
+begin
+  StrPCopy(Buf, R48Str(R48Mul(R, Hundred), 4, 1));
+  C.SetText(Id, Buf);
+end;
+
+procedure TDemographyDlg.SetupWindow;
+var
+  P: PPlayer;
+  H: SmallInt;
+  Buf: array[0..255] of Char;
+  Mood: Word;
+begin
+  P := PPlayer(@D.Data[$36]);
+  UpdateBirthDeathRates(P^);
+  H := SmallInt(UpdateHappiness(P^));
+  PSmallInt(@D.Data[$70B])^ := H;
+  StrPCopy(Buf, IntToStr(H));
+  C.SetText(101, Buf);
+  SetPercent(C, 102, P^.BirthRate);
+  SetPercent(C, 103, P^.DeathRate);
+  SetPercent(C, 104, ImmigrationRate(P^));
+  SetPercent(C, 105, EmigrationRate(P^));
+  { the mood by happiness: critical .. euphoric }
+  case H of
+    0..29: Mood := $289E;
+    30..49: Mood := $28BA;
+    50..69: Mood := $28D9;
+    70..89: Mood := $28F5;
+  else
+    Mood := $2916;
+  end;
+  C.SetText(106, DSText(Mood));
+  SetNumber(C, 107, P^.Population);
+end;
+
+{ -- Do_Finanzhaushalt ------------------------------------------------------- }
+
+procedure Do_Finanzhaushalt(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  D: TDialog;
+  P: PPlayer;
+
+  function L(Off: Integer): PLongInt;
+  begin
+    Result := PLongInt(@D.Data[Off]);
+  end;
+
+begin
+  D := UI.Dialog('BudgetDlg', $27CE, [APtr(Parent), AStr(DSText($2826))]);
+  P := @Players[Me];
+  if P^.MaximizeTaxes <> 0 then
+    MaximizeTaxes(P^);
+  UpdateBirthDeathRates(P^);
+  UpdateHappiness(P^);
+  L($34)^ := IncomeFromBuildings(P^);
+  L($38)^ := TaxIncome(P^);
+  L($3C)^ := JusticeIncome(P^);
+  L($40)^ := ArmyPay(P^);
+  L($44)^ := LongInt(WarehouseRent(P^) + Interest(P^));
+  L($50)^ := TradeAgreementIncome(Players, Me, NumPlayers);
+  L($54)^ := SabotageYearlyCost(Players, Me, NumPlayers);
+  L($48)^ := LongInt(L($34)^ + L($50)^ + L($38)^ + L($3C)^ - L($40)^ + L($44)^ - L($54)^);
+  L($4C)^ := LongInt(P^.Taler + L($48)^);
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+{ -- HAUSHALTSDLG ---------------------------------------------------------- }
+
+procedure TBudgetDlg.SetupWindow;
+const
+  Lines: array[0..8] of Integer = ($34, $38, $3C, $40, $44, $48, $4C, $50, $54);
+var
+  K: Integer;
+  V: LongInt;
+begin
+  { income from buildings, taxes, justice, - army pay, rent and interest,
+    the total, the new treasury, trade agreements, - sabotage }
+  for K := 0 to 8 do
+  begin
+    V := PLongInt(@D.Data[Lines[K]])^;
+    if (K = 3) or (K = 8) then
+      V := LongInt(-V);
+    SetNumber(C, 101 + K, V);
+  end;
+end;
+
+{ -- Do_InternationalerVergleich --------------------------------------------- }
+
+procedure Do_InternationalerVergleich(Parent: Pointer; var Players: TPlayers; NumPlayers: Byte);
+var
+  D: TDialog;
+begin
+  D := UI.Dialog('RankingDlg', $2834, [APtr(Parent), AStr(DSText($2888))]);
+  Move(Players, D.Data[$2F], SizeOf(TPlayers));
+  D.Data[$2E] := NumPlayers;
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+{ -- RANGLISTENDLG --------------------------------------------------------- }
+
+procedure TRankingDlg.SetupWindow;
+var
+  Players: PPlayers;
+  Order: array[0..255] of Byte;
+  Score: array[0..255] of LongInt;
+  Last, I, J, V: Byte;
+  Buf: array[0..119] of Char;
+begin
+  Players := PPlayers(@D.Data[$2F]);
+  Last := Byte(D.Data[$2E] - 1);
+  for I := 0 to Last do
+  begin
+    Order[I] := I;
+    Score[I] := ComputeScore(Players^[I], 0, 0);
+  end;
+  { insertion sort, best first; ties keep their order }
+  if Last >= 1 then
+    for I := 1 to Last do
+    begin
+      J := I;
+      V := Order[I];
+      while J <> 0 do
+      begin
+        if Score[V] <= Score[Order[J - 1]] then
+          Break;
+        Order[J] := Order[J - 1];
+        Dec(J);
+      end;
+      Order[J] := V;
+    end;
+  for I := 0 to Last do
+  begin
+    SetNumber(C, 301 + I, I + 1);
+    FormatPlayerTitle(Players^[Order[I]], Buf, 0, 0);
+    C.SetText(101 + I, Buf);
+    SetNumber(C, 201 + I, Score[Order[I]]);
+  end;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -890,4 +1081,7 @@ initialization
   RegisterDialogLogic('TaxDlg', TTaxDlg);
   RegisterDialogLogic('GoodsDlg', TGoodsDlg);
   RegisterDialogLogic('ProkuristDlg', TProkuristDlg);
+  RegisterDialogLogic('DemographyDlg', TDemographyDlg);
+  RegisterDialogLogic('BudgetDlg', TBudgetDlg);
+  RegisterDialogLogic('RankingDlg', TRankingDlg);
 end.

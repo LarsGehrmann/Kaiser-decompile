@@ -447,6 +447,14 @@ SPECS = {
                             {'salt': (0, 3000000), 'beer': (0, 3000000), 'wine': (0, 3000000),
                              'weapons': (0, 3000000), 'taler': (-99999999, 999999999)}),
     'Do_Hofschmiede': ('1040:6bab', ['Wnd', 'P'], 'none', ['smithies', 'population', 'land']),
+    'Do_DemographischeDaten': ('1040:62f8', ['Wnd', 'W:0:0', 'P'], 'none',
+                               ECON + ['maximize_taxes', 'event', 'flags_5bd_q']),
+    'Do_Finanzhaushalt': ('1040:5b3a', ['Wnd', 'A', 'I', 'N'], 'none',
+                          ECON + ['maximize_taxes', 'event', 'flags_5bd_q', 'J.cpu_level',
+                                  'trade_agreement']),
+    'Do_InternationalerVergleich': ('1040:5f7f', ['Wnd', 'A', 'N'], 'none',
+                                    ECON + ['J.population', 'J.land', 'J.taler', 'J.title',
+                                            'J.palace_parts', 'fame', 'J.fame']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1144,6 +1152,9 @@ DIALOG_TESTS = {
     'Do_Gebaeude': ['INVESTDLG'],
     'Do_SteuernFestsetzen': ['STEUERDLG'],
     'Do_HandelMitGuetern': ['GUETERHANDELDLG', 'PROKURADLG', 'PROKURADLG'],
+    'Do_DemographischeDaten': ['BEVDLG'],
+    'Do_Finanzhaushalt': ['HAUSHALTSDLG'],
+    'Do_InternationalerVergleich': ['RANGLISTENDLG'],
 }
 
 
