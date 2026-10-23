@@ -4,8 +4,9 @@
   The dialog works on a copy of the player at +0x34; units are selected by
   clicking into the painted grids (Mouse), at most two at a time, and the
   buttons swap, dismiss, pay, knight / enfeoff and recruit them. Drawing is
-  left to the UI (TroopDlg_Draw* calls); the dialogs it opens that are not
-  ported yet (RecruitDialog, ShowPayDlg, Do_UnitEditDlg) are UI calls.
+  left to the UI (TroopDlg_Draw* calls). Recruiting (REKRUTDLG, segment 9)
+  and the pay (SOLDDLG) are ported here too; the census editor's unit
+  editor (Do_UnitEditDlg, UNITEDITDLG) is a UI call.
   Differential tests: tools/emu/dlg_driver.py runs the original's own
   object with the same user events (docs/phase3.md). }
 unit Troops;
@@ -19,13 +20,21 @@ uses
   SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, Turn, KaiserUI;
 
 { Truppen aufstellen (1038:6a30): ANORDNENDLG on a copy of the player, taken
-  over on OK. Mode: 0 own armies, 1/2 the Heer before a battle, 3 the Garde
-  (before a city battle), 4 choose a unit to give away, 5 another player's
-  armies (view only), 6 the census editor (Debug) }
+  over on OK. Mode: 0 own armies, 1 the attacker's Heer before a battle,
+  2 the defender's Heer (field battle), 3 the defender's Garde (city
+  battle), 4 choose a unit to give away, 5 another player's armies (view
+  only), 6 the census editor (Debug). The GUI stores the window size at
+  D.Data[$2a] / [$2c] before SetupWindow (the grids scale with it) }
 procedure Do_TruppenAufstellen(Parent: Pointer; var P: TPlayer; Mode: Byte);
 { ChooseUnitToGive (1038:6a93): mode 4 ("Abschicken"); on OK the copy is
   taken over and Army (1 Heer, 2 Garde) / Slot name the chosen unit }
 function ChooseUnitToGive(Parent: Pointer; var P: TPlayer; var Army, Slot: Byte): Boolean;
+{ Rekrutieren (1040:5108): REKRUTDLG shows the player; on OK the unit type
+  chosen is paid and recruited into Army (1 Heer, 2 Garde); a Held gets a
+  name (REKHELDDLG). Free (the census editor): every type, no costs }
+procedure RecruitDialog(Parent: Pointer; var P: TPlayer; Army: Byte; Free: Boolean);
+{ Sold (1040:00f7): SOLDDLG sets the unit's pay }
+procedure ShowPayDlg(Parent: Pointer; var U: TUnit);
 
 const
   { object fields of ANORDNENDLG }
@@ -80,6 +89,40 @@ type
     function Handle(Id: SmallInt): Boolean; override;
     function Mouse(X, Y: SmallInt): Boolean; override;
     function MouseMove(X, Y: SmallInt): Boolean; override;
+  end;
+
+  { REKRUTDLG (VMT DS:2730, 1040:5397, a HelpDlg): the player (a copy, for
+    the display) at +0x34, free mode +0x709, the prices of the unit types
+    1..36 at +0x70b + 4 * type, the chosen type +0x70e, the timer +0x7c7,
+    the picture's blink +0x7cb; combo box 201 (types 1..title), statics
+    101 name, 102 price, 103..107 attack, defence, hit points, range,
+    steps, 108 pay, 109 weapons needed; OK (Kaufen) needs the weapons }
+  TRecruitDlg = class(TDialogLogic)
+  public
+    function Me: PPlayer;
+    function UnitType: Byte;
+    procedure Init; override;
+    procedure SetupWindow; override;
+    procedure UpdateUnitInfo;
+    procedure DrawUnitPicture(Blink: Byte);
+    { WMTimer (1040:5760), every 400 ms while the dialog is open: the
+      picture blinks at random (Random(3), so it changes RandSeed) }
+    procedure Timer;
+    function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { SOLDDLG (VMT DS:2008, 1040:013c): the unit (Args[2]), the pay chosen
+    +0x3e, the unit's base pay +0x40; scroll bar 101 base/2 .. base*2,
+    statics 102 the pay, 103 the unit's name. OK sets the pay; it can be
+    changed once a year (unit +0x37) }
+  TPayDlg = class(TDialogLogic)
+  public
+    U: PUnit;
+    procedure Init; override;
+    procedure SetupWindow; override;
+    procedure UpdatePayLabel;
+    function Handle(Id: SmallInt): Boolean; override;
+    function CanClose: Boolean; override;
   end;
 
 implementation
@@ -650,10 +693,10 @@ begin
   ShowTreasury;
 end;
 
-{ 104 / 105 Rekrutieren (RecruitDialog 1040:5108; free in the census) }
+{ 104 / 105 Rekrutieren (free in the census) }
 procedure TTroopDlg.Recruit(Army: Byte);
 begin
-  UI.Call('RecruitDialog', [APtr(D), APtr(Me), AByte(Army), AByte(Ord(Mode = 6))]);
+  RecruitDialog(D, Me^, Army, Mode = 6);
   if Army = 1 then
     DrawHeer
   else
@@ -671,7 +714,7 @@ begin
   UpdateButtons;
 end;
 
-{ 107 Sold (SOLDDLG, ShowPayDlg 1040:00f7) }
+{ 107 Sold }
 procedure TTroopDlg.Pay;
 var
   U: PUnit;
@@ -680,7 +723,7 @@ begin
     U := HeerUnit(D.Data[TdHeerSel1])
   else
     U := GardeUnit(D.Data[TdGardeSel1]);
-  UI.Call('ShowPayDlg', [APtr(D), APtr(U)]);
+  ShowPayDlg(D, U^);
   UpdateButtons;
 end;
 
@@ -786,6 +829,248 @@ begin
     UI.Call('TroopDlg_DrawUnitInfo', [AWord(0), APtr(D)]);
 end;
 
+{ -- RecruitDialog / REKRUTDLG ---------------------------------------------- }
+
+procedure RecruitDialog(Parent: Pointer; var P: TPlayer; Army: Byte; Free: Boolean);
+var
+  D, E: TDialog;
+  K, T: Byte;
+  Cost: LongInt;
+  U: TUnit;
+  Gains: THeroGains;
+begin
+  if not Free and (P.Title < 1) then
+  begin
+    E := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($2788))]);   { NOREKRUTDLG }
+    UI.Execute(E);
+    UI.Done(E, 1);
+    Exit;
+  end;
+  D := UI.Dialog('RecruitDlg', $2730, [APtr(Parent), AStr(DSText($278A)), AByte(Ord(Free))]);
+  Move(P, D.Data[$34], SizeOf(TPlayer));
+  { the prices (DS:5174, a quarter less with Ferengicharme), fame-discounted;
+    type 36 reads past the table }
+  for K := 1 to 36 do
+  begin
+    if Free then
+      Cost := 0
+    else if P.Spell = 6 then
+      Cost := LongInt(Int64(PLongInt(@PByte(@DS)[$5174 + 4 * K])^) * 3) div 4
+    else
+      Cost := PLongInt(@PByte(@DS)[$5174 + 4 * K])^;
+    PLongInt(@D.Data[$70B + 4 * K])^ := FameDiscount(P.Fame, Cost);
+  end;
+  { (the dialog object is never freed: no Done) }
+  if UI.Execute(D) <> 1 then
+    Exit;
+  T := D.Data[$70E];
+  Cost := PLongInt(@D.Data[$70B + 4 * T])^;
+  P.Taler := LongInt(P.Taler - Cost);
+  P.TotalRecruiting := LongInt(P.TotalRecruiting - Cost);
+  P.Weapons := LongInt(P.Weapons - PByte(@DS)[$5204 + T]);
+  if T <> 9 then
+  begin
+    RecruitUnit(P, Army, T, 0);
+    Exit;
+  end;
+  { a Held: his name, or (+0x49) the Lindwurm }
+  E := UI.Dialog('HeroNameDlg', $351E, [APtr(Parent), AStr(DSText($2794)), AWord(0)]);  { REKHELDDLG }
+  UI.Execute(E);
+  if E.Data[$49] = 1 then
+    RecruitUnit(P, Army, 12, 0)
+  else
+  begin
+    FillChar(U, SizeOf(U), 0);
+    CreateHero(U, UI.GetText(E));
+    FillChar(Gains, SizeOf(Gains), 0);
+    if (P.Spell = 9) and UnitGainExperience(U, Gains, 10, P.Spell) then   { Heldentum }
+      UI.Call('ShowHeroLevelUp', [APtr(Parent), ARec(@Gains, SizeOf(Gains))]);
+    AddUnitToArmy(P, Army, U);
+  end;
+  UI.Done(E, 1);
+end;
+
+function TRecruitDlg.Me: PPlayer;
+begin
+  Result := PPlayer(@D.Data[$34]);
+end;
+
+function TRecruitDlg.UnitType: Byte;
+begin
+  Result := D.Data[$70E];
+end;
+
+procedure TRecruitDlg.Init;
+begin
+  D.Data[$709] := Byte(Args[2].V);
+end;
+
+procedure TRecruitDlg.SetupWindow;
+var
+  N, K: Byte;
+  Buf: array[0..25] of Char;
+begin
+  D.Data[$70E] := 1;
+  PWord(@D.Data[$2E])^ := Word(UnitType + 200);      { SetHelpContext }
+  PWord(@D.Data[$7C9])^ := 0;
+  D.Data[$7CB] := 0;
+  { the types up to the title; a Koenig with a Held already: up to 8 }
+  if (Me^.Title = 9) and (CountUnitsOfType(Me^, 9) > 0) then
+    N := 8
+  else
+    N := Me^.Title;
+  if D.Data[$709] <> 0 then
+    N := 35;
+  if N >= 1 then
+    for K := 1 to N do
+    begin
+      MakeUnitName(Buf, K, 0, Me^.Country);
+      C.AddString(201, Buf);
+    end;
+  C.ComboSetText(201, DSText($4BBC + 25 * UnitType));
+  UpdateUnitInfo;
+  DrawUnitPicture(D.Data[$7CB]);
+  PWord(@D.Data[$7C7])^ := 1;                         { SetTimer(.., 1, 400, nil) }
+end;
+
+procedure TRecruitDlg.UpdateUnitInfo;
+var
+  T, K: Byte;
+  Buf: array[0..25] of Char;
+  Num: array[0..25] of Char;
+begin
+  T := UnitType;
+  if (LongInt(PByte(@DS)[$5204 + T]) > Me^.Weapons) and (D.Data[$709] = 0) then
+  begin
+    C.Enable(1, False);                                 { not enough weapons }
+    StrCopy(Buf, DSText($27A0));                        { '*** ' }
+    IntToPChar(Num, PByte(@DS)[$5204 + T]);
+    StrCat(Buf, Num);
+    StrCat(Buf, DSText($27A5));                         { ' Last Waffen ***' }
+  end
+  else
+  begin
+    C.Enable(1, True);
+    IntToPChar(Buf, PByte(@DS)[$5204 + T]);
+    StrCat(Buf, DSText($27B6));                         { ' Last Waffen' }
+  end;
+  C.SetText(109, Buf);
+  if T = 9 then
+  begin
+    StrCopy(Buf, DSText($27C3));                        { '???' }
+    C.SetText(101, Buf);
+    StrCopy(Buf, DSText($27C5));                        { '?' }
+    for K := 2 to 6 do
+      C.SetText(101 + K, Buf);
+  end
+  else
+  begin
+    MakeUnitName(Buf, T, 0, Me^.Country);
+    C.SetText(101, Buf);
+    IntToPChar(Buf, PByte(@DS)[$509C + T]);             { attack }
+    C.SetText(103, Buf);
+    IntToPChar(Buf, PByte(@DS)[$50C0 + T]);             { defence }
+    C.SetText(104, Buf);
+    IntToPChar(Buf, ShortInt(PByte(@DS)[$50E4 + T]));   { hit points }
+    C.SetText(105, Buf);
+    IntToPChar(Buf, PByte(@DS)[$512C + T]);             { range }
+    C.SetText(106, Buf);
+    IntToPChar(Buf, PByte(@DS)[$5108 + T]);             { steps }
+    C.SetText(107, Buf);
+  end;
+  IntToPChar(Buf, FameDiscount(Me^.Fame, PSmallInt(@PByte(@DS)[$5228 + 2 * T])^));   { pay }
+  C.SetText(108, Buf);
+  IntToPChar(Buf, PLongInt(@D.Data[$70B + 4 * T])^);
+  StrCat(Buf, DSText($27C7));                           { ' Taler' }
+  C.SetText(102, Buf);
+end;
+
+{ the unit's picture (bitmap 1100 + type, 1300 + type blinking): the UI }
+procedure TRecruitDlg.DrawUnitPicture(Blink: Byte);
+begin
+  UI.Call('RecruitDlg_DrawUnitPicture', [AByte(Blink), APtr(D)]);
+end;
+
+procedure TRecruitDlg.Timer;
+begin
+  if Random(3) = 0 then
+    D.Data[$7CB] := Ord(D.Data[$7CB] = 0);
+  DrawUnitPicture(D.Data[$7CB]);
+  D.Data[$7CB] := 0;
+end;
+
+{ 201: another unit type (the list starts with type 1) }
+function TRecruitDlg.Handle(Id: SmallInt): Boolean;
+var
+  Sel: Word;
+begin
+  Result := Id = 201;
+  if not Result then
+    Exit;
+  Sel := Word(C.GetSelIndex(201) + 1);
+  if Word(UnitType) <> Sel then
+  begin
+    D.Data[$70E] := Byte(Sel);
+    PWord(@D.Data[$2E])^ := Word(UnitType + 200);
+    UpdateUnitInfo;
+    DrawUnitPicture(0);
+  end;
+end;
+
+{ -- ShowPayDlg / SOLDDLG --------------------------------------------------- }
+
+procedure ShowPayDlg(Parent: Pointer; var U: TUnit);
+var
+  D: TDialog;
+begin
+  D := UI.Dialog('PayDlg', $2008, [APtr(Parent), AStr(DSText($205C)), APtr(@U)]);
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+procedure TPayDlg.Init;
+begin
+  U := PUnit(Args[2].P);
+  PSmallInt(@D.Data[$3E])^ := U^.Pay;
+  PSmallInt(@D.Data[$40])^ := U^.BasePay;
+end;
+
+procedure TPayDlg.SetupWindow;
+var
+  Base: SmallInt;
+begin
+  C.SetText(103, PChar(@U^.Name));
+  Base := PSmallInt(@D.Data[$40])^;
+  C.SetRange(101, Base div 2, SmallInt(Base shl 1));
+  UpdatePayLabel;
+end;
+
+procedure TPayDlg.UpdatePayLabel;
+begin
+  C.SetPosition(101, PSmallInt(@D.Data[$3E])^);
+  SetNumber(C, 102, PSmallInt(@D.Data[$3E])^);
+end;
+
+function TPayDlg.Handle(Id: SmallInt): Boolean;
+begin
+  Result := Id = 101;
+  if Result then
+  begin
+    PSmallInt(@D.Data[$3E])^ := C.GetPosition(101);
+    UpdatePayLabel;
+  end;
+end;
+
+{ the new pay; no more changes this year }
+function TPayDlg.CanClose: Boolean;
+begin
+  U^.Pay := PSmallInt(@D.Data[$3E])^;
+  U^.UnconsciousRounds := 0;
+  Result := True;
+end;
+
 initialization
   RegisterDialogLogic('TroopDlg', TTroopDlg);
+  RegisterDialogLogic('RecruitDlg', TRecruitDlg);
+  RegisterDialogLogic('PayDlg', TPayDlg);
 end.

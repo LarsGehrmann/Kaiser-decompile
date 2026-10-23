@@ -95,13 +95,13 @@ FUNCS = {
     'Battle_DisableButtons': ('1048:0dde', True, ['p'], False),
     'Battle_End': ('1048:8ff5', True, ['b', 'p'], False),   # EndDlg(code)
     'DisableButton2': ('1058:0591', True, ['p'], False),
-    # the troop dialog (ANORDNENDLG, segment 8): its drawing (DC, Self) and
-    # the dialogs it opens that are not ported yet
+    # the troop dialog (ANORDNENDLG, segment 8) and its recruiting dialog
+    # (REKRUTDLG, segment 9): their drawing (DC / blink, Self); the census
+    # editor's unit editor (UNITEDITDLG), not ported
     'TroopDlg_DrawHeer': ('1038:84a1', True, ['w', 'p'], False),
     'TroopDlg_DrawGarde': ('1038:8699', True, ['w', 'p'], False),
     'TroopDlg_DrawUnitInfo': ('1038:8921', True, ['w', 'p'], False),
-    'RecruitDialog': ('1040:5108', True, ['p', 'p', 'b', 'b'], False),   # (parent, P, army, free)
-    'ShowPayDlg': ('1040:00f7', True, ['p', 'p'], False),                # (parent, unit): SOLDDLG
+    'RecruitDlg_DrawUnitPicture': ('1040:55b5', True, ['b', 'p'], False),
     'Do_UnitEditDlg': ('1038:503d', False, ['p', 'p', 'p'], False),      # near (parent, P, unit)
 }
 # DrawUnitStatus(DC, side, unit, panel, Self) draws, but first recomputes the

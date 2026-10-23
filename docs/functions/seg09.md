@@ -26,6 +26,8 @@ country" string of a player, `1068:0ae8` CanAfford(cost) = taler − cost ≥ �
 
 ### Unit pay – SOLDDLG (type DS:2008)
 
+Ported: `port/src/troops.pas` (`ShowPayDlg`, `TPayDlg`).
+
 | Address | Name | Purpose |
 |---|---|---|
 | 1040:00f7 | `ShowPayDlg` * | Called by TroopDlg_Pay: runs SOLDDLG for one unit |
@@ -197,6 +199,8 @@ country" string of a player, `1068:0ae8` CanAfford(cost) = taler − cost ≥ �
 | 1040:4d8c | `T1e22::WMPaint` | Paints the coronation picture |
 
 ### Manoeuvre and recruiting – REKRUTDLG (type DS:2730)
+
+Ported: `port/src/troops.pas` (`RecruitDialog`, `TRecruitDlg`; the picture is a UI call).
 
 | Address | Name | Purpose |
 |---|---|---|

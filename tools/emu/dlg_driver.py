@@ -17,8 +17,9 @@ result. To test them, the original's own objects run in the emulator:
   - EndDlg ends the dialog with its code; Done (KaiserDlg.Done) is logged;
   - the heap (System _HeapAlloc) is a bump allocator for the objects.
 
-The port (port/src/dlglogic.pas, port/tests) plays the same script on its
-dialog types with the same control model and logs the same calls.
+The port (port/src/actions.pas, troops.pas; port/tests/scriptcontrols.pas)
+plays the same script on its dialog types with the same control model and
+logs the same calls.
 
 Script format (vector field dlg=): events separated by ';':
   c<id>        click a button / check box / radio button

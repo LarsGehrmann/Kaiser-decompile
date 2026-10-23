@@ -178,6 +178,9 @@ Common helpers used here (other segments): `1058:01bb` dialog-with-help-button c
 
 ### Troop dialog – ANORDNENDLG (type DS:1776)
 
+Ported: `port/src/troops.pas` (`Do_TruppenAufstellen`, `ChooseUnitToGive`, `TTroopDlg`; the
+Draw methods are UI calls). Rules: docs/rules/military.md.
+
 | Address | Name | Purpose |
 |---|---|---|
 | 1038:6a30 | `Do_TruppenAufstellen` | Menu Truppen aufstellen / generic troop dialog in a given mode; copies the player back on OK |

@@ -562,8 +562,11 @@ UI_SCRIPTS = {
     'OfferUnitsAtTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
-    # MUSTDISMISSDLG, NOHEERDLG, MILIZDLG, RITTERSCHLAGDLG, BELEIHENDLG
-    **{f: [('Execute(', lambda rng: (rng.choice([1, 1, 2]), {}))]
+    # MUSTDISMISSDLG, NOHEERDLG, MILIZDLG, RITTERSCHLAGDLG, BELEIHENDLG,
+    # NOREKRUTDLG; REKHELDDLG: 0x49 = 1 the Lindwurm, else the name (+0x100)
+    **{f: [('Execute(', lambda rng: (rng.choice([1, 1, 2]),
+                                     {0x49: bytes([rng.choice([0, 0, 0, 1])]),
+                                      0x100: rng.choice([b'Testheld', b'', b'Ab']) + b'\0'}))]
        for f in ('Do_TruppenAufstellen', 'ChooseUnitToGive')},
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'Ai_Turn': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
@@ -868,8 +871,13 @@ def preset_troops(rng, players, p, num):
                                                              rng.randint(0, 300000)]))
     if rng.random() < 0.2:
         m += set_field(players, p, 'army_away', rng.choice([0, 1]))
-    if rng.random() < 0.2:
+    k = rng.random()
+    if k < 0.15:
         m += set_field(players, p, 'spell', 3)        # Chevalerie: half fiefs
+    elif k < 0.3:
+        m += set_field(players, p, 'spell', rng.choice([6, 9]))   # Ferengicharme, Heldentum
+    if rng.random() < 0.15:
+        m += set_field(players, p, 'title', 9)        # a Koenig may recruit a Held
     return m
 
 
@@ -1258,7 +1266,27 @@ def troop_script(emu, rng, player):
         else:
             events.append(f'c{rng.randint(101, 107)}')
     events.append('ok' if rng.random() < 0.8 else 'cancel')
-    return ';'.join(events)
+    # the dialogs the buttons Rekrutieren (REKRUTDLG) and Sold (SOLDDLG)
+    # open, in order: one script each, good for both (combo box 201 with
+    # the types 1..title, scroll bar 101 for the pay)
+    subs = []
+    title = player[0x19]
+    hero = any(player[ARMY_BASE[a] + i * ks.UNIT_SIZE + 0x19] == 9
+               for a, n in ((1, counts[0]), (2, counts[1])) for i in range(1, n + 1))
+    for k in range(sum(e in ('c104', 'c105', 'c107') for e in events)):
+        sub = []
+        # a listed type: 1..title, a Koenig without a Held 1..9 (only the
+        # first time: a Held may be recruited); an index beyond the list
+        # (type 0) cannot be chosen in the real combo box
+        top = min(title, 9 if k == 0 and not hero else 8)
+        for _ in range(rng.choice([0, rng.randint(1, 3), rng.randint(1, 6)])):
+            if rng.random() < 0.5:
+                sub.append(f'l201:{rng.randint(max(0, top - 2), max(0, top - 1)) if rng.random() < 0.4 else rng.randint(0, max(0, top - 1))}')
+            else:
+                sub.append(f's101:{rng.choice([-1, 0, rng.randint(0, 300), rng.randint(0, 3000), rng.randint(0, 30000)])}')
+        sub.append('ok' if rng.random() < 0.75 else 'cancel')
+        subs.append(';'.join(sub))
+    return '/'.join([';'.join(events)] + subs)
 
 
 def dialog_script(emu, rng, template, player=None):
