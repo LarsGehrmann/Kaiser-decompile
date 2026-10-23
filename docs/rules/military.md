@@ -90,18 +90,80 @@ training (+1, +2 with a Lehrmeister in the Heer).
 
 ## Troop dialog – ANORDNENDLG (Do_TruppenAufstellen 1038:6a30, type DS:1776)
 
-Buttons: swap a unit between Heer and Garde (101), swap all (106), dismiss (102),
-pay (107), **Spezial** (103), recruit into Heer (104) / Garde (105).
+Ported in `port/src/troops.pas` (`TTroopDlg`, with the recruiting dialog `TRecruitDlg` and
+the pay dialog `TPayDlg`), identical to the original on the vectors of `port/tests/troops.vec`.
 
-- **Recruiting** (`1040:5108`): impossible as Herr (title 0, `NOREKRUTDLG`). Standard
-  troops cost DS:5174 Taler (Ferengicharme cheaper) and the weapons in DS:5204, taken from
-  the `weapons` stock; the unit type needs the title in DS:4f64. A Held gets the
-  hero-creation dialog `REKHELDDLG`.
-- **Fief (Spezial on a knight)** – Lehnswesen: `land_used += base_pay × 100` Hufen
-  (halved with Chevalerie, spell 3), the unit's pay becomes 0, it gains 24 experience,
-  fame + 2; buildings that no longer fit are lost. Fief land yields no harvest, cannot be
-  sold or built on.
-- **Spezial on a Knappe** (type 34): knighting (`RITTERSCHLAGDLG`, 1068:5b8b).
+The dialog works on a copy of the player; **Fertig** takes it over, **Abbrechen** discards
+everything done in the dialog (recruits already paid included). Units are selected by
+clicking into the two painted grids – the Heer as 2 columns × 5 rows of 32-pixel cells, the
+Garde as 3 × 3 cells inside an 8-pixel wall (slot of a cell: DS:105e / DS:107c; the grids
+scale with the window, designed for 440 × 401 pixels). A click toggles a unit; at most two
+are selected. The selection decides what the buttons do:
+
+| Selection | <=> (101) | Entlassen (102), Sold (107), Spezial (103) |
+|---|---|---|
+| none | – | – (Alle tauschen 106 instead: Heer and Garde change places) |
+| one Heer unit | "=>" into the Garde (Garde < 8, Heer at home) | for that unit |
+| one Garde unit | "<=" into the Heer (Heer < 8, Heer at home) | for that unit |
+| two units | exchange their places (Heer ↔ Garde only with the Heer at home) | – |
+
+- **Entlassen** (102): the unit's weapons (DS:5204) go back to the stock (`AddGoodsCapped`),
+  `units_given_or_dismissed` + 1. A Held cannot be dismissed (in the census editor only from
+  the Heer).
+- **Sold** (107, SOLDDLG 1040:00f7): only in mode 0, for a unit with pay > 0 whose byte
+  +0x37 is set (the turn start sets it): the new pay is chosen between `base_pay / 2` and
+  `base_pay × 2`; accepting clears +0x37, so the pay can be changed once a year.
+- **Spezial** (103): enabled for a knight type (DS:4f40: Ritter, Kreuzritter, Held,
+  Paladine, Reisiger Rächer, Schwarze Ritter, Templer) of rank ≥ 2 that still gets pay,
+  if the free land (`land − land_used`) covers the fief; for a Knappe (type 34) of rank ≥ 2;
+  in the census editor for any unit (the unit editor UNITEDITDLG).
+  - **Fief** – Lehnswesen (BELEIHENDLG "n Hufen werden die … zu Lehnsnehmern"):
+    `land_used += FiefSize` = `base_pay div 100 × 100` Hufen (halved with Chevalerie, spell
+    3), the unit's pay becomes 0, it gains 24 experience *as with Heldentum* (so it can rise
+    to Elite), fame + 2; buildings that no longer fit are lost (VERLUSTDLG). Fief land
+    yields no harvest, cannot be sold or built on.
+  - **Knighting** (RITTERSCHLAGDLG, `KnightSquire` 1068:5b8b).
+- **Rekrutieren** (104 Heer while it is at home and < 8, 105 Garde ≤ 8; `RecruitDialog`
+  1040:5108, REKRUTDLG): impossible as Herr (title 0, NOREKRUTDLG). The combo box offers the
+  unit types 1 … title (a Koenig who has a Held already: 1 … 8). Price = UnitCost (DS:5174,
+  × 3/4 with Ferengicharme) reduced by fame (`FameDiscount`); the weapons of DS:5204 are
+  needed (Kaufen is disabled without them) and taken from the stock; the price is also
+  subtracted from `total_recruiting`. A Held gets a name (REKHELDDLG; with Heldentum he
+  gains 10 experience at once) – or the dialog's Lindwurm flag gives the Lindwurm (type 12).
+  In the census editor every type 1 … 35 is free and needs no weapons.
+- **Taler, Waffen, Sold** (the yearly `ArmyPay`) are shown in modes 0 and 6.
+
+**Modes** (the caller passes them; +0x709):
+
+| Mode | Opened by | Allowed |
+|---|---|---|
+| 0 | menu Truppen aufstellen, after units join at the turn start | everything; Fertig refused with a Garde of 9 (MUSTDISMISSDLG: one must go) |
+| 1 | the attacker before a battle (War) | no recruiting, no Sold, no Abbrechen; Fertig refused (NOHEERDLG) with an empty Heer but a Garde |
+| 2 | the defender before a field battle | the same |
+| 3 | the defender before a city battle ("… stellt Eure GARDE auf") | no recruiting, no Sold, no Abbrechen; an empty Garde with the Heer at home asks first (MILIZDLG: the Miliz defends) |
+| 4 | Entwicklungshilfe "Truppen" (`ChooseUnitToGive` 1038:6a93, "Wählt eine Einheit zum Verschenken:") | no Entlassen, Sold, recruiting; **Abschicken** (OK) only for one selected unit whose type can desert (DS:52b8: not Miliz, the knights Ritter, Kreuzritter, Schwarze Ritter, Templer, not the Held and the special units 10–13) |
+| 5 | another player's armies ("Truppenübersicht …") | nothing, not even selecting |
+| 6 | the census editor (INI Debug) | like 0, plus the unit editor; recruiting is free |
+
+Abbrechen is also disabled with a Garde of 9 (a gift can leave 9 units: the 9th lies over
+`army_away` and the following fields of the player record).
+
+Original quirks and bugs (the port keeps them):
+
+- **Abschicken stays enabled.** In mode 4 the OK button is only updated while one unit is
+  selected; deselecting it (or moving it with <=>) leaves "Abschicken" enabled with nothing
+  selected, and `ChooseUnitToGive` then returns Garde slot 0. Do_Entwicklungshilfe gives away
+  the unused record before the Garde (player bytes 0x321..0x35d) and calls
+  `RemoveArmy2Unit(0)`, which moves the first Garde unit into that hidden slot (it is lost);
+  with an empty Garde its loop runs 0 … 255 and overwrites the following players (army2_count
+  becomes 255).
+- Spezial and Alle tauschen work in every mode but 5: a knight can be enfeoffed in the
+  gift dialog or right before a battle, and units can be dismissed before a battle.
+- The recruiting dialog is never freed, and while it is open its 400-ms timer calls
+  `Random(3)` (the picture blinks): how long the player looks at it changes `RandSeed`. The
+  differential tests send no timer messages (the port: `TRecruitDlg.Timer`).
+- Recruit type 36 (one past the table) reads its price from the weapons table; type 0 (not
+  selectable) would read it from the combo box pointer.
 
 ## Manoeuvre – Do_ManoeverAbhalten (1040:4ede)
 

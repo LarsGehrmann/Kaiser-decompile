@@ -59,7 +59,10 @@ type
   end;
 
 { Execute a dialog with a ported type: SetupWindow, then the events of
-  Script (';'-separated), as tools/emu/dlg_driver.py does; the end code }
+  Script (';'-separated), as tools/emu/dlg_driver.py does; the end code.
+  A first event w<width>:<height> is the window size KaiserDlg.SetupWindow
+  stores at +0x2a / +0x2c; m<x>:<y> / v<x>:<y> are a left click / a mouse
+  move at a client pixel (TDialogLogic.Mouse / MouseMove) }
 function RunScript(D: TDialog; const Template: TDlgTemplate; const Script: string): SmallInt;
 
 implementation
@@ -326,13 +329,23 @@ begin
   end;
 end;
 
+{ the numbers of a "<letter><a>:<b>" event }
+procedure ParsePair(const Ev: string; out A, B: SmallInt);
+var
+  K: Integer;
+begin
+  K := Pos(':', Ev);
+  A := StrToInt(Copy(Ev, 2, K - 2));
+  B := StrToInt(Copy(Ev, K + 1, MaxInt));
+end;
+
 function RunScript(D: TDialog; const Template: TDlgTemplate; const Script: string): SmallInt;
 var
   L: TDialogLogic;
   Ctls: TScriptControls;
   Events: TStringList;
   I: Integer;
-  Id: SmallInt;
+  Id, X, Y: SmallInt;
 begin
   L := TDialogLogic(D.Logic);
   Ctls := TScriptControls.Create(Template, D.Index);
@@ -343,6 +356,13 @@ begin
     Events.StrictDelimiter := True;
     if Script <> '' then
       Events.DelimitedText := Script;
+    if (Events.Count > 0) and (Copy(Events[0], 1, 1) = 'w') then
+    begin
+      ParsePair(Events[0], X, Y);
+      PSmallInt(@D.Data[$2A])^ := X;
+      PSmallInt(@D.Data[$2C])^ := Y;
+      Events.Delete(0);
+    end;
     UI.Note(Format('Execute(O%d)', [D.Index]));
     L.SetupWindow;
     I := 0;
@@ -354,6 +374,16 @@ begin
         Break;
       end;
       UI.Note('[' + Events[I] + ']');
+      if (Events[I] <> '') and (Events[I][1] in ['m', 'v']) then
+      begin
+        ParsePair(Events[I], X, Y);
+        if Events[I][1] = 'm' then
+          L.Mouse(X, Y)
+        else
+          L.MouseMove(X, Y);
+        Inc(I);
+        Continue;
+      end;
       Id := Ctls.Apply(Events[I]);
       Inc(I);
       if Id = 0 then

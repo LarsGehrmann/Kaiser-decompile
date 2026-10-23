@@ -40,6 +40,9 @@ REGS = {'ax': UC_X86_REG_AX, 'bx': UC_X86_REG_BX, 'cx': UC_X86_REG_CX,
 # segments with game logic (the others hold UI code, which tests stub out,
 # and the runtime); their ENTER frames get zeroed locals
 LOGIC_SEGMENTS = (2, 3, 4, 6, 7, 8, 9, 13, 14)
+# functions of the UI segments with uninitialised locals the port zeroes too:
+# RecruitDialog (the new hero's record and his level-up gains)
+ZERO_FRAME_FUNCS = ('1040:5108',)
 
 
 def ghidra_seg(addr):
@@ -130,7 +133,7 @@ class KaiserEmu:
                 si, off = ghidra_seg(row['address'])
             except (ValueError, KeyError):
                 continue
-            if si not in LOGIC_SEGMENTS:
+            if si not in LOGIC_SEGMENTS and row['address'] not in ZERO_FRAME_FUNCS:
                 continue
             b = bytes(self.read(self.para[si], off, 4))
             n = b[1] | b[2] << 8

@@ -96,6 +96,7 @@ end;
 function TReplayUI.Sym(P: Pointer): string;
 var
   A, B: PtrUInt;
+  I: Integer;
 begin
   A := PtrUInt(P);
   if P = Window then
@@ -111,6 +112,14 @@ begin
     Exit('D' + IntToStr(A - B));
   if P = nil then
     Exit('nil');
+  { into a ported dialog's object (e.g. its copy of the player) }
+  for I := 0 to High(FDialogs) do
+    if FDialogs[I].Logic <> nil then
+    begin
+      B := PtrUInt(@FDialogs[I].Data[0]);
+      if (A > B) and (A < B + FDialogs[I].Size) then
+        Exit(Format('O%d+%d', [FDialogs[I].Index, A - B]));
+    end;
   Result := 'S';
 end;
 

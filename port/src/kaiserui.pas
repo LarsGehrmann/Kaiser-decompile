@@ -82,6 +82,12 @@ type
     procedure SetupWindow; virtual;
     function CanClose: Boolean; virtual;
     function Handle(Id: SmallInt): Boolean; virtual;
+    { the window messages a type handles (DMT wm_LButtonDown, wm_MouseMove)
+      at client pixel X, Y; False when the type has no handler. A type that
+      paints scaled areas reads the window size SetupWindow finds at
+      D.Data[$2a] / [$2c] (KaiserDlg.SetupWindow stores it there) }
+    function Mouse(X, Y: SmallInt): Boolean; virtual;
+    function MouseMove(X, Y: SmallInt): Boolean; virtual;
   end;
   TDialogLogicClass = class of TDialogLogic;
 
@@ -184,6 +190,16 @@ begin
 end;
 
 function TDialogLogic.Handle(Id: SmallInt): Boolean;
+begin
+  Result := False;
+end;
+
+function TDialogLogic.Mouse(X, Y: SmallInt): Boolean;
+begin
+  Result := False;
+end;
+
+function TDialogLogic.MouseMove(X, Y: SmallInt): Boolean;
 begin
   Result := False;
 end;

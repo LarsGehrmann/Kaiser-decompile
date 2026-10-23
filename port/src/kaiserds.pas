@@ -23,7 +23,16 @@ type
     AiKingRewardBonus: array[0..4] of Byte;  { +0x530 their rank bonus }
     Pad535: array[0..2346] of Byte;
     AiMaxUnits: array[0..35] of Byte;  { +0xe60 computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9) }
-    PadE84: array[0..3379] of Byte;
+    PadE84: array[0..457] of Byte;
+    TroopHeerX: array[1..8] of Byte;  { +0x104e ANORDNENDLG painted grids (32-pixel cells): column 0..1 of Heer slot 1..8 }
+    TroopHeerY: array[1..8] of Byte;  { +0x1056 row 0..4 }
+    TroopHeerCell: array[0..9] of Byte;  { +0x105e the Heer slot in cell column * 5 + row (99: none; WMLButtonDown) }
+    TroopGardeX: array[1..9] of Byte;  { +0x1068 column 0..2 of Garde slot 1..9 (inside an 8-pixel wall) }
+    Pad1071: array[0..0] of Byte;
+    TroopGardeY: array[1..9] of Byte;  { +0x1072 row 0..2 }
+    Pad107B: array[0..0] of Byte;
+    TroopGardeCell: array[0..8] of Byte;  { +0x107c the Garde slot in cell column * 3 + row }
+    Pad1085: array[0..2866] of Byte;
     GrainTradeAmounts: array[0..3] of LongInt;  { +0x1bb8 KORNDLG buttons: 100000, 10000, 1000, 100 Scheffel }
     LandTradeAmounts: array[0..4] of LongInt;  { +0x1bc8 LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen }
     Pad1BDC: array[0..1753] of Byte;

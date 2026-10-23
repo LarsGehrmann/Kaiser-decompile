@@ -30,8 +30,9 @@ original resources.
   (`CanBePromoted` reads `PromotionLand[11]` for a Kaiser).
 - **Uninitialised locals.** Some original functions copy partly uninitialised local records
   (e.g. `RecruitUnit`'s new unit: hit points, steps, motivation; `MarriageDowry` copies it into
-  the army). In the emulator every `ENTER n,0` frame of the logic segments starts zeroed (the
-  instruction is patched to `INT3` and emulated with a zero fill), the stack is zeroed before
+  the army). In the emulator every `ENTER n,0` frame of the logic segments (and of the UI
+  functions in `ZERO_FRAME_FUNCS`: `RecruitDialog`'s new hero and his level-up gains) starts
+  zeroed (the instruction is patched to `INT3` and emulated with a zero fill), the stack is zeroed before
   each call, and the port zero-initialises these locals, so both agree on 0 even deep inside
   `PlayerTurnStart`. Bytes the original never writes in a record it logs (`TLandLoss` bytes
   4..7) are masked in the log.
@@ -83,6 +84,7 @@ port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
 port/bin/ruletest Kaiser port/tests/turn.vec    # turn processing, AI, turn loop vs. original
 port/bin/ruletest Kaiser port/tests/battle.vec  # battle window, setup and aftermath vs. original
 port/bin/ruletest Kaiser port/tests/actions.vec # menu actions with the original's dialogs
+port/bin/ruletest Kaiser port/tests/troops.vec  # the troop dialog (clicks into the unit grids)
 port/bin/ksrsim Kaiser/LARS23.KSR 100 1 out.ksr # play on 100 turns, save the result
 port/bin/ksrsim new:2:5:3 100 1                 # new game: 2 humans, 5 computers, level 3
 tools/emu/sim_compare.sh 100 1 /tmp/cmp         # all savegames: port vs. original, turn by turn
@@ -187,15 +189,22 @@ their templates:
   methods are logged (`SetText(c201,s:…)`, `Enable(c107)`, `SetPosition(c301,4)` …).
 - `TDialog.Execute` becomes a script driver: `SetupWindow`, then the events of `dlg=`
   (`c<id>` click, `s<id>:<pos>` scroll, `l<id>:<idx>` list selection, `t<id>:<hex>` typed
-  text, `ok`, `cancel`, dialogs separated by `/`) through the type's DMT handlers. OK runs
+  text, `m<x>:<y>` / `v<x>:<y>` a left click / a mouse move at a client pixel through the
+  DMT handlers for wm_LButtonDown 0x0201 / wm_MouseMove 0x0200, `ok`, `cancel`, dialogs
+  separated by `/`) through the type's DMT handlers. OK runs
   `CanClose` and ends with 1, Cancel ends with 2; events on disabled controls are ignored.
+  A first event `w<width>:<height>` is the window size `KaiserDlg.SetupWindow` stores at
+  +0x2a / +0x2c (types that paint scaled areas read it; without it 0, i.e. scale 1).
   Memory comes from a bump allocator; GDI calls (drawing) return 0 unlogged. A dialog
   opened by a dialog's handler (the Prokurist from the goods dialog) runs nested with the next
   script; each dialog object keeps its own controls.
 - The port: dialog types are `TDialogLogic` classes in `port/src/actions.pas`, registered by
   the constructor name; they work on `D.Data` laid out like the original object and reach the
   controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
-  and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`).
+  and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`). Mouse
+  messages go to `TDialogLogic.Mouse` / `MouseMove`; painting stays with the UI (the
+  original's drawing methods are logged UI calls, e.g. `TroopDlg_DrawHeer`). A pointer into
+  a ported dialog's object is logged as `O<n>+<offset>` (e.g. its copy of the player).
 
 `port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
 `Do_HandelMitGuetern` with the Prokurist (100), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each). Segment 9 frames are zeroed like the logic segments.
@@ -209,6 +218,10 @@ Original bugs found by the dialog tests (the specs keep the inputs out of their 
 - `FormatThousands` (1068:6b58, Wirtschaft and other statistics): its length table ends at 9
   digits; a 10-digit number makes it write the digits 11,520 bytes off its buffer and show an
   empty string. The port shows the same and skips the stray write.
+
+`port/tests/troops.vec`: `Do_TruppenAufstellen` (80, all seven modes, with REKRUTDLG and
+SOLDDLG nested) and `ChooseUnitToGive` (20) – `port/src/troops.pas`; 8,000 + 3,000
+generated vectors identical (docs/rules/military.md).
 
 ## The headless simulator
 

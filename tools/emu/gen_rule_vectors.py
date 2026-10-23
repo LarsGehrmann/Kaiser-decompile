@@ -105,6 +105,12 @@ BW_FIELDS = (ARMY[2:] + ['u.max_steps', 'u.range', 'u.max_ammo', 'J.spell', 'cou
                          'J.mills', 'J.palace_parts', 'J.taverns'])
 BW_CLAMPS = {}
 
+# the troop dialog: armies, unit types / ranks / pay, fief land
+TROOPS = ['army1_count', 'army2_count', 'u.type', 'u.level', 'u.pay', 'u.base_pay',
+          'u.unconscious_rounds', 'taler', 'weapons', 'land', 'land_used', 'spell', 'fame',
+          'army_away', 'title']
+TROOP_CLAMPS = {'army1_count': (0, 8)}             # (the preset: a Garde of 0..9)
+
 SPECS = {
     'GrainCapacity': ('1068:0885', ['P'], 'long', ECON),
     'SmithyOutput': ('1068:0bd3', ['P'], 'long', ECON),
@@ -496,6 +502,11 @@ SPECS = {
                          # below 20 people the need rounds to 0 and the gauge
                          # (1040:9081) divides by it: runtime error 200
                          {'population': (50, 3000000)}),
+    # the troop dialog ANORDNENDLG, mode 0 own armies, 1/2 the Heer before a
+    # battle, 3 the Garde, 4 a gift, 5 another player's armies, 6 census
+    'Do_TruppenAufstellen': ('1038:6a30', ['Wnd', 'P', 'B:0:6'], 'none', TROOPS, TROOP_CLAMPS),
+    # Entwicklungshilfe 'Truppen': mode 4, the chosen army and slot (out)
+    'ChooseUnitToGive': ('n1038:6a93', ['Wnd', 'P', 'O', 'O'], 'byte', TROOPS, TROOP_CLAMPS),
     # segment 1: the turn loop, a whole round of computer players
     'CmNeuesSpiel': ('1000:0ce6', ['NIL', 'SELF'], 'none',
                      ['h.immortality', 'h.goods_trade_enabled', 'h.initiative_enabled']),
@@ -595,6 +606,12 @@ UI_SCRIPTS = {
     'OfferUnitsAtTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
+    # MUSTDISMISSDLG, NOHEERDLG, MILIZDLG, RITTERSCHLAGDLG, BELEIHENDLG,
+    # NOREKRUTDLG; REKHELDDLG: 0x49 = 1 the Lindwurm, else the name (+0x100)
+    **{f: [('Execute(', lambda rng: (rng.choice([1, 1, 2]),
+                                     {0x49: bytes([rng.choice([0, 0, 0, 1])]),
+                                      0x100: rng.choice([b'Testheld', b'', b'Ab']) + b'\0'}))]
+       for f in ('Do_TruppenAufstellen', 'ChooseUnitToGive')},
     'DiplomacyTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'Ai_Turn': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'CmBeenden': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
@@ -878,6 +895,50 @@ def preset_round(rng, players, p, num):
     return m
 
 
+KNIGHT_TYPES = (7, 8, 9, 11, 13, 18, 29)          # DS:4f40 unit_knight
+
+
+def preset_troops(rng, players, p, num):
+    """Armies of 0..8 units (rarely a Garde of 9, as a gift leaves it);
+    knights of rank >= 2 with pay (fief), Knappen (knighting), heroes,
+    units whose pay may change; free land around a fief's size; the Heer
+    sometimes abroad."""
+    m = []
+    for name, hi in (('army1_count', 8), ('army2_count', 8)):
+        if rng.random() < 0.7:
+            m += set_field(players, p, name, rng.choice([0, 1, 2, rng.randint(0, hi), hi, hi]))
+    if rng.random() < 0.1:
+        m += set_field(players, p, 'army2_count', 9)
+    for army in (1, 2):
+        for i in range(1, 9):
+            if rng.random() > 0.45:
+                continue
+            base = p * PSIZE + ARMY_BASE[army] + i * ks.UNIT_SIZE
+            u = bytearray(players[base:base + ks.UNIT_SIZE])
+            u[0x19] = rng.choice(KNIGHT_TYPES + (34, 34, 9, rng.randint(0, 35), rng.randint(0, 35)))
+            u[0x24] = rng.choice([0, 1, 2, 2, 3, rng.randint(0, 12)])
+            struct.pack_into('<hh', u, 0x2b, rng.choice([0, rng.randint(1, 6000)]),
+                             rng.choice([0, rng.randint(1, 120), rng.randint(0, 30000)]))
+            u[0x37] = rng.choice([0, 1, 1, 0xff])
+            players[base:base + ks.UNIT_SIZE] = u
+            m.append((base, bytes(u)))
+    if rng.random() < 0.6:
+        off, _ = field_info(ks.PLAYER, 'land_used')
+        used = struct.unpack_from('<i', players, p * PSIZE + off)[0]
+        m += set_field(players, p, 'land', used + rng.choice([0, rng.randint(0, 3000),
+                                                             rng.randint(0, 300000)]))
+    if rng.random() < 0.2:
+        m += set_field(players, p, 'army_away', rng.choice([0, 1]))
+    k = rng.random()
+    if k < 0.15:
+        m += set_field(players, p, 'spell', 3)        # Chevalerie: half fiefs
+    elif k < 0.3:
+        m += set_field(players, p, 'spell', rng.choice([6, 9]))   # Ferengicharme, Heldentum
+    if rng.random() < 0.15:
+        m += set_field(players, p, 'title', 9)        # a Koenig may recruit a Held
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 def preset_battle(rng, players, p, num):
     """Every player gets a Heer with at least one real unit (a copy of a
@@ -911,6 +972,8 @@ PRESETS = {
     'CmDemissionieren': preset_round,
     'DeclareWar': preset_war_target,
     'Do_Gebaeude': preset_invest,
+    'Do_TruppenAufstellen': preset_troops,
+    'ChooseUnitToGive': preset_troops,
     **{f: preset_battle for f in SPECS if f.startswith('Battle_')},
     **{f: preset_battle for f in ('Battle_OtherSide', 'Battle_IsInCity',
                                   'Battle_IsThreatened', 'Battle_HeroShouldFlee',
@@ -1233,11 +1296,94 @@ DIALOG_TESTS = {
     'ShowRecordsDlg': ['REKORDDLG'],
     'ShowCoronation': ['KROENUNGSDLG'],
     'Do_Sabotage': ['SABOTAGEBUDGETDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG', 'SABOTAGEWAHLDLG'],
+    'Do_TruppenAufstellen': ['ANORDNENDLG'],
+    'ChooseUnitToGive': ['ANORDNENDLG'],
 }
 
 
-def dialog_script(emu, rng, template):
-    """Random user events for a dialog from its template."""
+def troop_script(emu, rng, player):
+    """ANORDNENDLG: a window size (the painted grids scale with it), clicks
+    on the units of the grids (cell centres, edges, beside the grids),
+    mouse moves (the info card) and the buttons 101..107, mostly right
+    after selecting one or two units."""
+    events = []
+    w = h = 0
+    k = rng.random()
+    if k < 0.25:
+        w, h = 440, 401
+    elif k < 0.55:
+        w, h = rng.randint(250, 1000), rng.randint(250, 900)
+    elif k < 0.6:
+        w, h = rng.randint(-5, 2), rng.randint(-5, 2)
+    if k < 0.6:
+        events.append(f'w{w}:{h}')
+    sx = w / 440 if w >= 1 else 1.0
+    sy = h / 401 if h >= 1 else 1.0
+
+    def pos(c, s):
+        v = int(c * s + 0.5)
+        return v + v % 2 + 1
+    hx, hy, gx, gy = pos(40, sx), pos(118, sy), pos(284, sx), pos(143, sy)
+    # the cells of the slots (DS:105e Heer column*5+row, DS:107c Garde column*3+row)
+    heer_cell = {v: divmod(i, 5) for i, v in enumerate(emu.read(emu.ds_para, 0x105e, 10))}
+    garde_cell = {v: divmod(i, 3) for i, v in enumerate(emu.read(emu.ds_para, 0x107c, 9))}
+    counts = (player[0x137], player[0x138])
+
+    def click(heer, slot=None):
+        if slot is None:
+            slot = rng.randint(1, max(1, min(9, counts[0 if heer else 1] + rng.choice([0, 0, 0, 1]))))
+        col, row = (heer_cell if heer else garde_cell).get(slot, (0, 0))
+        if heer:                                 # 2 columns x 5 rows of 32 pixels
+            x, y = hx + 32 * col, hy + 32 * row
+        else:                                    # 3 x 3 inside 8 pixels of wall
+            x, y = gx + 8 + 32 * col, gy + 8 + 32 * row
+        r = rng.random()
+        if r < 0.8:
+            return x + rng.randint(2, 30), y + rng.randint(2, 30)
+        if r < 0.93:                             # the cell's edges
+            return x + rng.choice([-9, -8, -1, 0, 31, 32]), y + rng.choice([-9, -8, -1, 0, 31, 32])
+        return rng.randint(-20, 500), rng.randint(-20, 450)
+    for _ in range(rng.choice([0, rng.randint(1, 4), rng.randint(1, 8), rng.randint(1, 14)])):
+        r = rng.random()
+        if r < 0.55:                             # select one or two units, then a button
+            events.append('m%d:%d' % click(rng.random() < 0.5))
+            if rng.random() < 0.3:
+                events.append('m%d:%d' % click(rng.random() < 0.5))
+            if rng.random() < 0.8:
+                events.append(f'c{rng.choice([101, 101, 102, 103, 103, 103, 107, 107])}')
+        elif r < 0.65:
+            events.append('v%d:%d' % click(rng.random() < 0.5))
+        else:
+            events.append(f'c{rng.randint(101, 107)}')
+    events.append('ok' if rng.random() < 0.8 else 'cancel')
+    # the dialogs the buttons Rekrutieren (REKRUTDLG) and Sold (SOLDDLG)
+    # open, in order: one script each, good for both (combo box 201 with
+    # the types 1..title, scroll bar 101 for the pay)
+    subs = []
+    title = player[0x19]
+    hero = any(player[ARMY_BASE[a] + i * ks.UNIT_SIZE + 0x19] == 9
+               for a, n in ((1, counts[0]), (2, counts[1])) for i in range(1, n + 1))
+    for k in range(sum(e in ('c104', 'c105', 'c107') for e in events)):
+        sub = []
+        # a listed type: 1..title, a Koenig without a Held 1..9 (only the
+        # first time: a Held may be recruited); an index beyond the list
+        # (type 0) cannot be chosen in the real combo box
+        top = min(title, 9 if k == 0 and not hero else 8)
+        for _ in range(rng.choice([0, rng.randint(1, 3), rng.randint(1, 6)])):
+            if rng.random() < 0.5:
+                sub.append(f'l201:{rng.randint(max(0, top - 2), max(0, top - 1)) if rng.random() < 0.4 else rng.randint(0, max(0, top - 1))}')
+            else:
+                sub.append(f's101:{rng.choice([-1, 0, rng.randint(0, 300), rng.randint(0, 3000), rng.randint(0, 30000)])}')
+        sub.append('ok' if rng.random() < 0.75 else 'cancel')
+        subs.append(';'.join(sub))
+    return '/'.join([';'.join(events)] + subs)
+
+
+def dialog_script(emu, rng, template, player=None):
+    """Random user events for a dialog from its template (player: the test
+    player's record, for the troop dialog's clicks)."""
+    if template == 'ANORDNENDLG':
+        return troop_script(emu, rng, player)
     from dlg_driver import DialogDriver
     probe = DialogDriver.__new__(DialogDriver)
     probe.emu = emu
@@ -1319,7 +1465,8 @@ def main():
             for off, val in hmuts:
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
-            dlg = '/'.join(dialog_script(emu, rng, t) for t in DIALOG_TESTS.get(func, []))
+            dlg = '/'.join(dialog_script(emu, rng, t, players[p * PSIZE:(p + 1) * PSIZE])
+                           for t in DIALOG_TESTS.get(func, []))
             emu.reset_ds()
             emu.write(emu.ds_para, 0x6794, struct.pack('<H', 400))   # INI Schlacht-Timer
             ui.reset()
