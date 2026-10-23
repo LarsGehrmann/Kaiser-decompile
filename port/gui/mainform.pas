@@ -226,6 +226,10 @@ begin
     312:                                        { CmMilitaer 1000:1c91 }
       if DS.Game.GameState = 1 then
         Do_Militaer(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.Year);
+    320:                                        { CmSpiel 1000:1d4b }
+      if DS.Game.GameState = 1 then
+        Do_Spiel(Self);
+    604: Do_Laendernamen(Self);                  { CmLaendernamen 1000:1ec3 }
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);

@@ -472,6 +472,7 @@ SPECS = {
                     'raider_fights_won', 'raider_fights_lost', 'own_units_killed',
                     'deserted_units', 'manoeuvres_held']),
     'Do_Laendernamen': ('1040:02d5', ['Wnd'], 'none', []),
+    'CmSpiel': ('1000:1d4b', ['NIL', 'SELF'], 'none', []),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -921,6 +922,17 @@ def header_turn(rng, header, players, p, num):
     return h
 
 
+def header_scenario(rng, header, players, p, num):
+    """A game in progress, with or without a scenario text."""
+    h = header_turn(rng, header, players, p, num)
+    for name, text in (('scenario_title', rng.choice([b'', b'Die Schlacht', b'x' * 39])),
+                       ('scenario_author', rng.choice([b'', b'Lars', b'y' * 23])),
+                       ('scenario_description', rng.choice([b'', b'Ein langer Text. ' * 20]))):
+        off, typ = field_info(ks.HEADER, name)
+        h.append((off, text + b'\0'))
+    return h
+
+
 def header_newgame(rng, header, players, p, num):
     """No game running (no question), no e-mail."""
     return [(field_info(ks.HEADER, 'game_state')[0], b'\0'),
@@ -929,6 +941,7 @@ def header_newgame(rng, header, players, p, num):
 
 # per function: header mutations after the random ones
 HEADER_PRESETS = {
+    'CmSpiel': header_scenario,
     'CmWirtschaft': header_turn,
     'CmMilitaer': header_turn,
     'NextPlayer': header_turn,
@@ -1178,6 +1191,7 @@ DIALOG_TESTS = {
     'CmWirtschaft': ['WIRTSTATDLG'],
     'CmMilitaer': ['MILSTATDLG'],
     'Do_Laendernamen': ['LAENDERNAMENDLG'],
+    'CmSpiel': ['SZENARIENINFODLG'],
 }
 
 

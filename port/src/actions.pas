@@ -48,6 +48,8 @@ procedure Do_Militaer(Parent: Pointer; const P: TPlayer; Year: Word);
 { Laendernamen (1040:02d5): LAENDERNAMENDLG edits the country names and
   adjectives (DS:63a8 / DS:6696) }
 procedure Do_Laendernamen(Parent: Pointer);
+{ Spiel (CmSpiel 1000:1d4b): the scenario's title, author and description }
+procedure Do_Spiel(Parent: Pointer);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -174,6 +176,12 @@ type
     procedure SetupWindow; override;
     function Handle(Id: SmallInt): Boolean; override;
     function CanClose: Boolean; override;
+  end;
+
+  { SZENARIENINFODLG (VMT DS:18f2, 1040:0002): statics 101, 102, edit 103 }
+  TScenarioInfoDlg = class(TDialogLogic)
+  public
+    procedure SetupWindow; override;
   end;
 
   { KORNDLG (VMT DS:1c50, 1040:8638): the player at +0x34, the capacity
@@ -1217,6 +1225,31 @@ begin
   Result := True;
 end;
 
+{ -- Spiel ------------------------------------------------------------------ }
+
+procedure Do_Spiel(Parent: Pointer);
+var
+  D: TDialog;
+begin
+  if StrLen(DS.Game.ScenarioTitle) = 0 then
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($0460))])   { no scenario }
+  else
+    D := UI.Dialog('ScenarioInfoDlg', $18F2, [APtr(Parent), AStr(DSText($0473))]);
+  UI.Execute(D);
+  UI.Done(D, 1);
+end;
+
+procedure TScenarioInfoDlg.SetupWindow;
+var
+  Buf: array[0..41] of Char;
+begin
+  C.SetText(101, DS.Game.ScenarioTitle);
+  StrCopy(Buf, DSText($1FF4));                    { 'von ' }
+  StrCat(Buf, DS.Game.ScenarioAuthor);
+  C.SetText(102, Buf);
+  C.SetText(103, PChar(@DS.Game.ScenarioDescription));
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -1394,4 +1427,5 @@ initialization
   RegisterDialogLogic('EconomyStatsDlg', TEconomyStatsDlg);
   RegisterDialogLogic('MilitaryStatsDlg', TMilitaryStatsDlg);
   RegisterDialogLogic('CountryNamesDlg', TCountryNamesDlg);
+  RegisterDialogLogic('ScenarioInfoDlg', TScenarioInfoDlg);
 end.

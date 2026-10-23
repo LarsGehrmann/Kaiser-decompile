@@ -171,6 +171,7 @@ ALLOWED = BATTLE_LOGIC + [('1060:03d9', 0x14e),           # FormatPlayerTitle
            ('1000:2476', 0x1c1),           # CmBeenden
            ('1000:1c91', 0x5f),            # CmMilitaer
            ('1000:1cf0', 0x5b),            # CmWirtschaft
+           ('1000:1d4b', 0x8d),            # CmSpiel
            ('1000:33c0', 0x99),            # BeginHumanTurn
            ('1000:0ce6', 0x156),           # CmNeuesSpiel
            ('1040:1d98', 0x192),           # NewGame_AskPlayerCounts

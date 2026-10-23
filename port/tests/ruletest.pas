@@ -610,6 +610,7 @@ begin
           'CmWirtschaft': begin Do_Wirtschaft(Window, Players[DS.Game.CurrentPlayer]); Got := '-'; end;
           'CmMilitaer': begin Do_Militaer(Window, Players[DS.Game.CurrentPlayer], DS.Game.Year); Got := '-'; end;
           'Do_Laendernamen': begin Do_Laendernamen(Window); Got := '-'; end;
+          'CmSpiel': begin Do_Spiel(Window); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin
