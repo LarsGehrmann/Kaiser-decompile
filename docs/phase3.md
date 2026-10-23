@@ -57,6 +57,21 @@ original resources.
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | ✅ `port/src/battle.pas`: all logic of the battle window (Init, combat, movement, healing, desertion, the AI, the timer, the human's clicks, buttons and combat options, GetResults); `port/src/war.pas`: segment 4 (BattleSetup, BattleFameAndXp, BattleAftermath, Battle, FightRaiders) and segment 6 (battlefield choice, plunder, burning, massacre, retreat losses). 13,343 vectors over 66 functions identical, from battle states the original's AI played (`port/tests/battle.vec`: 660 of them); 668 whole AI battles from all savegames identical (`battle_compare.py 2 2000`). Found on the way: an endless recursion of the original (`StopTimer` → `AiStep`, battle.md) |
 | 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | |
 
+Milestone 7 in steps (the GUI is the UI segments 1, 5, 8, 9, 10 drawing, 12, 13, 15–17 ported
+onto the LCL):
+
+| Step | Content | Validation |
+|---|---|---|
+| 7a | Toolchain (LCL Cocoa built from the Lazarus sources); resources read at runtime from `kaiser.exe` (dialog and menu templates, bitmaps, sounds, strings); a generic dialog from a template; the main window with the original menu; open a savegame, end the turn (`EndHumanTurn`) with the simple dialogs | the app runs a game on; templates render like the originals |
+| 7b | The dialog base types of segment 12 (KaiserDlg, MessageDlg, Message2Dlg, choice dialogs …) and the menu actions of segments 8 and 9 (`Do_*`), ported with their handlers | differential tests of the logic parts where the emulator can drive them |
+| 7c | The battle window: drawing (DrawMap, DrawCell, DrawUnitStatus), timer, clicks, cursors | play battles |
+| 7d | Main window painting and status (segment 13, 1), Annalen, Rekorde, help, sounds, toolbar | manual play-through |
+
+Toolchain notes: Homebrew's Lazarus cask is gone; `tools/lazarus` (gitignored) is a shallow
+clone of Lazarus 3.6, built with `make lazbuild` and `make lcl LCL_PLATFORM=cocoa`. FPC 3.2.2's
+Objective-C metadata is rejected by Apple's current linker ("malformed method list atom"); the
+GUI links with `-k-ld_classic`.
+
 ## Running
 
 ```sh
