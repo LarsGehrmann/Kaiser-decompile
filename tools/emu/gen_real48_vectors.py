@@ -117,6 +117,20 @@ def main():
             n = emu.read(emu.scratch_para, 0x100, 1)[0]
             txt = bytes(emu.read(emu.scratch_para, 0x101, n))
             out.write(f'{op} {a.hex()} {width} {dec} {txt.hex() or "-"}\n')
+        elif op == 'val':
+            alpha = rng.choice(['0123456789', '0123456789 +-$abcdefABCDEFxg', ' -+$0123456789'])
+            t = ''.join(rng.choice(alpha) for _ in range(rng.randint(0, 14)))
+            if rng.random() < 0.3:
+                t = rng.choice(['', ' ', '-', '$', '2147483647', '-2147483648', '2147483648',
+                                '4294967295', '$FFFFFFFF', '$80000000', '$7fffffff', ' 12', '12 ',
+                                '-0', '+5', '268435456', '2684354560', '$123456789'])
+            b = t.encode()
+            emu.write(emu.scratch_para, 0x100, bytes([len(b)]) + b)
+            ax, dx = emu.call_far('10c8:1859', [('ptr', (emu.scratch_para, 0x100)),
+                                                ('ptr', (emu.scratch_para, 0x200))])
+            code = struct.unpack('<h', bytes(emu.read(emu.scratch_para, 0x200, 2)))[0]
+            v = struct.unpack('<i', struct.pack('<HH', ax, dx))[0]
+            out.write(f'{op} {b.hex() or "-"} {v} {code}\n')
         elif op == 'random':
             seed, rng_ = rng.getrandbits(32), rng.choice([rng.randint(1, 65535), 2, 10, 100, 0x14a])
             emu.rand_seed(seed)

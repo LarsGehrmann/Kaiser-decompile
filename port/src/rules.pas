@@ -103,6 +103,10 @@ procedure SabotageFunding(var Players: TPlayers; Me, NumPlayers: Byte);  { 1068:
 function SabotageYearsToNextOp(const Players: TPlayers; var Me, Target: Byte): SmallInt;  { 1068:35c1 }
 
 procedure IntToPChar(Dest: PChar; V: LongInt);              { 1068:6b29 }
+{ Val(S, V, Code) of Borland for a longint (System _ValLong 10c8:1859 with
+  _StrToLong 10c8:1420): leading blanks, a sign, decimal or $hex; Code = the
+  position of the first bad character (1-based), 0 when all is read }
+function ValLong(const S: RawByteString; out Code: SmallInt): LongInt;
 function UnitGainExperience(var U: TUnit; var Gains: THeroGains; XP, Spell: Byte): Boolean;  { 1068:4671 }
 procedure FillWithMilitia(var P: TPlayer);                  { 1068:4b22 }
 procedure GenerateMarauders(var P: TPlayer; Strength: SmallInt);  { 1068:4d7c }
@@ -1208,6 +1212,124 @@ end;
 
 { Units of both armies are indexed 1..Count like the original; the slot
   after the 8th (Pad321 / Pad546) is reachable with index 9, as there. }
+
+function ValLong(const S: RawByteString; out Code: SmallInt): LongInt;
+var
+  I, N: Integer;      { I: the 1-based position (DI - the length byte), N: chars left }
+  Neg, Err: Boolean;
+  V: LongWord;
+  B: Byte;
+  K: Integer;
+begin
+  N := Length(S) and $FF;
+  I := 1;
+  while (N > 0) and (S[I] = ' ') do
+  begin
+    Inc(I);
+    Dec(N);
+  end;
+  V := 0;
+  Neg := False;
+  Err := False;
+  if N = 0 then
+    Err := True
+  else
+  begin
+    if (S[I] = '+') or (S[I] = '-') then
+    begin
+      Neg := S[I] = '-';
+      Inc(I);
+      Dec(N);
+    end;
+    if N = 0 then
+      Err := True
+    else if S[I] = '$' then
+    begin
+      Inc(I);
+      Dec(N);
+      if N = 0 then
+        Err := True
+      else
+      begin
+        while N > 0 do
+        begin
+          B := Ord(S[I]);
+          if B >= $61 then
+            B := Byte(B - $20);
+          if (B >= $30) and (B <= $39) then
+            B := B - $30
+          else if (B >= $41) and (B <= $46) then
+            B := B - $37
+          else
+            Break;                        { the end of the number (the decimal tail) }
+          for K := 1 to 4 do
+          begin
+            if V and $80000000 <> 0 then
+            begin
+              Err := True;
+              Break;
+            end;
+            V := V shl 1;
+          end;
+          if Err then
+            Break;
+          V := V or B;
+          Inc(I);
+          Dec(N);
+        end;
+        if not Err and (N = 0) then
+        begin
+          if Neg then
+            V := LongWord(-LongInt(V));
+          Code := 0;
+          Exit(LongInt(V));
+        end;
+        if not Err then
+        begin
+          { stopped at a bad character: the decimal tail's sign check }
+          if (V <> 0) and Neg then
+            V := LongWord(-LongInt(V));
+          if (V <> 0) and ((LongInt(V) < 0) <> Neg) then
+            Err := True;
+        end;
+      end;
+    end
+    else
+    begin
+      while N > 0 do
+      begin
+        B := Ord(S[I]);
+        if (B < $30) or (B > $39) then
+          Break;
+        if V and $F0000000 <> 0 then
+        begin
+          Err := True;
+          Break;
+        end;
+        V := LongWord(V * 10 + (B - $30));
+        Inc(I);
+        Dec(N);
+      end;
+      if not Err and (V <> 0) then
+      begin
+        if Neg then
+          V := LongWord(-LongInt(V));
+        if (LongInt(V) < 0) <> Neg then
+          Err := True;
+      end;
+    end;
+  end;
+  if Err or (N <> 0) then
+  begin
+    Code := I;
+    Result := 0;
+  end
+  else
+  begin
+    Code := 0;
+    Result := LongInt(V);
+  end;
+end;
 
 procedure IntToPChar(Dest: PChar; V: LongInt);
 var

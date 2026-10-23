@@ -6,7 +6,7 @@ program Real48Test;
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, Classes, KaiserTypes, Real48;
+  SysUtils, Classes, KaiserTypes, Real48, Rules;
 
 function HexToR48(const S: string): TReal48;
 var
@@ -28,6 +28,9 @@ end;
 var
   Lines, F: TStringList;
   I, J, Pass, Fail: Integer;
+  T: RawByteString;
+  V: LongInt;
+  Code: SmallInt;
   Op, Got, Want: string;
   A, B: TReal48;
 begin
@@ -93,6 +96,16 @@ begin
           Got := Got + LowerCase(IntToHex(Ord(R48Str(A, StrToInt(F[2]), StrToInt(F[3]))[J]), 2));
         if Got = '' then
           Got := '-';
+      end
+      else if Op = 'val' then
+      begin
+        T := '';
+        if F[1] <> '-' then
+          for J := 0 to Length(F[1]) div 2 - 1 do
+            T := T + Chr(StrToInt('$' + Copy(F[1], 2 * J + 1, 2)));
+        V := ValLong(T, Code);
+        Got := IntToStr(V) + ' ' + IntToStr(Code);
+        Want := F[2] + ' ' + F[3];
       end
       else if Op = 'random' then
       begin
