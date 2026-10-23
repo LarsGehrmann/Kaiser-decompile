@@ -62,12 +62,15 @@ function FindExe: string;
 function SettingsFile: string;
 function OwnSettingsFile: string;
 function ResBitmap(const Name: RawByteString; Id: Word = 0): TBitmap;
+{ a sprite: BITMAP Id with the mask BITMAP Id + 1000 (black = sprite, white =
+  transparent; Bmp_DrawMasked 1078:00c4) as a 32-bit bitmap with alpha }
+function Sprite(Id: Word): TBitmap;
 function Utf8(const Raw: RawByteString): string;
 
 implementation
 
 uses
-  Process;
+  Process, IntfGraphics, FPImage, GraphType;
 
 function Utf8(const Raw: RawByteString): string;
 begin
@@ -135,6 +138,54 @@ begin
     end;
   end;
   BitmapCache.AddObject(Key, Result);
+end;
+
+var
+  SpriteCache: TStringList;
+
+function Sprite(Id: Word): TBitmap;
+var
+  Img, Mask: TBitmap;
+  Src, MSrc, Dst: TLazIntfImage;
+  X, Y: Integer;
+  C: TFPColor;
+  K: Integer;
+begin
+  K := SpriteCache.IndexOf(IntToStr(Id));
+  if K >= 0 then
+    Exit(TBitmap(SpriteCache.Objects[K]));
+  Result := nil;
+  Img := ResBitmap('', Id);
+  Mask := ResBitmap('', Id + 1000);
+  if Img <> nil then
+  begin
+    Src := Img.CreateIntfImage;
+    if Mask <> nil then
+      MSrc := Mask.CreateIntfImage
+    else
+      MSrc := nil;
+    Dst := TLazIntfImage.Create(Img.Width, Img.Height, [riqfRGB, riqfAlpha]);
+    try
+      Dst.CreateData;
+      for Y := 0 to Img.Height - 1 do
+        for X := 0 to Img.Width - 1 do
+        begin
+          C := Src.Colors[X, Y];
+          C.Alpha := $FFFF;
+          if (MSrc <> nil) and (X < MSrc.Width) and (Y < MSrc.Height) and
+             (MSrc.Colors[X, Y].Red > $8000) then
+            C.Alpha := 0;
+          Dst.Colors[X, Y] := C;
+        end;
+      Result := TBitmap.Create;
+      Result.LoadFromIntfImage(Dst);
+    finally
+      Dst.Free;
+      Src.Free;
+      MSrc.Free;
+    end;
+  end;
+  SpriteCache.AddObject(IntToStr(Id), Result);
 end;
 
 { an ICON resource into an image (SS_ICON statics) }
@@ -467,6 +518,7 @@ begin
 end;
 
 initialization
+  SpriteCache := TStringList.Create;
   BitmapCache := TStringList.Create;
   BitmapCache.CaseSensitive := True;
 end.

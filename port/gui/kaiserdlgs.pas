@@ -11,8 +11,8 @@ unit KaiserDlgs;
 interface
 
 uses
-  SysUtils, Classes, Controls, StdCtrls, Forms, Strings, NERes, KaiserTypes, KaiserDS,
-  KaiserUI, KaiserLCL;
+  SysUtils, Classes, Controls, StdCtrls, ExtCtrls, Forms, Graphics, Strings, NERes,
+  KaiserTypes, KaiserDS, KaiserUI, KaiserLCL;
 
 type
   TKaiserDialog = class(TTemplateForm)
@@ -69,12 +69,63 @@ type
     function CanClose: Boolean; override;
   end;
 
+  { segment 3 (turn) }
+  TPromotionDlg = class(TKaiserDialog)       { BEFDLG / FEMBEFDLG (DS:05f0) }
+    procedure SetupWindow; override;
+  end;
+  TStartFinanzDlg = class(TKaiserDialog)     { STARTFINANZDLG (DS:0916) }
+    procedure SetupWindow; override;
+  end;
+  TStartPopDlg = class(TKaiserDialog)        { STARTPOPDLG (DS:0536) }
+    procedure SetupWindow; override;
+  end;
+  THexenDlg = class(TKaiserDialog)           { HEXENDLG (DS:0598) }
+    procedure SetupWindow; override;
+    function CanClose: Boolean; override;
+  end;
+
+  { segment 12 }
+  THeroNameDlg = class(TKaiserDialog)        { HELDDLG ... (DS:351e) }
+    procedure SetupWindow; override;
+    function CanClose: Boolean; override;
+  end;
+  TUnitInfoDlg = class(TKaiserDialog)        { SOELDNERDLG ... (DS:35e6) }
+  private
+    FFrame: Byte;
+    FPortrait: TImage;
+    FTimer: TTimer;
+    procedure Tick(Sender: TObject);
+    procedure DrawPortrait;
+  public
+    procedure SetupWindow; override;
+  end;
+  TPlayerSelectDlg = class(TKaiserDialog)    { SPENDE/TRADE/TRIBUT/SABOAUSWAHLDLG (DS:357a) }
+    procedure SetupWindow; override;
+    function CanClose: Boolean; override;
+  end;
+  TChoiceDlg = class(TKaiserDialog)          { Button2Dlg (DS:3652), ChoiceDlg (DS:36ea) }
+    procedure SetupWindow; override;
+    procedure Handle(Id: SmallInt); override;
+  end;
+
+  { segment 6 }
+  TMassacreDlg = class(TKaiserDialog)        { MASSAKERDLG (DS:0cec) }
+    procedure SetupWindow; override;
+  end;
+  TPlunderResultDlg = class(TKaiserDialog)   { PLUENDERNDLG (DS:0c98) }
+    procedure SetupWindow; override;
+  end;
+  TPlunderChoiceDlg = class(TKaiserDialog)   { LOOTDLG / LOOT2DLG (DS:0d60) }
+    procedure SetupWindow; override;
+    procedure Handle(Id: SmallInt); override;
+  end;
+
 function DialogClassOf(const Name: string): TKaiserDialogClass;
 
 implementation
 
 uses
-  Rules;
+  Rules, Real48, Turn, KaiserRes;
 
 { -- TKaiserDialog ----------------------------------------------------------- }
 
@@ -428,6 +479,245 @@ begin
   Result := S <> '';
 end;
 
+{ -- helpers --------------------------------------------------------------- }
+
+function GetLong(D: TDialog; Off: Word): LongInt;
+begin
+  Move(D.Data[Off], Result, 4);
+end;
+
+function LongText(V: LongInt): RawByteString;
+begin
+  Result := IntToStr(V);
+end;
+
+{ -- segment 3 --------------------------------------------------------------- }
+
+procedure TPromotionDlg.SetupWindow;
+var
+  T: Byte;
+begin
+  SetText(101, LongText(PWord(@D.Data[$7F])^ + 1400));
+  SetText(102, PChar(@D.Data[$2E]));
+  T := D.Data[$81];
+  if D.Data[$82] = 0 then
+    SetText(103, DSText($58E8 + 25 * (T + 1)))
+  else
+    SetText(103, DSText($59FC + 25 * (T + 1)));
+end;
+
+procedure TStartFinanzDlg.SetupWindow;
+begin
+  SetText(101, LongText(GetLong(D, $34)));
+  SetText(102, LongText(GetLong(D, $38)));
+  SetText(103, LongText(GetLong(D, $3C)));
+  SetText(104, LongText(-GetLong(D, $40)));
+  SetText(105, LongText(GetLong(D, $44)));
+  SetText(106, LongText(GetLong(D, $48)));
+  SetText(107, LongText(GetLong(D, $4C)));
+  SetText(108, LongText(GetLong(D, $50)));
+  SetText(109, LongText(GetLong(D, $54)));
+  SetText(110, LongText(-GetLong(D, $58)));
+end;
+
+procedure TStartPopDlg.SetupWindow;
+var
+  R: TReal48;
+begin
+  { the number, then the text }
+  SetText(101, LongText(GetLong(D, $2E)) + DSText($0A4C));
+  SetText(102, LongText(GetLong(D, $32)) + DSText($0A80));
+  SetText(103, LongText(GetLong(D, $36)) + DSText($0AA8));
+  SetText(104, LongText(GetLong(D, $3A)) + DSText($0ADB));
+  Move(D.Data[$3E], R, 6);
+  { Str(happiness * 100 :0:2) }
+  SetText(105, FormatFloat('0.00', R48ToDouble(R48Mul(R, RC($0087, 0, $4800)))) + DSText($0B0E));
+end;
+
+procedure THexenDlg.SetupWindow;
+var
+  I: Integer;
+begin
+  for I := 0 to 12 do
+    AddString(101, DS.SpellNames[I]);
+  SetSelIndex(101, 0);
+end;
+
+function THexenDlg.CanClose: Boolean;
+begin
+  PWord(@D.Data[$38])^ := Word(GetSelIndex(101));
+  Result := True;
+end;
+
+{ -- segment 12 --------------------------------------------------------------- }
+
+procedure THeroNameDlg.SetupWindow;
+var
+  Buf: array[0..16] of Char;
+begin
+  { a random name proposal (the game's RandSeed moves on) }
+  LoadString(Random(220) + 101, Buf, 16);
+  StrCopy(PChar(@D.Data[$38]), Buf);
+  SetText(101, Buf);
+  PWord(@D.Data[$2E])^ := $D1;
+  D.Data[$49] := 0;
+end;
+
+function THeroNameDlg.CanClose: Boolean;
+var
+  S: RawByteString;
+begin
+  S := Copy(GetText(101), 1, 15);
+  FillChar(D.Data[$38], 16, 0);
+  if S <> '' then
+    Move(S[1], D.Data[$38], Length(S));
+  if (DS.Game.CensusEditorEnabled <> 0) and (S = 'guams dlo') then
+    D.Data[$49] := 1;
+  StrCopy(PChar(@D.Data[DialogTextOfs]), PChar(@D.Data[$38]));
+  Result := True;
+end;
+
+procedure TUnitInfoDlg.SetupWindow;
+var
+  U: ^TUnit;
+  Buf: array[0..81] of Char;
+begin
+  { the unit record (+0x35) and the mode ('e' rank, 'f' ability) }
+  U := Args[2].P;
+  Move(U^, D.Data[$35], SizeOf(TUnit));
+  D.Data[$34] := Byte(Args[3].V);
+  U := @D.Data[$35];
+  SetText(101, PChar(@U^.Name));
+  Buf[0] := #0;
+  if D.Data[$34] = Ord('e') then
+    UnitRankName(U^, Buf)
+  else if D.Data[$34] = Ord('f') then
+    StrCopy(Buf, DSText($53D8 + 25 * U^.Ability));
+  SetText(102, Buf);
+  SetText(103, LongText(U^.Attack));
+  SetText(104, LongText(U^.Defence));
+  SetText(105, LongText(ShortInt(U^.MaxHp)));
+  SetText(106, LongText(U^.Range));
+  SetText(107, LongText(U^.MaxSteps));
+  SetText(108, LongText(U^.Pay));
+  FPortrait := TImage.Create(Self);
+  FPortrait.Parent := Self;
+  FPortrait.Stretch := True;
+  FPortrait.Transparent := True;
+  FPortrait.SetBounds(ClientWidth - 80, 12, 64, 64);
+  FFrame := 0;
+  DrawPortrait;
+  FTimer := TTimer.Create(Self);
+  FTimer.Interval := 400;
+  FTimer.OnTimer := @Tick;
+end;
+
+procedure TUnitInfoDlg.DrawPortrait;
+var
+  B: TBitmap;
+  Base: Word;
+begin
+  if FFrame = 0 then
+    Base := 1100
+  else
+    Base := 1300;
+  B := Sprite(Base + PUnit(@D.Data[$35])^.UnitType);
+  if B <> nil then
+    FPortrait.Picture.Assign(B);
+end;
+
+procedure TUnitInfoDlg.Tick(Sender: TObject);
+begin
+  { WMTimer (1058:0ca1): now and then the other frame for one tick }
+  if FFrame <> 0 then
+    FFrame := 0
+  else if Random(4) = 0 then
+    FFrame := 1;
+  DrawPortrait;
+end;
+
+procedure TPlayerSelectDlg.SetupWindow;
+var
+  Players: ^TPlayers;
+  Num, Excl, I, K: Byte;
+  Title: array[0..65] of Char;
+begin
+  { the formatted titles of all players but Exclude; +0x35 maps the entries }
+  Players := Args[2].P;
+  Num := Byte(Args[3].V);
+  Excl := Byte(Args[4].V);
+  K := 0;
+  for I := 0 to Num - 1 do
+    if I <> Excl then
+    begin
+      FormatPlayerTitle(Players^[I], Title, 0, 0);
+      AddString(101, Title);
+      D.Data[$35 + K] := I;
+      Inc(K);
+    end;
+  SetSelIndex(101, D.Data[$32]);
+end;
+
+function TPlayerSelectDlg.CanClose: Boolean;
+begin
+  if GetSelIndex(101) >= 0 then
+    D.Data[$32] := D.Data[$35 + GetSelIndex(101)];
+  Result := True;
+end;
+
+procedure TChoiceDlg.SetupWindow;
+var
+  I, N: Integer;
+  Flags: PByte;
+begin
+  if D.Name = 'ButtonChoiceDlg' then
+  begin
+    N := Args[2].V;
+    Flags := Args[3].P;
+    for I := 0 to N - 1 do
+      EnableItem(101 + I, Flags[I] <> 0);
+  end;
+end;
+
+procedure TChoiceDlg.Handle(Id: SmallInt);
+begin
+  if (Id >= 101) and (Id <= 110) then
+    inherited Command(Id)              { EndDlg(id) }
+  else
+    inherited Handle(Id);
+end;
+
+{ -- segment 6 ------------------------------------------------------------------ }
+
+procedure TMassacreDlg.SetupWindow;
+begin
+  SetText(101, LongText(GetLong(D, $2E)));
+  SetText(102, LongText(GetLong(D, $32)));
+  SetText(103, PChar(@D.Data[$42]));
+end;
+
+procedure TPlunderResultDlg.SetupWindow;
+begin
+  SetText(101, LongText(GetLong(D, $36)));
+  SetText(102, LongText(GetLong(D, $32)));
+  SetText(103, LongText(GetLong(D, $2E)));
+end;
+
+procedure TPlunderChoiceDlg.SetupWindow;
+begin
+  SetText(101, PChar(@D.Data[$34]));
+  SetText(102, PChar(@D.Data[$67]));
+end;
+
+procedure TPlunderChoiceDlg.Handle(Id: SmallInt);
+begin
+  { buttons 201..204: plunder, burn, massacre, mercy -> EndDlg(10..13) }
+  if (Id >= 201) and (Id <= 204) then
+    inherited Command(Id - 201 + 10)
+  else
+    inherited Handle(Id);
+end;
+
 function DialogClassOf(const Name: string): TKaiserDialogClass;
 begin
   case Name of
@@ -436,6 +726,17 @@ begin
     'HumanCountDlg': Result := THumanCountDlg;
     'ComputerCountDlg': Result := TComputerCountDlg;
     'PlayerDataDlg': Result := TPlayerDataDlg;
+    'PromotionDlg': Result := TPromotionDlg;
+    'StartFinanzDlg': Result := TStartFinanzDlg;
+    'StartPopDlg': Result := TStartPopDlg;
+    'HexenDlg': Result := THexenDlg;
+    'HeroNameDlg': Result := THeroNameDlg;
+    'UnitInfoDlg': Result := TUnitInfoDlg;
+    'PlayerSelectDlg': Result := TPlayerSelectDlg;
+    'Button2Dlg', 'ButtonChoiceDlg': Result := TChoiceDlg;
+    'MassacreDlg': Result := TMassacreDlg;
+    'PlunderResultDlg': Result := TPlunderResultDlg;
+    'PlunderChoiceDlg': Result := TPlunderChoiceDlg;
   else
     Result := TKaiserDialog;
   end;
