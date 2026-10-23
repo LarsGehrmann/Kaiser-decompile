@@ -237,7 +237,16 @@ begin
       GameDialogs.DisableButton2(FindDialog(Args[0].P));
   end
   else if Name = 'Victory' then
-    Annals.Victory(Args[0].P, Players^)
+  begin
+    { Victory (1000:3459): the coronation, high score and records, then
+      EndGame }
+    Annals.Victory(Args[0].P, Players^);
+    DS.Game.GameState := 0;
+  end
+  else if Name = 'EndGame' then
+    { EndGame (1000:0a6f): the title screen (the menu follows the state
+      after the command; kaiser.mid is not played) }
+    DS.Game.GameState := 0
   else if Name = 'Annals_Load' then
     Result := Ord(AnnalsLoad(DataFile('KAISER.SCO'), TAnnals(Args[0].P^)))
   else if Name = 'Annals_Save' then

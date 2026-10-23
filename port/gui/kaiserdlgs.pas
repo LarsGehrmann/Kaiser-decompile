@@ -130,7 +130,7 @@ function DialogClassOf(const Name: string): TKaiserDialogClass;
 implementation
 
 uses
-  Rules, Real48, Turn, KaiserRes, HelpView;
+  Math, Rules, Real48, Turn, KaiserRes, HelpView;
 
 { -- TKaiserDialog ----------------------------------------------------------- }
 
@@ -750,14 +750,14 @@ begin
   Crown := ResBitmap('KLEINEKRONE');
   if Crown = nil then
     Exit;
-  W := Trunc(120 * SX + 0.5);
-  H := Trunc(115 * SY + 0.5);
+  { Bmp_Draw: a BitBlt of 120 x 115 scaled, not stretched; the bitmap is
+    120 x 115 and the original's window 296 wide (scale 1): no more of it }
+  W := Min(Trunc(120 * SX + 0.5), Crown.Width);
+  H := Min(Trunc(115 * SY + 0.5), Crown.Height);
   B := TBitmap.Create;
   try
     B.SetSize(W, H);
-    B.Canvas.Brush.Color := clBlack;               { (outside the bitmap) }
-    B.Canvas.FillRect(0, 0, W, H);
-    B.Canvas.Draw(0, 0, Crown);                    { Bmp_Draw: BitBlt, not stretched }
+    B.Canvas.Draw(0, 0, Crown);
     PictureImage(Trunc(88 * SX + 0.5), Trunc(118 * SY + 0.5), W, H).Picture.Assign(B);
   finally
     B.Free;
