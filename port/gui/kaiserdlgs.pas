@@ -105,6 +105,10 @@ type
       type blinking) on the dialog's background at (12, 8) of a 237 x 254
       window, both scaled with the width (the original's y uses it too) }
     procedure DrawRecruitPicture(Blink: Byte);
+    { UnitEditDlg.DrawPortrait (1038:56b9): the same for the edited unit
+      (+0x703): 1100 + type, a hero 1150 + picture }
+    procedure DrawUnitEditPortrait;
+    procedure DrawSmallSprite(Id: Integer);
     { CoronationDlg.WMPaint (1040:4d8c): KLEINEKRONE, 120 x 115 of it at
       (88, 118) of a 296 x 354 window, scaled }
     procedure DrawCrown;
@@ -442,6 +446,8 @@ begin
     DrawTargetMap;
   if D.Name = 'CoronationDlg' then
     DrawCrown;
+  if D.Name = 'UnitEditDlg' then
+    DrawUnitEditPortrait;
   if Logic.TimerInterval > 0 then
   begin
     FTimer := TTimer.Create(Self);
@@ -708,11 +714,12 @@ begin
   end;
 end;
 
-procedure TLogicDialog.DrawRecruitPicture(Blink: Byte);
+{ a 32 x 32 sprite on the dialog's background at (12, 8) of a 237 x 254
+  window, both scaled with the width (RecruitDlg, UnitEditDlg) }
+procedure TLogicDialog.DrawSmallSprite(Id: Integer);
 var
   B, S: TBitmap;
   SX: Double;
-  N: Integer;
 begin
   SX := 1;
   if PSmallInt(@D.Data[$2A])^ > 0 then
@@ -722,17 +729,29 @@ begin
     B.SetSize(32, 32);
     B.Canvas.Brush.Color := DialogBackground;
     B.Canvas.FillRect(0, 0, 32, 32);
-    if Blink <> 0 then
-      N := 1300
-    else
-      N := 1100;
-    S := Sprite(N + D.Data[$70E]);
+    S := Sprite(Id);
     if S <> nil then
       B.Canvas.Draw(0, 0, S);
     PictureImage(Trunc(12 * SX + 0.5), Trunc(8 * SX + 0.5), 32, 32).Picture.Assign(B);
   finally
     B.Free;
   end;
+end;
+
+procedure TLogicDialog.DrawRecruitPicture(Blink: Byte);
+begin
+  if Blink <> 0 then
+    DrawSmallSprite(1300 + D.Data[$70E])
+  else
+    DrawSmallSprite(1100 + D.Data[$70E]);
+end;
+
+procedure TLogicDialog.DrawUnitEditPortrait;
+begin
+  if D.Data[$71C] = 9 then
+    DrawSmallSprite(1100 + 50 + D.Data[$71D])         { a hero: his picture }
+  else
+    DrawSmallSprite(1100 + ShortInt(D.Data[$71C]));
 end;
 
 procedure TLogicDialog.DrawCrown;

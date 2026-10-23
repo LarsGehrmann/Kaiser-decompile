@@ -213,6 +213,12 @@ begin
     if F is TLogicDialog then
       TLogicDialog(F).DrawUnitInfo;
   end
+  else if Name = 'UnitEditDlg_DrawPortrait' then
+  begin
+    F := FormOf(FindDialog(Args[0].P));
+    if F is TLogicDialog then
+      TLogicDialog(F).DrawUnitEditPortrait;
+  end
   else if Name = 'UnitLookDlg_DrawUnitPicture' then
   begin
     F := FormOf(FindDialog(Args[1].P));
