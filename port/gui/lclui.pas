@@ -9,7 +9,8 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports, GameDialogs;
+  KaiserLCL, KaiserDlgs, Rules, Actions, Annals, Troops, Intel, Census, Reports, GameDialogs,
+  Battle, War, BattleForm;
 
 type
   TLclUI = class(TGameUI)
@@ -53,6 +54,54 @@ begin
     Result := '';
 end;
 
+{ PlaySound (1070:0002): WAVEDATA resource N with afplay when "Krach &
+  Geschrei" is on; Async = 0 (the battle) waits for its end (sndPlaySound
+  SND_SYNC): the battle's animations show their frames meanwhile. Without
+  sound the original counts 500,000 loops instead. (Silent under the
+  autopilot.) }
+procedure PlayWave(N: Word; Async: Boolean);
+var
+  Data: TBytes;
+  FN: string;
+  S: TFileStream;
+begin
+  if not Async and (ActiveBattle <> nil) then
+    ActiveBattle.Flush;
+  if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
+    Exit;
+  if (DS.OptSound = 0) or (N = 0) then
+  begin
+    if not Async then
+      Sleep(100);
+    Exit;
+  end;
+  Data := Exe.FindNamedType('WAVEDATA', '', N);
+  if Data = nil then
+    Exit;
+  FN := GetTempDir + 'kaiser_sound_' + IntToStr(N) + '.wav';
+  if not FileExists(FN) then
+  begin
+    S := TFileStream.Create(FN, fmCreate);
+    try
+      S.WriteBuffer(Data[0], Length(Data));
+    finally
+      S.Free;
+    end;
+  end;
+  with TProcess.Create(nil) do
+  try
+    Executable := '/usr/bin/afplay';
+    Parameters.Add(FN);
+    if Async then
+      Options := []
+    else
+      Options := [poWaitOnExit];
+    Execute;
+  finally
+    Free;
+  end;
+end;
+
 function TLclUI.FormOf(D: TDialog): TKaiserDialog;
 var
   I: Integer;
@@ -73,6 +122,8 @@ begin
   Result := inherited Dialog(Name, VMT, Args);
   if (Length(Args) < 2) or (Name = 'TButton') or (Args[1].Kind <> uaStr) then
     Exit;
+  if (Name = 'KaiserDlg') and (VMT = 0) then
+    Exit;                        { BattleInit: the battle window (Battle_Execute) }
   { the template: a name or MAKEINTRESOURCE(id) (the reports of the turn) }
   Id := 0;
   TplName := ArgText(Args[1]);
@@ -97,6 +148,8 @@ begin
   if F = nil then
     Exit(inherited Execute(D));
   Result := F.Run;
+  if ActiveBattle <> nil then
+    ActiveBattle.NeedPaint := True;          { the battle window gets a WM_PAINT }
 end;
 
 procedure TLclUI.Done(D: TDialog; Flag: Word);
@@ -115,9 +168,6 @@ end;
 
 function TLclUI.Call(const Name: string; const Args: array of TUIArg): SmallInt;
 var
-  Data: TBytes;
-  FN: string;
-  S: TFileStream;
   F: TKaiserDialog;
 begin
   Result := 0;
@@ -173,34 +223,34 @@ begin
   else if Name = 'Records_Save' then
     RecordsSave(OwnDataFile('KAISER.REC'), TRecords(Args[0].P^))
   else if Name = 'PlaySound' then
+    PlayWave(Word(Args[0].V), Args[1].V <> 0)
+  { the battle window (BattleForm) }
+  else if Name = 'Battle_Execute' then
+    Result := RunBattle(Args[0].P)
+  else if Copy(Name, 1, 7) = 'Battle_' then
   begin
-    { WAVEDATA resource n, played by afplay (sndPlaySound, asynchronous),
-      when "Krach & Geschrei" is on }
-    if DS.OptSound = 0 then
+    if (ActiveBattle = nil) or (Length(Args) = 0) or (ActiveBattle.B <> Args[High(Args)].P) then
       Exit;
-    Data := Exe.FindNamedType('WAVEDATA', '', Word(Args[0].V));
-    if Data = nil then
-      Exit;
-    FN := GetTempDir + 'kaiser_sound_' + IntToStr(Args[0].V) + '.wav';
-    if not FileExists(FN) then
-    begin
-      S := TFileStream.Create(FN, fmCreate);
-      try
-        S.WriteBuffer(Data[0], Length(Data));
-      finally
-        S.Free;
-      end;
-    end;
-    with TProcess.Create(nil) do
-    try
-      Executable := '/usr/bin/afplay';
-      Parameters.Add(FN);
-      Options := [];
-      Execute;
-    finally
-      Free;
-    end;
+    if Name = 'Battle_DrawCell' then
+      ActiveBattle.DrawCell(SmallInt(Word(Args[0].V)), SmallInt(Word(Args[1].V)), Byte(Args[2].V))
+    else if Name = 'Battle_RedrawUnit' then
+      ActiveBattle.RedrawUnit(Byte(Args[0].V), Byte(Args[1].V))
+    else if Name = 'Battle_DrawUnitStatus' then
+      ActiveBattle.DrawUnitStatus(Byte(Args[1].V), Byte(Args[2].V), Byte(Args[3].V))
+    else if Name = 'Battle_ClearTargetPanel' then
+      ActiveBattle.ClearTargetPanel
+    else if Name = 'Battle_EnableButtons' then
+      ActiveBattle.EnableButtons(True)
+    else if Name = 'Battle_DisableButtons' then
+      ActiveBattle.EnableButtons(False);
+    { Battle_End: BattleEndCode, the window closes after the message }
   end
+  { a computer attacks a human (ResolveWar), the marauders / the Lindwurm }
+  else if Name = 'Battle' then
+    Result := War.Battle(Args[0].P, PPlayer(Args[1].P)^, PPlayer(Args[2].P)^, Byte(Args[3].V),
+      Byte(Args[4].V), Byte(Args[5].V))
+  else if Name = 'FightRaiders' then
+    Result := War.FightRaiders(Args[0].P, PPlayer(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
   else if Name = 'MessageBox' then
     Result := Application.MessageBox(PChar(Utf8(ArgText(Args[1]))), 'Kaiser', MB_OK)
   else if Name = 'Randomize' then

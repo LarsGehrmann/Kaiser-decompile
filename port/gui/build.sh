@@ -1,12 +1,13 @@
 #!/bin/bash
 # Build the GUI (port/gui) with Free Pascal and the LCL (Cocoa) built in
 # tools/lazarus (see docs/phase3.md, milestone 7). Output: port/bin/Kaiser.app
+# GUI_FPC_OPTS: extra compiler options (e.g. "-gl -gw" for line info in lldb)
 set -euo pipefail
 cd "$(dirname "$0")"
 L=../../tools/lazarus
 A=aarch64-darwin
 mkdir -p ../obj/gui ../bin
-fpc -Mobjfpc -Sa -O2 -dLCL -dLCLcocoa \
+fpc -Mobjfpc -Sa -O2 ${GUI_FPC_OPTS:-} -dLCL -dLCLcocoa \
   -Fu../src -Fu"$L/lcl/units/$A/cocoa" -Fu"$L/lcl/units/$A" \
   -Fu"$L/components/lazutils/lib/$A" -Fu"$L/packager/units/$A" \
   -FU../obj/gui -FE../bin \

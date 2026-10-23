@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
-  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports;
+  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48;
 
 type
   TKaiserForm = class(TForm)
@@ -37,6 +37,7 @@ type
     procedure HandleMapClick(Dbl: Boolean; X, Y: Integer);
     procedure CmHilfe;
     procedure MainShots(const Dir, Prefix: string);
+    procedure AutoWar(const Cmd: string);
   public
     { KaiserWindow::Paint (1000:0b5d) without its menu/caption side effects:
       the client area (without the toolbar) as the original paints it }
@@ -81,6 +82,8 @@ begin
   if Shots <> '' then
     MainShots(Shots, 'title');
   LoadFile := GetEnvironmentVariable('KAISER_LOAD');
+  if LoadFile = '' then
+    LoadFile := GetEnvironmentVariable('KAISER_AUTOLOAD');
   if (LoadFile = '') and (ParamCount > 0) and (Copy(ParamStr(1), 1, 1) <> '-') and
      FileExists(ParamStr(1)) then
     LoadFile := ParamStr(1);
@@ -93,14 +96,18 @@ begin
       FSaveFile := '';
   end
   else if GetEnvironmentVariable('KAISER_AUTOGAME') <> '' then
-  begin
     CmNeuesSpiel;
+  if GetEnvironmentVariable('KAISER_AUTOGAME') <> '' then
+  begin
     Invalidate;
     Cmds := TStringList.Create;
     try
       Cmds.CommaText := GetEnvironmentVariable('KAISER_AUTOMENU');
       for T := 0 to Cmds.Count - 1 do
-        Command(StrToIntDef(Cmds[T], 0));
+        if (Copy(Cmds[T], 1, 4) = 'war:') or (Copy(Cmds[T], 1, 5) = 'raid:') then
+          AutoWar(Cmds[T])
+        else
+          Command(StrToIntDef(Cmds[T], 0));
     finally
       Cmds.Free;
     end;
@@ -305,6 +312,36 @@ begin
   else
     Application.MessageBox('Die Hilfe (KAISER.HLP) ist in dieser Fassung nicht enthalten; ' +
       'docs/manual.md wurde nicht gefunden.', 'Kaiser', MB_OK);
+end;
+
+{ KAISER_AUTOMENU item war:A:D: player A (a computer) attacks D as in
+  NextPlayer (ResolveWar: the UI call 'Battle'); raid:P:M: the marauders
+  (M = 1) or the Lindwurm (2) attack P (the UI call 'FightRaiders' of the
+  turn start) }
+procedure TKaiserForm.AutoWar(const Cmd: string);
+var
+  Parts: TStringList;
+  Cur: Byte;
+begin
+  Parts := TStringList.Create;
+  try
+    Parts.Delimiter := ':';
+    Parts.DelimitedText := Cmd;
+    if Parts.Count < 3 then
+      Exit;
+    if Parts[0] = 'raid' then
+    begin
+      UI.Call('FightRaiders', [APtr(Self), APtr(@FSave.Players[StrToInt(Parts[1])]),
+        AByte(StrToInt(Parts[1])), AByte(StrToInt(Parts[2]))]);
+      Exit;
+    end;
+    Cur := DS.Game.CurrentPlayer;
+    DS.Game.CurrentPlayer := StrToInt(Parts[1]);
+    ResolveWar(Self, FSave.Players, StrToInt(Parts[2]));
+    DS.Game.CurrentPlayer := Cur;
+  finally
+    Parts.Free;
+  end;
 end;
 
 constructor TKaiserForm.Create(AOwner: TComponent);
@@ -643,6 +680,11 @@ begin
   FSave := S;
   FSaveFile := FileName;
   DS.Game := FSave.Header;
+  { LoadGame (1050:07ed): Randomize, an e-mail game its stored RandSeed }
+  if DS.Game.EmailGameQ = 0 then
+    UI.Call('Randomize', [])
+  else
+    Real48.RandSeed := DS.Game.RandSeed;
   if DS.Game.EmailGameQ = 0 then
   begin
     DS.Game.GameState := 6;

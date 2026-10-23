@@ -503,6 +503,15 @@ begin
   for I := 0 to High(FTemplate.Items) do
     if (FTemplate.Items[I].ClassName = 'BUTTON') and (FTemplate.Items[I].Style and $F = 1) then
       Def := FTemplate.Items[I].Id;
+  { KAISER_AUTOANSWER=NAME=ID,...: press button ID in dialog NAME instead }
+  with TStringList.Create do
+  try
+    CommaText := GetEnvironmentVariable('KAISER_AUTOANSWER');
+    if IndexOfName(FTemplate.Name) >= 0 then
+      Def := StrToIntDef(Values[FTemplate.Name], Def);
+  finally
+    Free;
+  end;
   Command(Def);
 end;
 

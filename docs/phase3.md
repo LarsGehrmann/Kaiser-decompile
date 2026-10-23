@@ -65,8 +65,8 @@ onto the LCL):
 | Step | Content | Validation |
 |---|---|---|
 | 7a | Toolchain (LCL Cocoa built from the Lazarus sources); resources read at runtime from `kaiser.exe` (dialog and menu templates, bitmaps, sounds, strings); a generic dialog from a template; the main window with the original menu; open a savegame, end the turn (`EndHumanTurn`) with the simple dialogs | the app runs a game on; templates render like the originals |
-| 7b | The dialog base types of segment 12 (KaiserDlg, MessageDlg, Message2Dlg, choice dialogs …) and the menu actions of segments 8 and 9 (`Do_*`), ported with their handlers | differential tests of the logic parts where the emulator can drive them (`actions.vec`, `troops.vec`, `dialogs.vec`) |
-| 7c | The battle window: drawing (DrawMap, DrawCell, DrawUnitStatus), timer, clicks, cursors | play battles |
+| 7b | The dialog base types of segment 12 (KaiserDlg, MessageDlg, Message2Dlg, choice dialogs …) and the menu actions of segments 8 and 9 (`Do_*`), ported with their handlers | differential tests of the logic parts where the emulator can drive them |
+| 7c | The battle window: drawing (DrawMap, DrawCell, DrawUnitStatus), timer, clicks, cursors | play battles: ✅ `port/gui/battleform.pas` (below); field, city, winter, marauder and Lindwurm battles played under the autopilot, from "Krieg führen", a computer's attack (`ResolveWar`) and `FightRaiders`; `battle.vec` unchanged |
 | 7d | Main window painting and status (segment 13, 1), Annalen, Rekorde, help, sounds, toolbar | manual play-through |
 
 Toolchain notes: Homebrew's Lazarus cask is gone; `tools/lazarus` (gitignored) is a shallow
@@ -173,6 +173,66 @@ Two traps found on the way: unit-type tables indexed with an empty slot's type (
 must read index −1 like the original (`PByte(@DS.UnitMelee)[ShortInt(t)]`; FPC turns a
 `ShortInt` index into the array's 0..35 range), and 32-bit products must wrap (`MulDiv` in
 `war.pas`), since FPC computes `LongInt * LongInt` in 64 bits on this target.
+
+## The battle window in the GUI (7c)
+
+`port/gui/battleform.pas` is the battle window of segment 10 on the LCL; the logic stays in
+`port/src/battle.pas` (the tested code), whose drawing calls `Battle_*` LclUI forwards to the
+open window. `War.Battle` / `FightRaiders` run it with the UI call `Battle_Execute` (a modal
+form; the end code is `BattleEndCode` after the message that called `EndBattle`); the UI calls
+`Battle` (a computer attacks a human, `ResolveWar`) and `FightRaiders` (turn start) go to `War`.
+
+- **Drawing** as the original, in its pixels (no scaling; client 480 x 437, MoveWindow
+  0x1e2 x 0x1ca): the map 15 x 11 cells of 32 pixels over the 8 x 8 pattern LAND (winter
+  SCHNEE, terrain bitmaps +20), framed with a green (white) pen (DrawMap 1068); terrain codes
+  2..13 and the rivers as bitmap 1000 + code, walls 1000 + code; units 1100 + type (side 1) /
+  1200 + type (side 0), heroes portrait + 50; a unit in a stance is the black silhouette of its
+  mask (Bmp_DrawSilhouette32, mask 2100 / 2200 + picture); camouflaged units (ability 29)
+  outside the city are not drawn (DrawMap, RedrawUnit). DrawCell (2803) also draws the
+  animation frames (0x83.. side 1 with 1300 + type, 0x8d.. side 0 with 1400 + type, 0x97..,
+  0xa1.., 0xab.., 0xb5..) and code 10 (the hit, bitmap 1010 over the terrain). Sprites are
+  bitmap Id with mask Id + 1000 (`Sprite`). The window is drawn into an off-screen bitmap.
+- **Panels** (DrawPanelFrames 17fd, DrawUnitStatus 1a60, ClearTargetPanel 196c): two sunken
+  grey frames 200 x 80 at (0, 352) and (280, 352); the unit to move left at (10, 360), the
+  target right at (290, 360), 180 x 64, Comic Sans MS bold -12: name, rank orders (black /
+  yellow / red + n), the effective attack and defence (motivation, blindness, Berserker,
+  Knappen, unconscious, the city walls, Eingraben, surrounded, Heilen; dark red below, dark
+  green above the base value), range, steps, ammunition with its icon, the hit point bar
+  (red / yellow / green), blind, unconscious, stance, the morale face, the player (attacker
+  yellow, defender blue) and the ability, right-aligned. An enemy's numbers show only when the
+  unit to move has a rank, its hit points, morale and ability from Haudegen on. The motivation
+  is computed on a copy first (the logic's `DrawUnitStatus` stores the same value right after
+  the UI call).
+- **Messages**: the timer (`DS.OptBattleTimer` ms) calls `WMTimer`; left click
+  `WMLButtonDown`, right click `WMRButtonDown` (the combat options KAMPFOPTDLG; the help
+  topics it returns are not shown, WinHelp is not ported); Warten / Fertig / Aufgeben call
+  `CmWarten` / `CmFertig` / `CmAufgeben`; the buttons are enabled and disabled by the logic.
+  WMMouseMove (91ae) is ported in the form: the cursors STOPCURSOR / GOCURSOR / SWORDCURSOR /
+  HEALCURSOR (from kaiser.exe) by `CanMoveTo` / `CanAttack` / `CanHeal`, the target panel
+  over a unit (through `Battle.DrawUnitStatus`, so hovering recomputes that unit's motivation
+  as in the original), the arrow below the map. WMPaint (the map, the frames, the left panel,
+  also through `Battle.DrawUnitStatus`) runs when the window appears and after every dialog
+  that was opened during the battle. The window cannot be closed (WMClose does nothing).
+- **Sounds**: the battle plays its sounds synchronously (mode 0, `sndPlaySound` SND_SYNC), so
+  the animations show their frames for the length of a sound: the form shows what was drawn,
+  then `afplay` runs to its end; without sound the original's counting loop is a 100 ms pause.
+- **Approximations**: while a message is handled (an AI step, a click, a dialog opened from
+  the battle) further timer ticks and mouse events are dropped (Windows would deliver the
+  window's WM_TIMER inside the nested modal loop of a dialog, and queue clicks); a repaint is
+  always the whole window (the original repaints the uncovered region, so a target panel
+  outside it stays); the buttons use the system font.
+- **Autopilot**: `KAISER_AUTOPILOT=DIR` saves `DIR/battle_NNN_<tick>.png` at ticks 4, 40, every
+  150 and `..._end<code>.png`, at a 30 ms timer; the human sides are played by scripted
+  clicks (once the combat options, then attack an enemy in reach, else step towards the
+  nearest enemy, else Fertig; the mouse is moved onto the nearest enemy before each snapshot),
+  or with `KAISER_AUTOBATTLE=ai` by the AI. `KAISER_AUTOLOAD=SAVE.KSR` starts from a savegame
+  instead of a new game; `KAISER_AUTOMENU` also takes `war:A:D` (computer A attacks D:
+  `ResolveWar`) and `raid:P:M` (marauders 1 / Lindwurm 2 against P); `KAISER_AUTOANSWER=
+  NAME=ID,...` presses button ID in dialog NAME (e.g. `KRIEGSERHADLG=1`: the city battle).
+  Example: `KAISER_AUTOPILOT=/tmp/ap KAISER_AUTOGAME=0 KAISER_AUTOLOAD=Kaiser/LARS23.KSR
+  KAISER_AUTOMENU=214 port/bin/Kaiser.app/Contents/MacOS/Kaiser`.
+- Loading a savegame now calls `Randomize` like the original's LoadGame (1050:07ed; an e-mail
+  game takes its stored `RandSeed`).
 
 ## How the exact runtime works
 
