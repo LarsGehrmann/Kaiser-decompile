@@ -62,7 +62,8 @@ type
   Script (';'-separated), as tools/emu/dlg_driver.py does; the end code.
   A first event w<width>:<height> is the window size KaiserDlg.SetupWindow
   stores at +0x2a / +0x2c; m<x>:<y> / v<x>:<y> are a left click / a mouse
-  move at a client pixel (TDialogLogic.Mouse / MouseMove) }
+  move at a client pixel (TDialogLogic.Mouse / MouseMove), T a timer tick
+  (TDialogLogic.Timer, if the type set a timer) }
 function RunScript(D: TDialog; const Template: TDlgTemplate; const Script: string): SmallInt;
 
 implementation
@@ -374,6 +375,14 @@ begin
         Break;
       end;
       UI.Note('[' + Events[I] + ']');
+      if Events[I] = 'T' then
+      begin
+        { a timer tick (wm_Timer), for a type that set a timer }
+        if L.TimerInterval > 0 then
+          L.Timer;
+        Inc(I);
+        Continue;
+      end;
       if (Events[I] <> '') and (Events[I][1] in ['m', 'v']) then
       begin
         ParsePair(Events[I], X, Y);

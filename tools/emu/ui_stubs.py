@@ -29,7 +29,10 @@ WINDOW = (0x0EEE, 0x1234)  # the parent window pointer the game passes around
 
 # constructors: name -> (address, argument kinds in Pascal order after
 # Self and the VMT word). Kinds: p pointer, s string, w word, b byte,
-# l longint, rN record of N bytes (by reference)
+# l longint, rN record of N bytes (by reference). A Dlg_<type> vector
+# (gen_rule_vectors.py) unstubs its type's constructor; KaiserDlg's always
+# stays (called with Self and VMT 0 it is the inherited constructor of a
+# real dialog: logged as KaiserDlg[0](parent,name), the object is left alone)
 CTORS = {
     'KaiserDlg': ('1058:0002', ['p', 's']),
     'MessageDlg': ('1058:024d', ['p', 's', 's']),
@@ -105,6 +108,8 @@ FUNCS = {
     'TroopDlg_DrawUnitInfo': ('1038:8921', True, ['w', 'p'], False),
     'RecruitDlg_DrawUnitPicture': ('1040:55b5', True, ['b', 'p'], False),
     'Do_UnitEditDlg': ('1038:503d', False, ['p', 'p', 'p'], False),      # near (parent, P, unit)
+    # UnitInfoDlg's portrait (blink, Self): drawing
+    'UnitInfoDlg_DrawPortrait': ('1058:0af8', True, ['b', 'p'], False),
 }
 # DrawUnitStatus(DC, side, unit, panel, Self) draws, but first recomputes the
 # unit's motivation (ComputeMotivation(unit, side, Self), if the unit exists):
@@ -203,7 +208,7 @@ class UILayer:
     results; kind is 'ctor', 'method' or 'func'."""
 
     def __init__(self, emu, players_para, chooser, unstub=()):
-        self.unstub = set(unstub)        # FUNCS that run for real (dialog tests)
+        self.unstub = set(unstub)        # FUNCS / CTORS that run for real (dialog tests)
         self.emu = emu
         self.players_para = players_para
         self.window_alias = None         # a fake window object standing for W
@@ -307,7 +312,8 @@ class UILayer:
     def _install(self):
         emu = self.emu
         for name, (addr, kinds) in CTORS.items():
-            emu.redirect(addr, self._ctor_handler(name, kinds))
+            if name not in self.unstub:
+                emu.redirect(addr, self._ctor_handler(name, kinds))
         for name, (addr, far, kinds, has_ret) in FUNCS.items():
             if name not in self.unstub:
                 emu.redirect(addr, self._func_handler(name, far, kinds, has_ret))
@@ -324,7 +330,7 @@ class UILayer:
             b, e = emu.segment_range(seg)
             emu.guard_ranges.append((b, e, f'segment {seg}'))
         emu.guard_allow = []
-        redirected = ([a for a, _ in CTORS.values()] +
+        redirected = ([a for n, (a, _) in CTORS.items() if n not in self.unstub] +
                       [f[0] for n, f in FUNCS.items() if n not in self.unstub] +
                       [DRAW_UNIT_STATUS[0]])
         for addr, size in ALLOWED + [(a, 5) for a in redirected]:   # 5: the patched jump
@@ -361,7 +367,8 @@ class UILayer:
                 obj = (words[1], words[0])
                 if name == 'KaiserDlg' and kinds[1] == 's':
                     off_s, seg_s = args[len(args) - 4 + 0], args[len(args) - 4 + 1]
-                    nm = self.cstring(seg_s, off_s) if seg_s else b''
+                    # a name, or MAKEINTRESOURCE(id): the template of that id
+                    nm = self.cstring(seg_s, off_s) if seg_s else str(off_s).encode()
                     if hasattr(self, 'driver'):
                         self.driver.set_template(nm.decode('latin-1'), obj)
                 size = 0

@@ -28,10 +28,14 @@ type
     Exe: TNEFile;                    { the templates of the ported dialog types }
     DlgScripts: TStringList;         { the user events per real dialog (dlg=) }
     BattleBase: PByte;               { the battle window object: B<offset> }
+    { the dialog type a Dlg_ vector runs for real: the emulator fakes the
+      other types of its CTORS (tools/emu/ui_stubs.py), so does the replay }
+    Unstubbed: string;
     constructor Create;
     destructor Destroy; override;
     procedure Start(const Recorded: string);
     function LogText: string;
+    function LogicFor(const Name: string): TDialogLogicClass; override;
     function Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog; override;
     function Execute(D: TDialog): SmallInt; override;
     procedure Done(D: TDialog; Flag: Word); override;
@@ -199,6 +203,25 @@ begin
   end;
 end;
 
+const
+  { the constructors tools/emu/ui_stubs.py fakes (CTORS) }
+  FakedCtors: array[0..18] of string = ('KaiserDlg', 'MessageDlg', 'HelpMessageDlg',
+    'Message2Dlg', 'HeroNameDlg', 'UnitInfoDlg', 'PromotionDlg', 'StartFinanzDlg',
+    'StartPopDlg', 'HexenDlg', 'HumanCountDlg', 'ComputerCountDlg', 'PlayerDataDlg',
+    'TButton', 'ButtonChoiceDlg', 'HelpChoice2Dlg', 'MassacreDlg', 'PlunderResultDlg',
+    'PlunderChoiceDlg');
+
+function TReplayUI.LogicFor(const Name: string): TDialogLogicClass;
+var
+  I: Integer;
+begin
+  if Name <> Unstubbed then
+    for I := 0 to High(FakedCtors) do
+      if FakedCtors[I] = Name then
+        Exit(nil);
+  Result := inherited LogicFor(Name);
+end;
+
 function TReplayUI.Dialog(const Name: string; VMT: Word; const Args: array of TUIArg): TDialog;
 var
   Entry: string;
@@ -244,7 +267,7 @@ begin
       Script := DlgScripts[0];
       DlgScripts.Delete(0);
     end;
-    Exit(RunScript(D, Exe.Dialog(PChar(TDialogLogic(D.Logic).Args[1].P)), Script));
+    Exit(RunScript(D, Exe.DialogRes(PChar(TDialogLogic(D.Logic).Args[1].P)), Script));
   end;
   Entry := 'Execute(O' + IntToStr(D.Index) + ');d:' + Contents(D);
   R := Take(Entry);
@@ -261,6 +284,8 @@ procedure TReplayUI.Done(D: TDialog; Flag: Word);
 var
   Entry: string;
 begin
+  if D.Logic <> nil then
+    Flag := TDialogLogic(D.Logic).DoneFlag(Flag);
   Entry := Format('Done(O%d,%d)', [D.Index, Byte(Flag)]);
   if Take(Entry) = '!' then
     Entry := Entry + '!';
@@ -290,7 +315,10 @@ begin
   if Take(Entry) = '!' then
     Entry := Entry + '!';
   FLog.Add(Entry);
-  Result := D.Text;
+  if D.Logic <> nil then
+    Result := TDialogLogic(D.Logic).GetText
+  else
+    Result := D.Text;
 end;
 
 procedure TReplayUI.Note(const Entry: string);

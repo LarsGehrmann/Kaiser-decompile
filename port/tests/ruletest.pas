@@ -8,7 +8,7 @@ program RuleTest;
 
 uses
   SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
-  Battle, War, NERes, Actions, Annals, Troops, Intel, ReplayUI;
+  Battle, War, NERes, Actions, Annals, Troops, Intel, GameDialogs, ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -150,6 +150,103 @@ const
     Result := @Save.Players[PIdx].Army1[ArgI(N)];
   end;
 
+  { the VMT the game constructs a dialog type with (Dlg_ vectors) }
+  function DialogVMT(const Name: string): Word;
+  begin
+    case Name of
+      'KaiserDlg': Result := $3364;
+      'MessageDlg': Result := $33C6;
+      'HelpMessageDlg': Result := $341A;
+      'Message2Dlg': Result := $3472;
+      'HelpChoice2Dlg': Result := $34C6;
+      'HeroNameDlg': Result := $351E;
+      'UnitInfoDlg': Result := $35E6;
+      'Button2Dlg': Result := $3652;
+      'ButtonChoiceDlg': Result := $36EA;
+      'PromotionDlg': Result := $05F0;
+      'StartFinanzDlg': Result := $0916;
+      'StartPopDlg': Result := $0536;
+      'HexenDlg': Result := $0598;
+      'MassacreDlg': Result := $0CEC;
+      'PlunderResultDlg': Result := $0C98;
+      'PlunderChoiceDlg': Result := $0D60;
+      'HumanCountDlg': Result := $22E4;
+      'ComputerCountDlg': Result := $2362;
+      'PlayerDataDlg': Result := $195A;
+    else
+      begin
+        WriteLn('unknown dialog type ', Name);
+        Halt(2);
+      end;
+    end;
+  end;
+
+  { a Dlg_<type> vector (tools/emu/gen_rule_vectors.py): the type's
+    constructor with the arguments of args= (after the parent W: s:<hex>
+    string, i:<id> resource id, w: / b: numbers, r:<hex> record, A the
+    player array), the fields of fld= into the object, Execute, Done; the
+    end code }
+  function RunDialogType(const Name, Fld: string): string;
+  var
+    A: array of TUIArg;
+    Strs: array of RawByteString;
+    K: Integer;
+    It, V: string;
+    Hb: TBytes;
+    D: TDialog;
+    R: SmallInt;
+  begin
+    A := nil;
+    Strs := nil;
+    SetLength(A, Args.Count + 1);
+    SetLength(Strs, Args.Count);
+    A[0] := APtr(Window);
+    for K := 0 to Args.Count - 1 do
+    begin
+      It := Args[K];
+      V := Copy(It, 3, MaxInt);
+      case It[1] of
+        's', 'r':
+          begin
+            Hb := HexBytes(V);
+            SetLength(Strs[K], Length(Hb));
+            if Length(Hb) > 0 then
+              Move(Hb[0], Strs[K][1], Length(Hb));
+            if It[1] = 's' then
+              A[K + 1] := AStr(PChar(Strs[K]))
+            else
+              A[K + 1] := ARec(PChar(Strs[K]), Length(Hb));
+          end;
+        'i': A[K + 1] := AStr(PChar(PtrUInt(StrToInt(V))));
+        'w': A[K + 1] := AWord(StrToInt(V));
+        'b': A[K + 1] := AByte(StrToInt(V));
+        'A': A[K + 1] := APtr(@Save.Players);
+      end;
+    end;
+    Replay.Unstubbed := Name;
+    D := UI.Dialog(Name, DialogVMT(Name), A);
+    Patch(PByte(@D.Data[0]), Fld, Parts);
+    R := UI.Execute(D);
+    { out=: the object's parts the vector reports (offset:hex;...) }
+    V := Field(S, 'out');
+    if V <> '-' then
+    begin
+      Parts.DelimitedText := V;
+      Outs := '';
+      for K := 0 to Parts.Count - 1 do
+      begin
+        It := Parts[K];
+        if K > 0 then
+          Outs := Outs + ';';
+        Outs := Outs + Copy(It, 1, Pos(':', It)) +
+          HexOf(Copy(Snapshot(D.Data[0], Length(D.Data)), StrToInt(Copy(It, 1, Pos(':', It) - 1)),
+          (Length(It) - Pos(':', It)) div 2));
+      end;
+    end;
+    UI.Done(D, 1);
+    Result := IntToStr(Word(R));
+  end;
+
 begin
   { the original's UI calls are replayed; W = this window pointer }
   Replay := TReplayUI.Create;
@@ -230,7 +327,11 @@ begin
       DS.CpuRulerNames[K] := DS.CountryNames[K];
       DS.CountryNamesRt[K] := DS.CountryNames[K];
     end;
+    Replay.Unstubbed := '';
     try
+      if Copy(Func, 1, 4) = 'Dlg_' then
+        Got := RunDialogType(Copy(Func, 5, MaxInt), Field(S, 'fld'))
+      else
       with Save do
         case Func of
           'GrainCapacity': Got := IntToStr(GrainCapacity(Pl^));
