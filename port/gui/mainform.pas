@@ -187,6 +187,12 @@ begin
         Do_LandHandeln(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
         Invalidate;
       end;
+    204:                                        { CmSteuernFestsetzen 1000:164b }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_SteuernFestsetzen(Self, 0, FSave.Players[DS.Game.CurrentPlayer]);
+        Invalidate;
+      end;
     203:                                        { CmGebaeude 1000:1611 }
       if DS.Game.GameState = 1 then
       begin

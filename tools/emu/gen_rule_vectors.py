@@ -434,6 +434,9 @@ SPECS = {
                      'cathedral_parts', 'cathedral_built_this_turn', 'granaries', 'warehouses',
                      'university_parts', 'university_built_this_turn', 'taverns', 'smithies',
                      'spell', 'title', 'fame', 'grain', 'salt', 'h.goods_trade_enabled']),
+    'Do_SteuernFestsetzen': ('1040:669d', ['Wnd', 'W:0:0', 'P'], 'none',
+                             ['tax_rate', 'justice', 'asylum_law', 'maximize_taxes', 'title',
+                              'population', 'happiness', 'taler']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -1129,6 +1132,7 @@ DIALOG_TESTS = {
     'Do_LandHandeln': ['LANDDLG'],
     'Do_KornVerteilen': ['KORNDLG'],
     'Do_Gebaeude': ['INVESTDLG'],
+    'Do_SteuernFestsetzen': ['STEUERDLG'],
 }
 
 

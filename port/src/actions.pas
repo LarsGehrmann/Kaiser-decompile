@@ -20,12 +20,16 @@ procedure Do_LandHandeln(Parent: Pointer; var Players: TPlayers; Me, NumPlayers:
 { Gebaeude (1040:6cff): INVESTDLG on a copy of the player; a palace or
   cathedral finished (or lost) changes the fame, finishing one is news }
 procedure Do_Gebaeude(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+{ Steuern festsetzen (1040:669d): STEUERDLG on a copy of the player; HWnd
+  is the main window's handle (for the help) }
+procedure Do_SteuernFestsetzen(Parent: Pointer; HWnd: Word; var P: TPlayer);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
 
 type
   PPlayers = ^TPlayers;
+  PReal48 = ^TReal48;
 
   { LANDDLG (VMT DS:1cec, 1040:7f10): all players at +0x34, me +0x4486,
     the number of players +0x4487; buttons 101..105 sell, 106..110 buy
@@ -54,6 +58,18 @@ type
     procedure SetupWindow; override;
     procedure Update;
     procedure Pay(K: Integer);
+    function Handle(Id: SmallInt): Boolean; override;
+  end;
+
+  { STEUERDLG (VMT DS:1d64, 1040:6728, a HelpDlg): the player at +0x64;
+    sliders 101..103 tax rate, justice, asylum law in percent, statics
+    201..203, checkbox 301 Einnahmen maximieren }
+  TTaxDlg = class(TDialogLogic)
+  public
+    function Me: PPlayer;
+    procedure SetPositions;
+    procedure SetupWindow; override;
+    procedure UpdateLabels;
     function Handle(Id: SmallInt): Boolean; override;
   end;
 
@@ -401,6 +417,91 @@ begin
   Update;
 end;
 
+{ -- Do_SteuernFestsetzen ---------------------------------------------------- }
+
+procedure Do_SteuernFestsetzen(Parent: Pointer; HWnd: Word; var P: TPlayer);
+var
+  D: TDialog;
+begin
+  if P.MaximizeTaxes <> 0 then
+    MaximizeTaxes(P);
+  D := UI.Dialog('TaxDlg', $1D64, [APtr(Parent), AStr(DSText($2938))]);
+  Move(P, D.Data[$64], SizeOf(TPlayer));
+  PWord(@D.Data[$34])^ := HWnd;
+  if UI.Execute(D) = 1 then
+    Move(D.Data[$64], P, SizeOf(TPlayer));
+  UI.Done(D, 1);
+end;
+
+{ -- STEUERDLG ------------------------------------------------------------- }
+
+const
+  Hundred: TReal48 = ($87, 0, 0, 0, 0, $48);
+
+function Percent(const R: TReal48): LongInt;
+begin
+  Result := R48Round(R48Mul(R, Hundred));
+end;
+
+function TTaxDlg.Me: PPlayer;
+begin
+  Result := PPlayer(@D.Data[$64]);
+end;
+
+procedure TTaxDlg.SetPositions;
+begin
+  C.SetPosition(101, SmallInt(Percent(Me^.TaxRate)));
+  C.SetPosition(102, SmallInt(Percent(Me^.Justice)));
+  C.SetPosition(103, SmallInt(Percent(Me^.AsylumLaw)));
+end;
+
+procedure TTaxDlg.SetupWindow;
+var
+  K: Integer;
+begin
+  for K := 0 to 2 do
+    C.SetRange(101 + K, 0, 100);
+  SetPositions;
+  UpdateLabels;
+end;
+
+procedure TTaxDlg.UpdateLabels;
+begin
+  C.SetCheck(301, Ord(Me^.MaximizeTaxes <> 0));
+  SetNumber(C, 201, Percent(Me^.TaxRate));
+  SetNumber(C, 202, Percent(Me^.Justice));
+  SetNumber(C, 203, Percent(Me^.AsylumLaw));
+end;
+
+function TTaxDlg.Handle(Id: SmallInt): Boolean;
+var
+  P: PPlayer;
+begin
+  P := Me;
+  Result := True;
+  case Id of
+    101..103:
+      begin
+        { moving a slider ends the automatic maximum }
+        PReal48(@PByte(@P^.TaxRate)[6 * (Id - 101)])^ :=
+          R48Div(R48FromLong(C.GetPosition(Id)), Hundred);
+        P^.MaximizeTaxes := 0;
+      end;
+    301:
+      begin
+        P^.MaximizeTaxes := Ord(P^.MaximizeTaxes = 0);
+        if P^.MaximizeTaxes <> 0 then
+        begin
+          MaximizeTaxes(P^);
+          SetPositions;
+        end;
+      end;
+  else
+    Exit(False);
+  end;
+  UpdateLabels;
+end;
+
 { -- Do_KornVerteilen ------------------------------------------------------ }
 
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -568,4 +669,5 @@ initialization
   RegisterDialogLogic('LandDlg', TLandDlg);
   RegisterDialogLogic('GrainDlg', TGrainDlg);
   RegisterDialogLogic('InvestDlg', TInvestDlg);
+  RegisterDialogLogic('TaxDlg', TTaxDlg);
 end.

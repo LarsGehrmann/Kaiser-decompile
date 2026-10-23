@@ -195,7 +195,7 @@ their templates:
   controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
   and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`).
 
-`port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100).
+`port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100).
 
 ## The headless simulator
 
