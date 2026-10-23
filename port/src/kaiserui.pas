@@ -15,6 +15,9 @@ unit KaiserUI;
 
 interface
 
+uses
+  KaiserDS;
+
 const
   DialogTextOfs = $100;        { where GetText finds the entered text }
 
@@ -32,6 +35,7 @@ type
     Index: Integer;            { 1, 2, ... in order of creation }
     Name: string;              { constructor, e.g. 'MessageDlg' }
     VMT: Word;                 { the original dialog type (VMT offset in DS) }
+    Size: Word;                { its instance size (from the VMT) }
     Data: array[0..$1FF] of Byte;
     function Text: PChar;
   end;
@@ -141,6 +145,7 @@ begin
   Result := Register(TDialog.Create);
   Result.Name := Name;
   Result.VMT := VMT;
+  Result.Size := PWord(@PByte(@DS)[VMT])^;
 end;
 
 function TGameUI.Execute(D: TDialog): SmallInt;

@@ -247,6 +247,21 @@ SPECS = {
     # milestone 4: turn processing (segment 3)
     'RulerFallsIll': ('n1010:3777', ['Wnd'], 'none', []),
     'WitchChoosesSpell': ('n1010:372a', ['Wnd', 'P'], 'none', ['spell']),
+    'GrantFirstHero': ('n1010:2c50', ['Wnd', 'P'], 'none', ARMY,
+                       {'army1_count': (0, 7)}),
+    'HarvestReport': ('n1010:288d', ['Wnd', 'P', 'R'], 'none', ['harvest_quality']),
+    'Report_Population': ('1010:27c9', ['Wnd', 'P'], 'none', POP),
+    'Report_Budget': ('1010:263f', ['Wnd', 'A', 'I', 'N'], 'none', ECON + SABOTAGE),
+    'LandLossCheck': ('n1010:4891', ['Wnd', 'P'], 'none', BUILD),
+    'SkipTurnCheck': ('n1010:5707', ['Wnd', 'A', 'I', 'N'], 'none',
+                      ['skip_turn', 'skip_turn', 'flags_5bd_q', 'land', 'taler',
+                       'population', 'markets', 'mills', 'news_count']),
+    'RevolutionCheck': ('n1010:55bb', ['Wnd', 'P'], 'none',
+                        ['happiness', 'happiness', 'title', 'fame', 'lifetime']),
+    'GrainShortageWarning': ('n1010:47b1', ['Wnd', 'P'], 'none',
+                             ['population', 'grain', 'grain_distributed']),
+    'MarriageDowry': ('n1010:2924', ['Wnd', 'P'], 'none', ARMY + ['is_female'],
+                      {'army1_count': (0, 5)}),
 }
 
 
@@ -255,6 +270,11 @@ SPECS = {
 # for dialogs and 0 for functions
 UI_SCRIPTS = {
     'WitchChoosesSpell': [('Execute(', lambda rng: (1, {0x38: bytes([rng.randint(0, 12)])}))],
+    # 0x49 = 1: the Lindwurm instead of a hero; the name is GetText (+0x100)
+    'GrainShortageWarning': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'GrantFirstHero': [('Execute(', lambda rng: (1, {0x49: bytes([rng.choice([0, 0, 1])]),
+                                                    0x100: rng.choice([b'Testheld', b'', b'Ab'])
+                                                    + b'\0'}))],
 }
 
 

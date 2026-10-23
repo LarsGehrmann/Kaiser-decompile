@@ -11,7 +11,7 @@ Everything that would touch Windows or OWL is replaced:
   - any other code in a UI segment stops the emulation (guard).
 Every call is logged as one entry, e.g.
     MessageDlg[3364](W,s:4b52...,s:48616c6c6f)=O1
-    Execute(O1)=1+38:05
+    Execute(O1;d:0000...)=1+38:05
     Done(O1,1)
 Pointers are symbolic: W window, P<i>:<off> into player i, D<off> into DS,
 O<n> fake object n, S other (locals). Strings are hex (s:...), records
@@ -110,6 +110,16 @@ class UILayer:
             return 'nil'
         return 'S'
 
+    def contents(self, seg, off):
+        """What the game wrote into a fake dialog: bytes 2..size, trailing
+        zeros dropped."""
+        size = OBJ_SIZE
+        for i, o in enumerate(self.objects):
+            if o == (seg, off):
+                size = self.sizes[i]
+        data = bytes(self.emu.read(seg, off + 2, max(size - 2, 0))).rstrip(b'\0')
+        return data.hex()
+
     def cstring(self, seg, off):
         data = self.emu.read(seg, off, 512)
         return data[:data.index(0)] if 0 in data else data
@@ -123,6 +133,8 @@ class UILayer:
                 i += 2
                 if k == 'p':
                     out.append(self.sym(seg, off))
+                elif k == 's' and seg == 0:
+                    out.append(f'i:{off}')            # MAKEINTRESOURCE
                 elif k == 's':
                     out.append('s:' + self.cstring(seg, off).hex())
                 elif k == 'l':
@@ -166,6 +178,7 @@ class UILayer:
         emu = self.emu
         self.log = []
         self.objects = []
+        self.sizes = []
         emu.write(emu.ds_para, FAKE_VMT, bytes(self.vmt))
         emu.write(self.app[0], self.app[1], struct.pack('<H', FAKE_VMT) + bytes(OBJ_SIZE - 2))
         emu.write(emu.ds_para, APP_PTR, struct.pack('<HH', self.app[1], self.app[0]))
@@ -176,14 +189,20 @@ class UILayer:
             n = arg_bytes(kinds)
             words = emu.stack_words(3 + n // 2, 4)   # Self (2 words), VMT, args
             args = words[3:]
-            entry = f'{name}[{words[2]:x}]({self.format_args(kinds, args)})'
+            vmt = words[2]
+            entry = f'{name}[{vmt:x}]({self.format_args(kinds, args)})'
             k = len(self.objects)
-            if k >= 0xFE00 // OBJ_SIZE:
-                raise RuntimeError('too many dialogs')
-            obj = (emu.scratch_para + OBJ_SEG, k * OBJ_SIZE)
-            emu.write(obj[0], obj[1], bytes(OBJ_SIZE))
+            size = emu.ds_word(vmt)                   # instance size from the VMT
+            if (words[0], words[1]) != (0, 0):        # an object constructed in place
+                obj = (words[1], words[0])
+            else:
+                if k >= 0xFE00 // OBJ_SIZE:
+                    raise RuntimeError('too many dialogs')
+                obj = (emu.scratch_para + OBJ_SEG, k * OBJ_SIZE)
+            emu.write(obj[0], obj[1], bytes(size))
             emu.write(obj[0], obj[1], struct.pack('<H', FAKE_VMT))
             self.objects.append(obj)
+            self.sizes.append(size)
             self.log.append(f'{entry}=O{k + 1}')
             emu.stub_return(6 + n, True, obj[1], obj[0])
         return handler
@@ -196,6 +215,10 @@ class UILayer:
             self_sym = self.sym(words[1], words[0])
             args = self.format_args(kinds, words[2:])
             entry = f'{name}({self_sym}{"," + args if args else ""})'
+            if name == 'Execute':
+                entry += ';d:' + self.contents(words[1], words[0])
+            elif name == 'ExecDialog':
+                entry += ';d:' + self.contents(words[3], words[2])
             ax, dx, data = 0, 0, {}
             if has_ret == 'ptr':
                 ax, dx = words[0] + TEXT_OFS, words[1]

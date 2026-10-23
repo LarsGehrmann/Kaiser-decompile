@@ -118,7 +118,11 @@ begin
           S := 'O' + IntToStr(FindDialog(Args[I].P).Index)
         else
           S := Sym(Args[I].P);
-      uaStr: S := 's:' + HexOfMem(PByte(Args[I].P), StrLen(PChar(Args[I].P)));
+      uaStr:
+        if PtrUInt(Args[I].P) < $10000 then                 { MAKEINTRESOURCE }
+          S := 'i:' + IntToStr(PtrUInt(Args[I].P))
+        else
+          S := 's:' + HexOfMem(PByte(Args[I].P), StrLen(PChar(Args[I].P)));
       uaWord: S := IntToStr(Word(Args[I].V));
       uaByte: S := IntToStr(Byte(Args[I].V));
       uaLong: S := IntToStr(Args[I].V);
@@ -159,6 +163,8 @@ begin
     Parts.Delimiter := '+';
     Parts.StrictDelimiter := True;
     Parts.DelimitedText := R;
+    if Parts.Count = 0 then
+      Exit(0);
     Result := StrToIntDef(Parts[0], 0);
     for I := 1 to Parts.Count - 1 do
     begin
@@ -179,18 +185,33 @@ var
   Entry: string;
 begin
   Result := inherited Dialog(Name, VMT, Args);
-  Entry := Format('%s[%x](%s)', [Name, VMT, FormatArgs(Args)]);
+  Entry := Format('%s[%s](%s)', [Name, LowerCase(IntToHex(VMT, 1)), FormatArgs(Args)]);
   if Take(Entry) = '!' then
     FLog.Add(Entry + '!')
   else
     FLog.Add(Entry + '=O' + IntToStr(Result.Index));
 end;
 
+{ bytes 2..size of the dialog object, trailing zeros dropped }
+function Contents(D: TDialog): string;
+var
+  N: Integer;
+begin
+  N := D.Size;
+  if N > SizeOf(D.Data) then
+    N := SizeOf(D.Data);
+  while (N > 2) and (D.Data[N - 1] = 0) do
+    Dec(N);
+  if N <= 2 then
+    Exit('');
+  Result := HexOfMem(@D.Data[2], N - 2);
+end;
+
 function TReplayUI.Execute(D: TDialog): SmallInt;
 var
   Entry, R: string;
 begin
-  Entry := 'Execute(O' + IntToStr(D.Index) + ')';
+  Entry := 'Execute(O' + IntToStr(D.Index) + ');d:' + Contents(D);
   R := Take(Entry);
   if R = '!' then
   begin
@@ -215,7 +236,7 @@ function TReplayUI.ExecDialog(D: TDialog): SmallInt;
 var
   Entry, R: string;
 begin
-  Entry := 'ExecDialog(A,O' + IntToStr(D.Index) + ')';
+  Entry := 'ExecDialog(A,O' + IntToStr(D.Index) + ');d:' + Contents(D);
   R := Take(Entry);
   if R = '!' then
   begin

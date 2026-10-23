@@ -380,6 +380,15 @@ begin
           'MagnitudeText': begin OutSize := 40; MagnitudeText(@OutBuf, ArgI(0)); Got := '-'; end;
           'RulerFallsIll': begin RulerFallsIll(Window); Got := '-'; end;
           'WitchChoosesSpell': begin WitchChoosesSpell(Window, Pl^); Got := '-'; end;
+          'GrantFirstHero': begin GrantFirstHero(Window, Pl^); Got := '-'; end;
+          'HarvestReport': begin HarvestReport(Window, Pl^, ArgR(0)); Got := '-'; end;
+          'Report_Population': begin Report_Population(Window, Pl^); Got := '-'; end;
+          'Report_Budget': begin Report_Budget(Window, Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'LandLossCheck': begin LandLossCheck(Window, Pl^); Got := '-'; end;
+          'SkipTurnCheck': begin SkipTurnCheck(Window, Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'RevolutionCheck': begin RevolutionCheck(Window, Pl^); Got := '-'; end;
+          'GrainShortageWarning': begin GrainShortageWarning(Window, Pl^); Got := '-'; end;
+          'MarriageDowry': begin MarriageDowry(Window, Pl^); Got := '-'; end;
           'SabotageYearsToNextOp':
             begin
               B1 := PIdx;
