@@ -268,6 +268,13 @@ SPECS = {
                        POP + ECON + ARMY + ['first_king_bonus', 'army_away',
                                             'maximize_taxes', 'lifetime'],
                        {'army1_count': (0, 7), 'army2_count': (0, 7)}),
+    'SabotageEnd': ('1010:192f', ['Wnd', 'A', 'I', 'N'], 'none',
+                    SABOTAGE + ['cpu_level', 'cpu_level', 'justice', 'flags_5bd_q', 'event_money']),
+    'ShowStartTurnDialog': ('1010:0002', ['Wnd', 'P', 'I', 'W:0:300'], 'byte',
+                            ['is_female', 'title', 'h.email_game_q', 'h.last_human']),
+    'OfferUnitsAtTurnStart': ('1010:22d4', ['Wnd', 'P'], 'none',
+                              ARMY + ['spell', 'spell', 'spell', 'title', 'cpu_level', 'army_away'],
+                              {'army1_count': (0, 7), 'army2_count': (0, 7), 'fame': (0, 100)}),
     'Bankruptcy': ('n1010:4f9f', ['Wnd', 'P'], 'none',
                    BUILD + ['taler', 'taler', 'title'],
                    dict({'taler': (-3000000, 100000)},
@@ -283,6 +290,8 @@ UI_SCRIPTS = {
     'WitchChoosesSpell': [('Execute(', lambda rng: (1, {0x38: bytes([rng.randint(0, 12)])}))],
     # 0x49 = 1: the Lindwurm instead of a hero; the name is GetText (+0x100)
     'GrainShortageWarning': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
+    'ShowStartTurnDialog': [('Email_AskPassword(', lambda rng: (rng.choice([0, 1]), {}))],
+    'OfferUnitsAtTurnStart': [('Execute(', lambda rng: (rng.choice([1, 2]), {}))],
     'PromotionCheck': [('Execute(', lambda rng: (rng.choice([1, 2]),
                                                  {0x100: b'Neuheld\0'}))],
     'GrantFirstHero': [('Execute(', lambda rng: (1, {0x49: bytes([rng.choice([0, 0, 1])]),
@@ -330,9 +339,23 @@ def preset_promotion(rng, players, p, num):
     return m
 
 
+def preset_sabotage_log(rng, players, p, num):
+    """Random entries in the sabotage log of the test player."""
+    n = rng.randint(0, 15)
+    m = set_field(players, p, 'sabotage_log_count', n)
+    off, _ = field_info(ks.PLAYER, 'sabotage_log')
+    log = b''.join(bytes([rng.randrange(num), rng.choice([0, 0, rng.randint(1, 14)])]) +
+                   struct.pack('<i', rng.randint(-100, 50000)) for _ in range(15))
+    a = p * PSIZE + off
+    players[a:a + 90] = log
+    m.append((a, log))
+    return m
+
+
 # per function: called after the random mutations, returns more mutations
 PRESETS = {
     'PromotionCheck': preset_promotion,
+    'SabotageEnd': preset_sabotage_log,
 }
 
 

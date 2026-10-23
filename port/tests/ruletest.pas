@@ -391,6 +391,9 @@ begin
           'GrainShortageWarning': begin GrainShortageWarning(Window, Pl^); Got := '-'; end;
           'MarriageDowry': begin MarriageDowry(Window, Pl^); Got := '-'; end;
           'Bankruptcy': begin Bankruptcy(Window, Pl^); Got := '-'; end;
+          'SabotageEnd': begin SabotageEnd(Window, Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'ShowStartTurnDialog': Got := B2S(ShowStartTurnDialog(Window, Pl^, ArgI(0), ArgI(1)));
+          'OfferUnitsAtTurnStart': begin OfferUnitsAtTurnStart(Window, Pl^); Got := '-'; end;
           'FormatPlayerTitle':
             begin
               OutSize := 120;

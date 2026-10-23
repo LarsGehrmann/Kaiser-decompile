@@ -57,7 +57,7 @@ FUNCS = {
     'Do_KornVerteilen': ('1040:8551', True, ['p', 'p', 'b'], False),
     'Do_TruppenAufstellen': ('1038:6a30', True, ['p', 'p', 'b'], False),
     'PlaySound': ('1070:0002', True, ['w', 'w'], False),
-    'Email_AskPassword': ('1020:014e', True, ['p', 'p', 'p', 'p'], True),
+    'Email_AskPassword': ('1020:014e', True, ['p', 'p', 's', 's'], True),
     'ShowHeroLevelUp': ('1040:384b', True, ['p', 'r32'], False),
     'FightRaiders': ('1018:0c5f', True, ['p', 'p', 'b', 'b'], True),
     'TradeCaravan': ('1040:08a2', True, ['p', 'p', 'w'], False),

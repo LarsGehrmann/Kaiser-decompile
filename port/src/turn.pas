@@ -27,6 +27,9 @@ procedure Bankruptcy(Parent: Pointer; var P: TPlayer);      { 1010:4f9f }
 procedure FormatPlayerTitle(const P: TPlayer; Dest: PChar; WithPrefix, WithEpithet: Byte);  { 1060:03d9 }
 procedure PromotionCheck(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
   Year: Word);                                              { 1010:48fc }
+procedure SabotageEnd(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);  { 1010:192f }
+function ShowStartTurnDialog(Parent: Pointer; var P: TPlayer; Me: Byte; Year: Word): Boolean;  { 1010:0002 }
+procedure OfferUnitsAtTurnStart(Parent: Pointer; var P: TPlayer);  { 1010:22d4 }
 
 implementation
 
@@ -511,6 +514,178 @@ begin
           UI.Done(D, 1);
       end;
   end;
+end;
+
+procedure SabotageEnd(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte);
+var
+  P: PPlayer;
+  I, Last, Kind, Attacker: Byte;
+  Amount: LongInt;
+  Text: array[0..127] of Char;
+  D: TDialog;
+begin
+  { the yearly sabotage budget, then the reports of strikes against Me }
+  SabotageFunding(Players, Me, NumPlayers);
+  P := @Players[Me];
+  Last := P^.SabotageLogCount;
+  for I := 1 to Last do
+  begin
+    Attacker := P^.SabotageLog[6 * I - 6];
+    Kind := P^.SabotageLog[6 * I - 5];
+    Amount := PLongInt(@P^.SabotageLog[6 * I - 4])^;
+    if Kind = $0D then
+      P^.EventMoney := P^.EventMoney - Amount;
+    if Kind = $0E then
+      P^.EventMoney := P^.EventMoney - Amount;
+    if P^.CpuLevel = 0 then
+    begin
+      StrCopy(Text, DSText($07B0));                    { '' }
+      if Kind > 0 then
+        D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(ResId(Kind + 500)), AStr(Text)])
+      else if Chance(R48Round(R48Mul(RC($0087, 0, $4800), P^.Justice))) then
+      begin
+        { the caught agent names his master }
+        FormatPlayerTitle(Players[Attacker], Text, 0, 0);
+        D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText($07B1)), AStr(Text)]);
+      end
+      else
+        D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText($07C2)), AStr(Text)]);
+      UI.Execute(D);
+      UI.Done(D, 1);
+    end
+    else if Kind = 0 then
+      LoseFame(PSmallInt(@P^.AttitudeQ)[Attacker], 20);   { a computer remembers }
+    FillChar(P^.SabotageLog[6 * I - 6], 6, 0);
+  end;
+  P^.SabotageLogCount := 0;
+  if (PLongInt(@P^.Flags5bdQ)^ and $200) <> 0 then
+  begin
+    Dec(P^.Lifetime);
+    P^.SkipTurn := 1;
+  end;
+end;
+
+function ShowStartTurnDialog(Parent: Pointer; var P: TPlayer; Me: Byte; Year: Word): Boolean;
+var
+  Title: array[0..57] of Char;
+  YearStr: array[0..5] of Char;
+  D: TDialog;
+begin
+  UI.Call('PlaySound', [AWord(9), AWord(1)]);
+  FormatPlayerTitle(P, Title, 0, 0);
+  IntToPChar(YearStr, Word(Year + 1400));
+  if (DS.Game.EmailGameQ <> 0) and (Me <> DS.Game.LastHuman) then
+    { e-mail game: the next human enters the password }
+    Exit(Byte(UI.Call('Email_AskPassword', [APtr(Parent), APtr(@P), AStr(Title), AStr(YearStr)])) <> 0);
+  if P.IsFemale = 0 then
+    D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($0644)), AStr(Title), AStr(YearStr)])
+  else
+    D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($0651)), AStr(Title), AStr(YearStr)]);
+  UI.Execute(D);
+  UI.Done(D, 1);
+  Result := True;
+end;
+
+procedure OfferUnitsAtTurnStart(Parent: Pointer; var P: TPlayer);
+var
+  Offer, Accept: Boolean;
+  UnitType, Bonus, L: Byte;
+  HelpId: Word;
+  Name: array[0..15] of Char;
+  NewU: TUnit;
+  D: TDialog;
+
+  { a special unit of the player's spell: 1 / (30 - fame div 5) a year }
+  procedure SpellUnit(T: Byte; NameOfs, Help: Word);
+  begin
+    if (Random(Word(30 - P.Fame div 5)) = 0) and (P.Title >= DS.UnitTitleNeeded[T]) then
+    begin
+      UnitType := T;
+      HelpId := Help;
+      StrCopy(Name, DSText(NameOfs));
+      Offer := True;
+    end;
+  end;
+
+begin
+  FillChar(NewU, SizeOf(NewU), 0);
+  FillChar(Name, SizeOf(Name), 0);
+  Offer := False;
+  UnitType := 0;
+  HelpId := 0;
+  Bonus := 0;
+  case P.Spell of
+    3: SpellUnit($22, $08DA, $EA);                     { Chevalerie }
+    8: SpellUnit($15, $08E6, $83);                     { Heilende Haende }
+    7: SpellUnit($11, $08EE, $82);                     { Gaias Segen }
+    $0B:                                               { Pietaet: monks, rarer with more }
+      begin
+        L := Byte((CountUnitsOfType(P, $0B) + 1) * 15 - P.Fame div 10);
+        if (Random(L) = 0) and (P.Title >= DS.UnitTitleNeeded[$0B]) then
+        begin
+          UnitType := $0B;
+          StrCopy(Name, DSText($08F7));
+          HelpId := $7F;
+          Offer := True;
+        end;
+      end;
+    $0C:                                               { Terror: a vampire, then ... }
+      if (P.Title >= DS.UnitTitleNeeded[$0A]) and (CountUnitsOfType(P, $0A) < 1) then
+      begin
+        UnitType := $0A;
+        StrCopy(Name, DSText($0902));
+        HelpId := $80;
+        Offer := True;
+      end
+      else
+        SpellUnit($12, $090C, $81);
+  end;
+  if not Offer then
+  begin
+    { mercenaries }
+    if P.Spell = $0A then
+      L := 12
+    else
+      L := 14;
+    if Random(Word(L - P.Fame div 10)) = 0 then
+    begin
+      UnitType := RandomMercenaryType(P);
+      HelpId := UnitType + 200;
+      StrCopy(Name, DSText($08DA));
+      Offer := True;
+    end;
+  end;
+  if not Offer then
+    Exit;
+  case Random(10) of
+    0..6: Bonus := 0;
+    7..8: Bonus := 1;
+    9: Bonus := 2;
+  end;
+  Accept := False;
+  InitUnit(P, NewU, UnitType, Bonus);
+  if P.CpuLevel = 0 then
+  begin
+    D := UI.Dialog('UnitInfoDlg', $35E6, [APtr(Parent), AStr(Name), ARec(@NewU, SizeOf(NewU)),
+      AByte($66), AWord(HelpId)]);
+    if UI.Execute(D) = 1 then
+      Accept := True;
+    UI.Done(D, 1);
+  end
+  else
+    Accept := True;
+  if not Accept then
+    Exit;
+  if P.CpuLevel = 0 then
+  begin
+    if (P.Army1Count < 8) and (P.ArmyAway = 0) then
+      AddUnitToArmy(P, 1, NewU)
+    else
+      AddUnitToArmy(P, 2, NewU);
+    UI.Call('Do_TruppenAufstellen', [APtr(Parent), APtr(@P), AByte(0)]);
+  end
+  else
+    AddUnitToArmy(P, 1, NewU);                       { (even into a full Heer) }
 end;
 
 end.
