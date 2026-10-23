@@ -25,6 +25,7 @@ type
     function Answer(const R: string; D: TDialog): SmallInt;
   public
     PlayersBase: PByte;
+    BattleBase: PByte;               { the battle window object: B<offset> }
     constructor Create;
     destructor Destroy; override;
     procedure Start(const Recorded: string);
@@ -93,6 +94,9 @@ begin
   A := PtrUInt(P);
   if P = Window then
     Exit('W');
+  B := PtrUInt(BattleBase);
+  if (BattleBase <> nil) and (A >= B) and (A < B + BattleSize) then
+    Exit('B' + IntToStr(A - B));
   B := PtrUInt(PlayersBase);
   if (A >= B) and (A < B + 10 * PlayerSize) then
     Exit(Format('P%d:%d', [(A - B) div PlayerSize, (A - B) mod PlayerSize]));

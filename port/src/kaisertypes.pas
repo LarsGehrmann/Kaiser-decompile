@@ -11,6 +11,7 @@ const
   PlayerSize = $6D5;
   UnitSize = $3D;
   ExtraSize = $192;
+  BattleSize = $FA7;
   MaxPlayers = 10;
 
 type
@@ -199,6 +200,38 @@ type
     ScenarioDescription: array[0..512] of Byte;  { +0x094 char[512] text, ends at the header size 0x295 }
   end;
 
+  TBattleWnd = packed record
+    Owl: array[0..45] of Byte;  { +0x000 TDialog part: VMT, window handle, parent, title ... }
+    Side: array[0..1] of TPlayer;  { +0x02e 0 = defender (or the raiders / Lindwurm), 1 = attacker }
+    Results: array[0..54] of Byte;  { +0xdd8 destroyed buildings, killed units ... (GetResults, battle.md) }
+    SideMorale: array[0..1] of TReal48;  { +0xe0f happiness + fame / 300 (InitMorale) }
+    HealingHands: array[0..1] of Byte;  { +0xe1b spell 8 Heilende Haende }
+    Entertainer: array[0..1] of Byte;  { +0xe1d Heer has ability 18: motivation + 0.25 }
+    Fear: array[0..1] of TReal48;  { +0xe1f 0.2 when the other side has the spell Terror (12) }
+    Human: array[0..1] of Byte;  { +0xe2b cpu_level = 0 }
+    Mode: Byte;  { +0xe2d 0 war, 1 raiders, 2 Lindwurm (FightRaiders) }
+    AiTactic: Byte;  { +0xe2e defender tactic Random(4), 0 in winter }
+    AiCautiousHero: Byte;  { +0xe2f Random(2): a computer hero moves one step per turn }
+    MapCountry: Byte;  { +0xe30 MAPDATA: city n+1, field n+11 }
+    Grid: array[0..164] of Byte;  { +0xe31 terrain plus units (0x6e+i side 1, 0x78+i side 0), column-major x*11+y }
+    Terrain: array[0..164] of Byte;  { +0xed6 }
+    StartTicks: LongInt;  { +0xf7b WMTimer: the first 3 ticks only count up (SetupWindow: 0) }
+    SideToMove: Byte;  { +0xf7f }
+    UnitToMove: Byte;  { +0xf80 }
+    AiAggressive: Byte;  { +0xf81 AiChooseAggressive }
+    CrossedMiddle: Byte;  { +0xf82 an attacker unit moved to x > 7 (AI tactic 2) }
+    PadF83: array[0..1] of Byte;
+    Cursors: array[0..4] of Word;  { +0xf85 cursor handles (SetupWindow) }
+    TimerId: Word;  { +0xf8f SetTimer }
+    CursorShown: Byte;  { +0xf91 the current unit is drawn (1) or blinked away (0); StopTimer re-sends WM_TIMER when 0 }
+    City: Byte;  { +0xf92 city battle (Stadtkampf) }
+    Winter: Byte;  { +0xf93 Random(6) = 0 }
+    BlinkTicks: LongInt;  { +0xf94 timer ticks since the last blink }
+    SetUp: Byte;  { +0xf98 SetupWindow ran }
+    FocusButton: Word;  { +0xf99 window handle of button 101 (SetFocus) }
+    Buttons: array[0..11] of Byte;  { +0xf9b Warten, Fertig, Aufgeben (TButton pointers) }
+  end;
+
   TPlayers = array[0..MaxPlayers - 1] of TPlayer;
 
 implementation
@@ -207,4 +240,5 @@ initialization
   Assert(SizeOf(TUnit) = UnitSize);
   Assert(SizeOf(TPlayer) = PlayerSize);
   Assert(SizeOf(TGameHeader) = HeaderSize);
+  Assert(SizeOf(TBattleWnd) = BattleSize);
 end.

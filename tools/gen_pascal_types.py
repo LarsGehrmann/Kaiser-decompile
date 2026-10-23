@@ -54,6 +54,8 @@ def size_of(typ):
         return ks.HEADER_SIZE
     if typ == 'unit':
         return ks.UNIT_SIZE
+    if typ == 'player':
+        return ks.PLAYER_SIZE
     return int(re.sub(r'\D', '', typ))
 
 
@@ -70,6 +72,8 @@ def pascal_type(name, typ):
         return 'TGameHeader'
     if typ == 'unit':
         return 'TUnit'
+    if typ == 'player':
+        return 'TPlayer'
     n = size_of(typ)
     if typ.startswith('cstr'):
         return f'array[0..{n - 1}] of Char'
@@ -123,6 +127,7 @@ def main():
               f'  PlayerSize = ${ks.PLAYER_SIZE:X};\n'
               f'  UnitSize = ${ks.UNIT_SIZE:X};\n'
               f'  ExtraSize = ${ks.EXTRA_SIZE:X};\n'
+              f'  BattleSize = ${ks.BATTLE_SIZE:X};\n'
               '  MaxPlayers = 10;\n\n'
               'type\n'
               '  { Borland Pascal 6-byte Real, stored unchanged }\n'
@@ -131,6 +136,7 @@ def main():
         record('TUnit', ks.UNIT, ks.UNIT_SIZE),
         record('TPlayer', ks.PLAYER, ks.PLAYER_SIZE),
         record('TGameHeader', ks.HEADER, ks.HEADER_SIZE),
+        record('TBattleWnd', ks.BATTLE, ks.BATTLE_SIZE),
     ])
     footer = ('\n\n  TPlayers = array[0..MaxPlayers - 1] of TPlayer;\n\n'
               'implementation\n\n'
@@ -138,6 +144,7 @@ def main():
               '  Assert(SizeOf(TUnit) = UnitSize);\n'
               '  Assert(SizeOf(TPlayer) = PlayerSize);\n'
               '  Assert(SizeOf(TGameHeader) = HeaderSize);\n'
+              '  Assert(SizeOf(TBattleWnd) = BattleSize);\n'
               'end.\n')
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, 'w', encoding='utf-8') as fh:

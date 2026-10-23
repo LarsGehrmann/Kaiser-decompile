@@ -8,7 +8,7 @@ program RuleTest;
 
 uses
   SysUtils, Classes, KaiserTypes, KaiserDS, KaiserSave, Real48, Rules, KaiserUI, Turn, Ai, Game,
-  ReplayUI;
+  Battle, ReplayUI;
 
 type
   TBytes = array of Byte;
@@ -114,6 +114,14 @@ var
   OutSize, K: Integer;
   B1, B2: Byte;
   U: PUnit;
+  BW: TBattleWnd;                  { the battle window of bw= / bwdiff= vectors }
+  BWBefore, BWAfter: TBytes;
+  HasBW: Boolean;
+  BWText: string;
+
+const
+  BWLo = $2E;                      { compared part, as BW_CMP in gen_rule_vectors.py }
+  BWHi = $F9B;
 
   function ArgI(N: Integer): LongInt;
   begin
@@ -170,11 +178,28 @@ begin
     Patch(PByte(@Save.Players[0]), Field(S, 'mut'), Parts);
     ResetDataSegment;
     DS.Game := Save.Header;
+    DS.OptBattleTimer := 400;                     { INI Schlacht-Timer }
     Patch(PByte(@DS.Game), Field(S, 'hmut'), Parts);
     Before := Snapshot(Save.Players[0], Num * PlayerSize);
     HBefore := Snapshot(DS.Game, HeaderSize);
     RandSeed := StrToInt64(Field(S, 'seed'));
     Replay.PlayersBase := PByte(@Save.Players[0]);
+    { the battle window: zeroed (BWI) or the original's state after Init (BW) }
+    HasBW := Field(S, 'bwdiff') <> '';
+    FillChar(BW, SizeOf(BW), 0);
+    BWText := Field(S, 'bw');
+    if HasBW and (BWText <> '-') then
+    begin
+      BWBefore := HexBytes(BWText);
+      Move(BWBefore[0], PByte(@BW)[BWLo], Length(BWBefore));
+    end;
+    if HasBW then
+    begin
+      Replay.BattleBase := PByte(@BW);
+      BWBefore := Snapshot(PByte(@BW)[BWLo], BWHi - BWLo);
+    end
+    else
+      Replay.BattleBase := nil;
     UIField := Field(S, 'ui');
     if UIField = '' then
       UIField := '-';
@@ -416,6 +441,106 @@ begin
           'Ai_ArrangeArmies': begin Ai_ArrangeArmies(Pl^, ArgI(0)); Got := '-'; end;
           'Ai_BanditBattle': Got := IntToStr(Ai_BanditBattle(Pl^));
           'Ai_AutoBattle': Got := IntToStr(Ai_AutoBattle(Pl^, Players[ArgI(0)]));
+          'Battle_OtherSide': Got := IntToStr(OtherSide(BW));
+          'Battle_IsInCity': Got := B2S(IsInCity(BW, BattleUnit(BW, ArgI(0), ArgI(1))^));
+          'Battle_IsThreatened': Got := B2S(IsThreatened(BW, ArgI(0), ArgI(1)));
+          'Battle_HeroShouldFlee': Got := B2S(HeroShouldFlee(BW));
+          'Battle_AnyUnitInMelee': Got := B2S(AnyUnitInMelee(BW));
+          'Battle_CountAdjacentEnemies': Got := IntToStr(CountAdjacentEnemies(BW, ArgI(0), ArgI(1)));
+          'Battle_HasAdjacentFriendOfType':
+            Got := B2S(HasAdjacentFriendOfType(BW, ArgI(0), ArgI(1), ArgI(2)));
+          'Battle_InBounds': Got := B2S(InBounds(BW, ArgI(0), ArgI(1)));
+          'Battle_StrengthBalance': Got := HexOf(StrengthBalance(BW, ArgI(0)));
+          'Battle_AiChooseAggressive': Got := B2S(AiChooseAggressive(BW));
+          'Battle_AiEnemyOutguns': Got := B2S(AiEnemyOutguns(BW));
+          'Battle_StartSideTurn': begin StartSideTurn(BW, ArgI(0)); Got := '-'; end;
+          'Battle_ResetSide': begin ResetSide(BW, ArgI(0)); Got := '-'; end;
+          'Battle_InitMorale': begin InitMorale(BW); Got := '-'; end;
+          'Battle_ComputeMotivation':
+            begin
+              ComputeMotivation(BW, BattleUnit(BW, ArgI(0), ArgI(1))^, ArgI(2));
+              Got := '-';
+            end;
+          'Battle_RefreshUnitCodes': begin RefreshUnitCodes(BW, ArgI(0)); Got := '-'; end;
+          'Battle_CanMoveTo': Got := B2S(CanMoveTo(BW, ArgI(0), ArgI(1)));
+          'Battle_CanAttack': Got := B2S(CanAttack(BW, ArgI(0), ArgI(1)));
+          'Battle_CanHeal': Got := B2S(CanHeal(BW, ArgI(0), ArgI(1)));
+          'Battle_NextUnit': Got := IntToStr(NextUnit(BW));
+          'Battle_Duel':
+            begin
+              Duel(BW, BattleUnit(BW, ArgI(0), ArgI(1))^, BattleUnit(BW, ArgI(2), ArgI(3))^,
+                ArgI(4) <> 0, ArgI(5) <> 0, ArgI(6) <> 0);
+              Got := '-';
+            end;
+          'Battle_AttackUnit':
+            Got := B2S(AttackUnit(BW, ArgI(0), ArgI(1), ArgI(2), ArgI(3), ArgI(4) <> 0));
+          'Battle_AttackObject': Got := B2S(AttackObject(BW, ArgI(0), ArgI(1)));
+          'Battle_MoveUnit': begin MoveUnit(BW, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Battle_DesertionCheck': begin DesertionCheck(BW); Got := '-'; end;
+          'Battle_AiShouldRetreat': Got := B2S(AiShouldRetreat(BW));
+          'Battle_AiChooseStance': begin AiChooseStance(BW); Got := '-'; end;
+          'Battle_AiFindEnemyHero', 'Battle_AiFirstEnemy', 'Battle_AiLastEnemy',
+          'Battle_AiFindHelplessEnemy', 'Battle_AiFindFastEnemy', 'Battle_AiFindWeakestEnemy',
+          'Battle_AiFindMostWoundedFriend', 'Battle_AiFindEnemyWithAbility',
+          'Battle_AiFindHealingEnemy', 'Battle_AiPickWallTarget', 'Battle_AiPickAdjacentBuilding',
+          'Battle_AiChooseTarget':
+            begin
+              OutCount := 2;
+              case Func of
+                'Battle_AiFindEnemyHero': B1 := Ord(AiFindEnemyHero(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiFirstEnemy': B1 := Ord(AiFirstEnemy(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiLastEnemy': B1 := Ord(AiLastEnemy(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiFindHelplessEnemy':
+                  B1 := Ord(AiFindHelplessEnemy(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiFindFastEnemy': B1 := Ord(AiFindFastEnemy(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiFindWeakestEnemy':
+                  B1 := Ord(AiFindWeakestEnemy(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiFindMostWoundedFriend':
+                  B1 := Ord(AiFindMostWoundedFriend(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiFindEnemyWithAbility':
+                  B1 := Ord(AiFindEnemyWithAbility(BW, PSmallInt(@O1)^, PSmallInt(@O2)^, ArgI(0)));
+                'Battle_AiFindHealingEnemy':
+                  B1 := Ord(AiFindHealingEnemy(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiPickWallTarget': B1 := Ord(AiPickWallTarget(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiPickAdjacentBuilding':
+                  B1 := Ord(AiPickAdjacentBuilding(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+                'Battle_AiChooseTarget': B1 := Ord(AiChooseTarget(BW, PSmallInt(@O1)^, PSmallInt(@O2)^));
+              end;
+              Got := IntToStr(B1);
+            end;
+          'Battle_AiNearestEnemy':
+            begin
+              OutCount := 2;
+              AiNearestEnemy(BW, ArgI(0), ArgI(1), PSmallInt(@O1)^, PSmallInt(@O2)^);
+              Got := '-';
+            end;
+          'Battle_AiStepToward':
+            begin
+              OutCount := 2;
+              Got := B2S(AiStepToward(BW, ArgI(0), ArgI(1), ArgI(2), ArgI(3),
+                PSmallInt(@O1)^, PSmallInt(@O2)^));
+            end;
+          'Battle_AiTryAttack': Got := B2S(AiTryAttack(BW));
+          'Battle_AiMove': begin AiMove(BW); Got := '-'; end;
+          'Battle_AiStep': begin AiStep(BW); Got := '-'; end;
+          'Battle_WMTimer': begin WMTimer(BW); Got := '-'; end;
+          'Battle_Play':
+            begin
+              { up to N timer ticks, until the battle ends }
+              BattleEndCode := 0;
+              K := 0;
+              while (K < ArgI(0)) and (BattleEndCode = 0) do
+              begin
+                WMTimer(BW);
+                Inc(K);
+              end;
+              Got := IntToStr(K);
+            end;
+          'BattleInit':
+            begin
+              BattleInit(BW, Window, nil, Pl^, Save.Players[ArgI(0)], ArgI(1), ArgI(2));
+              Got := '-';
+            end;
           'CmNeuesSpiel': begin NewGame(Window, 0, Players); Got := '-'; end;
           'CmBeenden': begin EndHumanTurn(Window, 0, Players); Got := '-'; end;
           'NextPlayer': begin NextPlayer(Window, 0, Players); Got := '-'; end;

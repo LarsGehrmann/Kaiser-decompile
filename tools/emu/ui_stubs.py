@@ -43,6 +43,7 @@ CTORS = {
     'HumanCountDlg': ('1040:2017', ['p', 's']),
     'ComputerCountDlg': ('1040:234c', ['p', 's']),
     'PlayerDataDlg': ('1040:2569', ['p', 's', 'p', 'b']),
+    'TButton': ('1098:04e8', ['p', 'w', 's', 'w', 'w', 'w', 'w', 'b']),
 }
 # virtual methods of the fake objects: VMT slot -> (name, arg kinds after Self,
 # returns a value)
@@ -80,11 +81,81 @@ FUNCS = {
     'EmailGameStep': ('1000:2637', True, ['p'], False),
     'Menu_DisableSave': ('1060:0037', True, ['w', 'w'], False),
     'Randomize': ('10c8:13d7', True, [], False),        # the clock: RandSeed stays
+    # the battle window's drawing (Battle_DrawUnitStatus: see DRAW_UNIT_STATUS)
+    'Battle_RedrawUnit': ('1048:6192', True, ['b', 'b', 'p'], False),
+    'Battle_DrawCell': ('1048:2803', True, ['w', 'w', 'b', 'p'], False),
+    'Battle_ClearTargetPanel': ('1048:196c', True, ['p'], False),
+    'Battle_EnableButtons': ('1048:0daa', True, ['p'], False),
+    'Battle_DisableButtons': ('1048:0dde', True, ['p'], False),
+    'Battle_End': ('1048:8ff5', True, ['b', 'p'], False),   # EndDlg(code)
 }
+# DrawUnitStatus(DC, side, unit, panel, Self) draws, but first recomputes the
+# unit's motivation (ComputeMotivation(unit, side, Self), if the unit exists):
+# the stub logs the call and continues in ComputeMotivation
+DRAW_UNIT_STATUS = ('1048:1a60', ['w', 'b', 'b', 'b', 'p'], '1048:3ae4')
 # segments that may only run through the stubs above (UI, OWL, battle view)
 GUARDED_SEGMENTS = [1, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24]
+# the logic of the battle window (segment 10); its drawing and message
+# handlers stay guarded and are stubbed in FUNCS
+BATTLE_LOGIC = [
+    ('1048:0002', 0x7c7),    # Init
+    ('1048:0966', 0x25d),    # InitMorale
+    ('1048:0e12', 0xc4),    # GetResults
+    ('1048:345c', 0x20),    # OtherSide
+    ('1048:347c', 0x3b),    # IsInCity
+    ('1048:34b7', 0x121),    # IsThreatened
+    ('1048:35d8', 0x96),    # HeroShouldFlee
+    ('1048:366e', 0x58),    # AnyUnitInMelee
+    ('1048:36c6', 0xfb),    # CountAdjacentEnemies
+    ('1048:37c1', 0x14a),    # HasAdjacentFriendOfType
+    ('1048:390b', 0x2d),    # InBounds
+    ('1048:3938', 0x1ac),    # StrengthBalance
+    ('1048:3ae4', 0x1f2),    # ComputeMotivation
+    ('1048:3cd6', 0xa2),    # RefreshUnitCodes
+    ('1048:3d78', 0x208),    # CanMoveTo
+    ('1048:3fc0', 0x59c),    # MoveUnit
+    ('1048:455c', 0x3e8),    # CanAttack
+    ('1048:4944', 0x711),    # Duel
+    ('1048:5055', 0x498),    # AttackUnit
+    ('1048:54ed', 0x669),    # AttackObject
+    ('1048:5b56', 0x10a),    # CanHeal
+    ('1048:5c60', 0x6e),    # HealUnit
+    ('1048:5cce', 0xf2),    # DoHeal
+    ('1048:5dc0', 0x3d2),    # DesertionCheck
+    ('1048:631a', 0x28e),    # EndAction
+    ('1048:65a8', 0x356),    # AiStep
+    ('1048:68fe', 0xd6),    # AiChooseAggressive
+    ('1048:69d4', 0x349),    # AiEnemyOutguns
+    ('1048:6d1d', 0xee),    # AiFindEnemyHero
+    ('1048:6e0b', 0x72),    # AiFirstEnemy
+    ('1048:6e7d', 0xb9),    # AiLastEnemy
+    ('1048:6f36', 0x117),    # AiFindHelplessEnemy
+    ('1048:704d', 0xff),    # AiFindFastEnemy
+    ('1048:714c', 0x128),    # AiFindWeakestEnemy
+    ('1048:7274', 0x12f),    # AiFindMostWoundedFriend
+    ('1048:73a3', 0xf0),    # AiFindEnemyWithAbility
+    ('1048:7493', 0xee),    # AiFindHealingEnemy
+    ('1048:7581', 0x8c),    # AiPickWallTarget
+    ('1048:760d', 0x118),    # AiPickAdjacentBuilding
+    ('1048:7725', 0x2f6),    # AiChooseTarget
+    ('1048:7a1b', 0xf7),    # AiNearestEnemy
+    ('1048:7b12', 0x22b),    # AiStepToward
+    ('1048:7d3d', 0x34e),    # AiTryAttack
+    ('1048:808b', 0x118),    # AiChooseStance
+    ('1048:81a3', 0x30a),    # AiMove
+    ('1048:84ad', 0x133),    # AiShouldRetreat
+    ('1048:85e0', 0x4e4),    # StartSideTurn
+    ('1048:8ac4', 0x155),    # ResetSide
+    ('1048:8c19', 0x79),    # CombatOptions_MoreThanOneActive
+    ('1048:8f08', 0xed),    # NextUnit
+    ('1048:96d1', 0x16e),    # WMTimer
+    ('1048:983f', 0x2b),    # StartTimer
+    ('1048:986a', 0x41),    # StopTimer
+    ('1048:98ab', 0x86),    # CmWarten
+    ('1048:9931', 0x36),    # CmFertig
+]
 # code in guarded segments that is plain logic and may run
-ALLOWED = [('1060:03d9', 0x14e),           # FormatPlayerTitle
+ALLOWED = BATTLE_LOGIC + [('1060:03d9', 0x14e),           # FormatPlayerTitle
            ('1000:35ad', 0x125),           # NextPlayer
            ('1000:36d2', 0xee),            # CpuTurn
            ('1000:37c0', 0x10f),           # ResolveWar
@@ -92,7 +163,8 @@ ALLOWED = [('1060:03d9', 0x14e),           # FormatPlayerTitle
            ('1000:33c0', 0x99),            # BeginHumanTurn
            ('1000:0ce6', 0x156),           # CmNeuesSpiel
            ('1040:1d98', 0x192),           # NewGame_AskPlayerCounts
-           ('1040:1f2a', 0xeb)]            # NewGame_AskPlayerData
+           ('1040:1f2a', 0xeb),            # NewGame_AskPlayerData
+           ('1050:1212', 0xe6)]            # LoadMapData (the resource API is emulated)
 
 
 def arg_bytes(kinds):
@@ -110,6 +182,7 @@ class UILayer:
         self.emu = emu
         self.players_para = players_para
         self.window_alias = None         # a fake window object standing for W
+        self.battle_alias = None         # the battle window object: B<offset>
         self.chooser = chooser
         self.log = []
         self.objects = []
@@ -120,6 +193,11 @@ class UILayer:
         from kaiser_structs import PLAYER_SIZE
         if (seg, off) == WINDOW or (seg, off) == self.window_alias:
             return 'W'
+        if self.battle_alias is not None:
+            bseg, boff = self.battle_alias
+            rel = seg * 16 + off - (bseg * 16 + boff)
+            if 0 <= rel < 0xfa7:
+                return f'B{rel}'
         rel = seg * 16 + off - self.players_para * 16     # (any segment:offset form)
         if 0 <= rel < 10 * PLAYER_SIZE:
             return f'P{rel // PLAYER_SIZE}:{rel % PLAYER_SIZE}'
@@ -185,6 +263,7 @@ class UILayer:
             emu.redirect(addr, self._ctor_handler(name, kinds))
         for name, (addr, far, kinds, has_ret) in FUNCS.items():
             emu.redirect(addr, self._func_handler(name, far, kinds, has_ret))
+        emu.redirect(DRAW_UNIT_STATUS[0], self._draw_unit_status_handler())
         self.vmt = bytearray(0x80)
         for slot, (name, kinds, has_ret) in METHODS.items():
             para, off = emu.new_stub(self._method_handler(name, kinds, has_ret))
@@ -197,7 +276,8 @@ class UILayer:
             b, e = emu.segment_range(seg)
             emu.guard_ranges.append((b, e, f'segment {seg}'))
         emu.guard_allow = []
-        redirected = [a for a, _ in CTORS.values()] + [f[0] for f in FUNCS.values()]
+        redirected = ([a for a, _ in CTORS.values()] + [f[0] for f in FUNCS.values()] +
+                      [DRAW_UNIT_STATUS[0]])
         for addr, size in ALLOWED + [(a, 5) for a in redirected]:   # 5: the patched jump
             si, off = ghidra_seg(addr)
             b = emu.lin(emu.para[si], off)
@@ -223,6 +303,16 @@ class UILayer:
             entry = f'{name}[{vmt:x}]({self.format_args(kinds, args)})'
             k = len(self.objects)
             size = emu.ds_word(vmt)                   # instance size from the VMT
+            if (words[0], words[1]) != (0, 0) and vmt == 0:
+                # an inherited constructor (VMT 0): the object is set up by
+                # its own constructor, leave it alone
+                obj = (words[1], words[0])
+                size = 0
+                self.objects.append(obj)
+                self.sizes.append(size)
+                self.log.append(f'{entry}=O{k + 1}')
+                emu.stub_return(6 + n, True, obj[1], obj[0])
+                return
             if (words[0], words[1]) != (0, 0):        # an object constructed in place
                 obj = (words[1], words[0])
                 emu.write(obj[0], obj[1], bytes(size))
@@ -268,6 +358,33 @@ class UILayer:
                 entry += f'={ax}' + ''.join(f'+{o:x}:{b.hex()}' for o, b in sorted(data.items()))
             self.log.append(entry)
             emu.stub_return(4 + n, True, ax, dx)
+        return handler
+
+    def _draw_unit_status_handler(self):
+        from kaiser_emu import ghidra_seg
+        from unicorn.x86_const import UC_X86_REG_SP, UC_X86_REG_SS, UC_X86_REG_CS, UC_X86_REG_IP
+        kinds = DRAW_UNIT_STATUS[1]
+
+        def handler():
+            emu = self.emu
+            words = emu.stack_words(6, 4)          # Self (2), panel, unit, side, DC
+            self.log.append(f'Battle_DrawUnitStatus({self.format_args(kinds, words)})')
+            self_off, self_seg, _panel, unit, side = words[0], words[1], words[2], words[3] & 0xFF, words[4] & 0xFF
+            count = emu.read(self_seg, self_off + side * 0x6d5 + 0x165, 1)[0]
+            if count < unit & 0xFF:
+                emu.stub_return(12, True)
+                return
+            # the same return address, arguments (unit pointer, side, Self)
+            ss = emu.uc.reg_read(UC_X86_REG_SS)
+            sp = emu.uc.reg_read(UC_X86_REG_SP)
+            ip, cs = struct.unpack('<HH', emu.read(ss, sp, 4))
+            u = self_off + side * 0x6d5 + 0x12a + (unit & 0xFF) * 0x3d
+            sp += 2
+            emu.write(ss, sp, struct.pack('<7H', ip, cs, self_off, self_seg, side, u & 0xFFFF, self_seg))
+            emu.uc.reg_write(UC_X86_REG_SP, sp)
+            si, off = ghidra_seg(DRAW_UNIT_STATUS[2])
+            emu.uc.reg_write(UC_X86_REG_CS, emu.para[si])
+            emu.uc.reg_write(UC_X86_REG_IP, off)
         return handler
 
     def _func_handler(self, name, far, kinds, has_ret):

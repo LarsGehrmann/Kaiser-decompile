@@ -32,6 +32,8 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 SAVES = sorted(glob.glob(os.path.join(ROOT, 'Kaiser', '*.KSR')) +
                glob.glob(os.path.join(ROOT, 'Kaiser', '*.ksr')))
 HDR_DS = 0x6108
+BW_AREA = 0x9000           # scratch offset of the battle window object (BW, BWI)
+BW_CMP = (0x2e, 0xf9b)     # compared part: without the OWL fields and the button pointers
 PSIZE = ks.PLAYER_SIZE
 OUT_AREA = 0xF000          # scratch offset of out parameters (after the players)
 ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
@@ -52,6 +54,9 @@ ARMY_BASE = {1: 0xfc, 2: 0x321}   # unit i of army a at ARMY_BASE[a] + i*0x3d
 #   PJ     pointer to another player J != test player (J shown)
 #   Wnd    the parent window pointer (UI calls log it as W)
 #   SELF   the main window object (players at +0x41), logged as W too
+#   BWI    a zeroed battle window object (for BattleWnd::Init), reported in bwdiff=
+#   BW     a battle window set up by the original BattleWnd::Init (the test
+#          player attacks J); bw= holds it (offsets 0x2e..0xf9a), bwdiff= the change
 #   Y      a year: 0 (the first turn) in a quarter of the cases, else 1..300
 #   RI / RJ  pointer to a byte holding the test player index / J (J shown)
 # Return kinds: long, word, sword (signed 16), byte, real, none.
@@ -94,6 +99,12 @@ AIM = ['cpu_level', 'ai_aggression_q', 'attitude_q', 'trade_agreement', 'peace_y
        'J.cpu_level']
 AI_CLAMPS = {'cpu_level': (1, 6), 'ai_aggression_q': (1, 6), 'army1_count': (0, 8),
              'army2_count': (0, 8), 'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}
+# battles (BW): the test player attacks J
+BW_FIELDS = (ARMY[2:] + ['u.max_steps', 'u.range', 'u.max_ammo', 'J.spell', 'country',
+                         'J.country', 'cpu_level', 'J.cpu_level', 'happiness', 'J.markets',
+                         'J.mills', 'J.palace_parts', 'J.taverns'])
+BW_CLAMPS = {}
+
 SPECS = {
     'GrainCapacity': ('1068:0885', ['P'], 'long', ECON),
     'SmithyOutput': ('1068:0bd3', ['P'], 'long', ECON),
@@ -329,6 +340,62 @@ SPECS = {
                       ARMY + ['population', 'J.population', 'J.army1_count', 'J.army2_count'],
                       {'army1_count': (0, 8), 'army2_count': (0, 8),
                        'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
+    # segment 10: the battle window
+    'BattleInit': ('1048:0002', ['Wnd', 'NIL', 'P', 'PJ', 'B:0:3', 'B:0:1', 'W:11564:11564', 'BWI'],
+                   'none', ARMY + ['J.army1_count', 'J.spell', 'spell', 'country', 'J.country',
+                                   'cpu_level', 'J.cpu_level', 'happiness', 'fame', 'J.markets',
+                                   'J.mills', 'J.palace_parts', 'J.taverns'],
+                   {'army1_count': (0, 8), 'J.army1_count': (0, 8)}),
+    # the battle window during a battle (BW: Init, then some AI steps)
+    'Battle_OtherSide': ('1048:345c', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_IsInCity': ('1048:347c', ['BU', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_IsThreatened': ('1048:34b7', ['B:0:1', 'B:1:8', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_HeroShouldFlee': ('1048:35d8', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AnyUnitInMelee': ('1048:366e', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_CountAdjacentEnemies': ('1048:36c6', ['B:0:1', 'B:1:8', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_HasAdjacentFriendOfType': ('1048:37c1', ['B:0:1', 'B:1:8', 'B:0:35', 'BW'], 'byte',
+                                       BW_FIELDS, BW_CLAMPS),
+    'Battle_InBounds': ('1048:390b', ['W:0:15', 'W:0:11', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_StrengthBalance': ('1048:3938', ['B:0:1', 'BW'], 'real', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiChooseAggressive': ('1048:68fe', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiEnemyOutguns': ('1048:69d4', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_StartSideTurn': ('1048:85e0', ['B:0:1', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_ResetSide': ('1048:8ac4', ['B:0:1', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_InitMorale': ('1048:0966', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_ComputeMotivation': ('1048:3ae4', ['BU', 'B:0:1', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_RefreshUnitCodes': ('1048:3cd6', ['B:0:1', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_CanMoveTo': ('1048:3d78', ['BN', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_CanAttack': ('1048:455c', ['BN', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_CanHeal': ('1048:5b56', ['BN', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_NextUnit': ('1048:8f08', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_Duel': ('1048:4944', ['BU', 'BU', 'B:0:1', 'B:0:1', 'B:0:1', 'BW'], 'none',
+                    BW_FIELDS, BW_CLAMPS),
+    'Battle_AttackUnit': ('1048:5055', ['BA', 'B:0:1', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AttackObject': ('1048:54ed', ['BN', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_MoveUnit': ('1048:3fc0', ['BN', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_DesertionCheck': ('1048:5dc0', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiShouldRetreat': ('1048:84ad', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiChooseStance': ('1048:808b', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindEnemyHero': ('1048:6d1d', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFirstEnemy': ('1048:6e0b', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiLastEnemy': ('1048:6e7d', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindHelplessEnemy': ('1048:6f36', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindFastEnemy': ('1048:704d', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindWeakestEnemy': ('1048:714c', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindMostWoundedFriend': ('1048:7274', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindEnemyWithAbility': ('1048:73a3', ['O', 'O', 'B:0:30', 'BW'], 'byte',
+                                      BW_FIELDS, BW_CLAMPS),
+    'Battle_AiFindHealingEnemy': ('1048:7493', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiPickWallTarget': ('1048:7581', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiPickAdjacentBuilding': ('1048:760d', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiChooseTarget': ('1048:7725', ['O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiNearestEnemy': ('1048:7a1b', ['BN', 'O', 'O', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiStepToward': ('1048:7b12', ['BN', 'BN', 'O', 'O', 'BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiTryAttack': ('1048:7d3d', ['BW'], 'byte', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiMove': ('1048:81a3', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_AiStep': ('1048:65a8', ['BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_WMTimer': ('1048:96d1', ['NIL', 'BW'], 'none', BW_FIELDS, BW_CLAMPS),
+    'Battle_Play': ('1048:96d1', ['BW'], 'word', BW_FIELDS, BW_CLAMPS),
     # segment 1: the turn loop, a whole round of computer players
     'CmNeuesSpiel': ('1000:0ce6', ['NIL', 'SELF'], 'none',
                      ['h.immortality', 'h.goods_trade_enabled', 'h.initiative_enabled']),
@@ -680,7 +747,43 @@ def preset_round(rng, players, p, num):
 
 
 # per function: called after the random mutations, returns more mutations
+def preset_battle(rng, players, p, num):
+    """Every player gets a Heer with at least one real unit (a copy of a
+    unit of the save), so that a battle can be fought."""
+    m = []
+    donors = []
+    for q in range(num):
+        for a, cnt in ((1, 0x137), (2, 0x138)):
+            for i in range(1, players[q * PSIZE + cnt] + 1):
+                base = q * PSIZE + ARMY_BASE[a] + i * ks.UNIT_SIZE
+                u = players[base:base + ks.UNIT_SIZE]
+                if u[0x1b] + u[0x1c] > 0 and u[0x1d] > 0:
+                    donors.append(bytes(u))
+    if not donors:
+        return m
+    for q in range(num):
+        n = players[q * PSIZE + 0x137]
+        units = [players[q * PSIZE + ARMY_BASE[1] + i * ks.UNIT_SIZE:][:ks.UNIT_SIZE] for i in range(1, n + 1)]
+        if n == 0 or sum(u[0x1b] + u[0x1c] for u in units) == 0 or any(u[0x1d] == 0 for u in units):
+            k = rng.randint(1, 8)
+            for i in range(1, k + 1):
+                base = q * PSIZE + ARMY_BASE[1] + i * ks.UNIT_SIZE
+                u = rng.choice(donors)
+                players[base:base + ks.UNIT_SIZE] = u
+                m.append((base, u))
+            m += set_field(players, q, 'army1_count', k)
+    return m
+
+
 PRESETS = {
+    **{f: preset_battle for f in SPECS if f.startswith('Battle_')},
+    **{f: preset_battle for f in ('Battle_OtherSide', 'Battle_IsInCity',
+                                  'Battle_IsThreatened', 'Battle_HeroShouldFlee',
+                                  'Battle_AnyUnitInMelee', 'Battle_CountAdjacentEnemies',
+                                  'Battle_HasAdjacentFriendOfType', 'Battle_InBounds',
+                                  'Battle_StrengthBalance', 'Battle_AiChooseAggressive',
+                                  'Battle_AiEnemyOutguns', 'Battle_StartSideTurn',
+                                  'Battle_ResetSide', 'Battle_InitMorale')},
     'DiplomacyTurnStart': preset_mailbox,
     'PlayerTurnStart': preset_mailbox,
     **{f: preset_ai for f in ('Ai_Turn', 'Ai_Diplomacy', 'Ai_YearlySimulation',
@@ -902,6 +1005,61 @@ def make_mutations(rng, fields, p, uidx, j):
     return muts, hmuts
 
 
+def setup_battle_window(emu, sp):
+    """The state BattleWnd::SetupWindow (1048:0bc3) leaves; its window calls
+    are not run (the port: BattleSetupWindow)."""
+    b = BW_AREA
+    side = emu.read(sp, b + 0xf7f, 1)[0]
+    if emu.read(sp, b + 0xe2b + side, 1)[0] == 0:
+        emu.write(sp, b + 0xf81, b'\0')             # a computer starts defensive
+    emu.write(sp, b + 0xf98, b'\1')
+    emu.write(sp, b + 0xf91, b'\1')
+    emu.write(sp, b + 0xf7b, struct.pack('<i', 0))
+    emu.write(sp, b + 0xf94, struct.pack('<i', 1))
+    emu.write(sp, b + 0xf8f, struct.pack('<H', 1))  # SetTimer
+
+
+def battle_ticks(emu, ui, sp, n):
+    """n window timer ticks (WMTimer 1048:96d1), until the battle ends;
+    returns the number of ticks run."""
+    for k in range(n):
+        emu.call_far('1048:96d1', [('ptr', (0, 0)), ('ptr', (sp, BW_AREA))])
+        if any(e.startswith('Battle_End') for e in ui.log):
+            return k + 1
+    return n
+
+
+def advance_battle(emu, ui, sp, rng):
+    """Let the original AI play both sides of the battle at BW_AREA for a
+    random number of timer ticks, stopping when it ends; then the human
+    flags are restored in half of the cases."""
+    human = emu.read(sp, BW_AREA + 0xe2b, 2)
+    emu.write(sp, BW_AREA + 0xe2b, b'\0\0')
+    setup_battle_window(emu, sp)
+    ui.battle_alias = (sp, BW_AREA)
+    for _ in range(rng.choice([0, rng.randint(0, 20), rng.randint(0, 300)])):
+        ui.log = []
+        before = bytes(emu.read(sp, BW_AREA, ks.BATTLE_SIZE))
+        try:
+            battle_ticks(emu, ui, sp, 1)
+        except EmuError:
+            # the original overflows its stack: a retreat with the cursor
+            # hidden re-enters AiStep through StopTimer (docs/rules/battle.md)
+            emu.write(sp, BW_AREA, before)
+            break
+        if any(e.startswith('Battle_End') for e in ui.log):
+            # the state before the end: the battle goes on (AiChooseTarget
+            # would search for an enemy forever)
+            emu.write(sp, BW_AREA, before)
+            break
+    if rng.random() < 0.5:
+        emu.write(sp, BW_AREA + 0xe2b, bytes(human))
+
+
+def kind_bw(args):
+    return any(a == 'BW' for a in args)
+
+
 def main():
     funcs = sys.argv[1].split(',')
     n = int(sys.argv[2])
@@ -947,6 +1105,7 @@ def main():
                 header[off:off + len(val)] = val
             seed = rng.getrandbits(32)
             emu.reset_ds()
+            emu.write(emu.ds_para, 0x6794, struct.pack('<H', 400))   # INI Schlacht-Timer
             ui.reset()
             ui.chooser = make_chooser(func, rng, num)
             emu.write(emu.ds_para, HDR_DS, bytes(header))
@@ -965,6 +1124,26 @@ def main():
             emu.rand_seed(seed)
             call_args, shown, outs = [], [], []
             byte_refs = OUT_AREA + 0x100
+            bw_before = None
+            ui.battle_alias = None
+            if 'BW' in args:
+                # a battle window set up by the original BattleWnd::Init (the
+                # test player attacks player J, city or field battle) and
+                # played on by the AI; before the other arguments, which
+                # may depend on it
+                emu.write(sp, BW_AREA, bytes(ks.BATTLE_SIZE))
+                city = rng.randint(0, 1)
+                emu.call_far('1048:0002', [('ptr', WINDOW), ('ptr', (0, 0)),
+                                           ('ptr', (sp, p * PSIZE)), ('ptr', (sp, j * PSIZE)),
+                                           ('word', 0), ('word', city), ('word', 0x2d2c),
+                                           ('ptr', (sp, BW_AREA))])
+                advance_battle(emu, ui, sp, rng)
+                ui.reset()
+                ui.chooser = make_chooser(func, rng, num)
+                emu.rand_seed(seed)
+                ui.battle_alias = (sp, BW_AREA)
+                bw_before = bytes(emu.read(sp, BW_AREA, ks.BATTLE_SIZE))
+            bw = bw_before
             for a in args:
                 kind, _, rest = a.partition(':')
                 if kind == 'P':
@@ -1004,6 +1183,44 @@ def main():
                     call_args.append(('ptr', (0, 0)))
                 elif kind == 'Wnd':
                     call_args.append(('ptr', WINDOW))
+                elif kind == 'BWI':
+                    # a zeroed battle window object (for BattleWnd::Init itself)
+                    emu.write(sp, BW_AREA, bytes(ks.BATTLE_SIZE))
+                    ui.battle_alias = (sp, BW_AREA)
+                    bw_before = bytes(ks.BATTLE_SIZE)
+                    call_args.append(('ptr', (sp, BW_AREA)))
+                elif kind == 'BW':
+                    call_args.append(('ptr', (sp, BW_AREA)))
+                elif kind == 'BN':
+                    # a cell near the current unit (distance <= 2)
+                    u = 0x12a + bw[0xf7f] * 0x6d5 + bw[0xf80] * 0x3d
+                    ux, uy = struct.unpack_from('<hh', bw, u + 0x39)
+                    for v in (ux + rng.randint(-2, 2), uy + rng.randint(-2, 2)):
+                        call_args.append(('word', v & 0xFFFF))
+                        shown.append(str(v))
+                elif kind == 'BA':
+                    # an attacker (side, unit) and the cell of a unit of the
+                    # other side
+                    # (a cell that holds that unit's code: AttackUnit
+                    # takes the victim from the grid)
+                    cands = []
+                    for bs in (0, 1):
+                        na = bw[0x2e + bs * 0x6d5 + 0x137]
+                        for be in range(1, bw[0x2e + (1 - bs) * 0x6d5 + 0x137] + 1):
+                            e = 0x12a + (1 - bs) * 0x6d5 + be * 0x3d
+                            ex, ey = struct.unpack_from('<hh', bw, e + 0x39)
+                            code = (0x78, 0x6e)[1 - bs] + be
+                            if na and 0 <= ex * 11 + ey < 165 and bw[0xe31 + ex * 11 + ey] == code:
+                                cands.append((bs, rng.randint(1, na), ex, ey))
+                    bs, bi, ex, ey = rng.choice(cands) if cands else (0, 1, 0, 0)
+                    for v in (bs, bi, ex, ey):
+                        call_args.append(('word', v & 0xFFFF))
+                        shown.append(str(v))
+                elif kind == 'BU':
+                    # unit K of side S of the battle window (shown: S, K)
+                    bs, bk = rng.randint(0, 1), rng.randint(1, 8)
+                    call_args.append(('ptr', (sp, BW_AREA + 0x12a + bs * 0x6d5 + bk * 0x3d)))
+                    shown += [str(bs), str(bk)]
                 elif kind == 'SELF':
                     # a fake main window: the player array lies at Self+0x41
                     self_ptr = (sp - 5, 0x50 - 0x41)
@@ -1041,7 +1258,13 @@ def main():
                     raise ValueError(a)
             try:
                 near = addr.startswith('n')
-                ax, dx = emu.call_far(addr.lstrip('n'), call_args, near=near)
+                if func == 'Battle_Play':
+                    # up to N timer ticks of the battle, until it ends
+                    n = rng.randint(1, 400)
+                    shown.append(str(n))
+                    ax, dx = battle_ticks(emu, ui, sp, n), 0
+                else:
+                    ax, dx = emu.call_far(addr.lstrip('n'), call_args, near=near)
                 r = emu.last_regs
                 if ret == 'long':
                     rv = str(struct.unpack('<i', struct.pack('<HH', ax, dx))[0])
@@ -1071,13 +1294,19 @@ def main():
                     out_vals.append(str(o) if s == sp else ('nil' if s == 0 and o == 0 else 'bad'))
             after = emu.read(sp, 0, len(players))
             hafter = emu.read(emu.ds_para, HDR_DS, ks.HEADER_SIZE)
+            bw_fields = ''
+            if bw_before is not None:
+                bw_after = bytes(emu.read(sp, BW_AREA, ks.BATTLE_SIZE))
+                lo, hi = BW_CMP
+                bw_fields = (f' bw={bw_before[lo:hi].hex() if kind_bw(args) else "-"}'
+                             f' bwdiff={diff(bw_before[lo:hi], bw_after[lo:hi]) or "-"}')
             mut = ';'.join(f'{o}:{v.hex()}' for o, v in muts)
             hmut = ';'.join(f'{o}:{v.hex()}' for o, v in hmuts)
             print(f'func={func} save={os.path.basename(save)} p={p} seed={seed} '
                   f'args={",".join(shown) or "-"} mut={mut or "-"} hmut={hmut or "-"} -> '
                   f'ret={rv} out={",".join(out_vals) or "-"} '
                   f'seedout={emu.rand_seed()} diff={diff(players, after) or "-"} '
-                  f'hdiff={diff(header, hafter) or "-"} '
+                  f'hdiff={diff(header, hafter) or "-"}{bw_fields} '
                   f'ui={"|".join(ui.log) or "-"}')
 
 

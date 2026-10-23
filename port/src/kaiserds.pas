@@ -23,7 +23,21 @@ type
     AiKingRewardBonus: array[0..4] of Byte;  { +0x530 their rank bonus }
     Pad535: array[0..2346] of Byte;
     AiMaxUnits: array[0..35] of Byte;  { +0xe60 computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9) }
-    PadE84: array[0..7527] of Byte;
+    PadE84: array[0..7422] of Byte;
+    BattleHardness: array[0..14] of Byte;  { +0x2b83 AttackObject: Random(hardness) per terrain code (wall 5, market 5, mill 4, palace 8, cathedral 10, ...) }
+    BattleSideCodeB: array[0..1] of Byte;  { +0x2b92 the same as battle_side_code (AiTryAttack) }
+    BattleAttCityX: array[1..8] of Byte;  { +0x2b94 start positions, army slot 1..8: attacker in a city battle }
+    BattleAttCityY: array[1..8] of Byte;  { +0x2b9c }
+    BattleAttFieldX: array[1..8] of Byte;  { +0x2ba4 attacker in a field battle }
+    BattleAttFieldY: array[1..8] of Byte;  { +0x2bac }
+    BattleDefCityX: array[1..8] of Byte;  { +0x2bb4 defender in a city battle (inside the walls) }
+    BattleDefCityY: array[1..8] of Byte;  { +0x2bbc }
+    BattleDefFieldX: array[1..8] of Byte;  { +0x2bc4 defender in a field battle }
+    BattleDefFieldY: array[1..8] of Byte;  { +0x2bcc }
+    BattleMillX: array[1..8] of Byte;  { +0x2bd4 city battle: up to 8 mills outside the walls }
+    BattleMillY: array[1..8] of Byte;  { +0x2bdc }
+    BattleMarketX: array[1..4] of Byte;  { +0x2be4 city battle: up to 4 markets }
+    BattleMarketY: array[1..4] of Byte;  { +0x2be8 }
     UnitAttackSound: array[0..35] of Byte;  { +0x2bec battle sound per unit type }
     UnitMoveSound: array[0..35] of Byte;  { +0x2c10 }
     UnitDeathSound: array[0..35] of Byte;  { +0x2c34 }
@@ -31,7 +45,18 @@ type
     UnitChristian: array[0..35] of Byte;  { +0x2c7c 0 = heathen (Heilige Lanze) }
     UnitMelee: array[0..35] of Byte;  { +0x2ca0 0: Artillerie, Alchimisten }
     UnitRoughTerrain: array[0..35] of Byte;  { +0x2cc4 trees, rivers, no winter step loss (Lindwurm) }
-    Pad2CE8: array[0..5485] of Byte;
+    Pad2CE8: array[0..419] of Byte;
+    BattleSideCode: array[0..1] of Byte;  { +0x2e8c grid code base of a side: unit i of side s is code + i (0x78 / 0x6e) }
+    BattleDx: array[1..8] of SmallInt;  { +0x2e8e the 8 neighbours: column offset }
+    BattleDy: array[1..8] of SmallInt;  { +0x2e9e the 8 neighbours: row offset }
+    Pad2EAE: array[0..23] of Byte;
+    BattleWallX: array[1..6] of Byte;  { +0x2ec6 AiPickWallTarget: wall cells next to the gate (x) }
+    BattleWallY: array[1..6] of Byte;  { +0x2ecc }
+    BattleDx2: array[1..15] of SmallInt;  { +0x2ed2 the 8 neighbours twice (AiPickAdjacentBuilding starts at a random one) }
+    BattleDy2: array[1..15] of SmallInt;  { +0x2ef0 }
+    BattleDx3: array[1..15] of SmallInt;  { +0x2f0e the same, for AiStepToward }
+    BattleDy3: array[1..15] of SmallInt;  { +0x2f2c }
+    Pad2F4A: array[0..4875] of Byte;
     AttackInitiativeCost: array[0..9, 0..9] of Byte;  { +0x4256 [defender country, attacker country] 2..4 }
     SabotageChance: array[0..15] of Byte;  { +0x42ba base success chance % per sabotage kind 1..14, minus justice*100 (SabotageAction) }
     SkipTurnLoss: array[0..1] of TReal48;  { +0x42ca SkipTurnLosses fraction: 0.1 (mode 0), 0.3 (mode 1) }
@@ -100,7 +125,10 @@ type
     CpuRulerNames: array[0..9] of array[0..24] of Char;  { +0x64a2 runtime, from KAISER.INI (InitPlayers, InitComputerRuler) }
     HumanNames: array[0..9] of array[0..24] of Char;  { +0x659c runtime: the names entered for the humans in a new game (NewGame_AskPlayerData) }
     CountryAdjectives: array[0..9] of array[0..24] of Char;  { +0x6696 runtime, editable (CountryNamesDlg); knight names (MakeUnitName) }
-    Pad6790: array[0..139] of Byte;
+    OptDeltaX: SmallInt;  { +0x6790 INI Delta X: window offset }
+    OptDeltaY: SmallInt;  { +0x6792 INI Delta Y }
+    OptBattleTimer: Word;  { +0x6794 INI Schlacht-Timer: battle timer interval in ms (at least 50; the cursor blinks every 400 ms) }
+    Pad6796: array[0..133] of Byte;
   end;
 
 var

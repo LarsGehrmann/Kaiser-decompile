@@ -95,7 +95,16 @@ class KaiserEmu:
                     p += 1 + n
         # Windows API functions the emulator implements: (module, ordinal)
         self.api = {('USER', 176): self._load_string,
-                    ('USER', 125): self._invalidate_rect}
+                    ('USER', 125): self._invalidate_rect,
+                    ('USER', 10): self._set_timer,
+                    ('USER', 12): self._kill_timer,
+                    ('USER', 22): self._set_focus,
+                    ('USER', 66): self._get_dc,
+                    ('USER', 68): self._release_dc,
+                    ('KERNEL', 60): self._find_resource,
+                    ('KERNEL', 61): self._load_resource,
+                    ('KERNEL', 62): self._lock_resource,
+                    ('KERNEL', 19): self._global_unlock}
         self.pristine_ds = bytes(self.read(self.ds_para, 0, 0x10000))
         # far return target: a HLT instruction in the stub segment
         self.return_ip = 0xFF00
@@ -348,9 +357,62 @@ class KaiserEmu:
             self.write(buf_seg, buf_off, text[:n] + b'\0')
         self._api_return(10, n)
 
+    RESOURCE_AREA = 0xE000         # scratch offset where LockResource puts the data
+
+    def _find_resource(self):
+        # FindResource(hInstance, lpName, lpType): handle = index + 1, 0 if missing
+        t_off, t_seg, n_off, n_seg, _hinst = self._api_args(10)
+        def name(seg, off):
+            if seg == 0:
+                return off
+            raw = bytes(self.read(seg, off, 64))
+            return raw[:raw.index(0)].decode('latin-1').upper()
+        rtype, rname = name(t_seg, t_off), name(n_seg, n_off)
+        handle = 0
+        for i, r in enumerate(self.ne.resources):
+            tid = r.type_id if isinstance(r.type_id, int) else str(r.type_id).upper()
+            rid = r.res_id if isinstance(r.res_id, int) else str(r.res_id).upper()
+            if tid == rtype and rid == rname:
+                handle = i + 1
+                break
+        self._api_return(10, handle)
+
+    def _load_resource(self):
+        hres, _hinst = self._api_args(4)
+        self._api_return(4, hres)
+
+    def _lock_resource(self):
+        (h,) = self._api_args(2)
+        if h == 0:
+            self._api_return(2, 0, 0)
+            return
+        data = self.ne.resources[h - 1].data
+        self.write(self.scratch_para, self.RESOURCE_AREA, data)
+        self._api_return(2, self.RESOURCE_AREA, self.scratch_para)
+
+    def _global_unlock(self):
+        self._api_args(2)
+        self._api_return(2, 0)
+
     def _invalidate_rect(self):
         # InvalidateRect(hWnd, lpRect, bErase): repainting is not emulated
         self._api_return(8)
+
+    # the battle window's timer, focus and device contexts: nothing happens
+    def _set_timer(self):
+        self._api_return(10, 1)           # SetTimer(hWnd, id, elapse, proc): id 1
+
+    def _kill_timer(self):
+        self._api_return(4, 1)
+
+    def _set_focus(self):
+        self._api_return(2, 0)
+
+    def _get_dc(self):
+        self._api_return(2, 0)            # GetDC(hWnd): DC 0
+
+    def _release_dc(self):
+        self._api_return(4, 1)
 
     def _setup(self, stack_words):
         uc = self.uc
