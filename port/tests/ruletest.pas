@@ -619,6 +619,7 @@ begin
               OutSize := 1;
               Got := B2S(DeclareWar(Window, Save.Players, ArgI(0), OutBuf[0], ArgI(1), ArgI(2)));
             end;
+          'CmDemissionieren': begin Do_Demissionieren(Window, 0, Players); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin

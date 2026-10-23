@@ -484,6 +484,9 @@ SPECS = {
     'DeclareWar': ('1038:40e8', ['Wnd', 'A', 'I', 'OB:1', 'N', 'Y'], 'byte',
                    ['title', 'army_away', 'army1_count', 'initiative', 'peace_years', 'fame',
                     'J.army1_count', 'J.army2_count', 'h.initiative_enabled', 'J.mailbox']),
+    'CmDemissionieren': ('1000:16d0', ['NIL', 'SELF'], 'none',
+                         ['title', 'lifetime', 'J.title', 'J.lifetime', 'h.immortality'],
+                         {'J.army1_count': (0, 8), 'J.army2_count': (0, 8)}),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],
@@ -594,6 +597,9 @@ UI_SCRIPTS = {
     'CmBeenden': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
                   ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
                   ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
+    'CmDemissionieren': [('Execute(', lambda rng: (rng.choice([1, 1, 2]), {})),
+                         ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
+                         ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
     'NextPlayer': [('Execute(', lambda rng: (rng.choice([1, 2]), {})),
                    ('Battle(', lambda rng: (rng.choice([0, 1, 1, 2, 3]), {})),
                    ('FightRaiders(', lambda rng: (rng.choice([0, 1, 2]), {}))],
@@ -899,6 +905,7 @@ def preset_battle(rng, players, p, num):
 
 
 PRESETS = {
+    'CmDemissionieren': preset_round,
     'DeclareWar': preset_war_target,
     'Do_Gebaeude': preset_invest,
     **{f: preset_battle for f in SPECS if f.startswith('Battle_')},
@@ -964,6 +971,7 @@ def header_newgame(rng, header, players, p, num):
 
 # per function: header mutations after the random ones
 HEADER_PRESETS = {
+    'CmDemissionieren': header_turn,
     'CmSpiel': header_scenario,
     'CmWirtschaft': header_turn,
     'CmMilitaer': header_turn,

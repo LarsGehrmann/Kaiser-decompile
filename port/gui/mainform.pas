@@ -255,6 +255,12 @@ begin
           DS.Game.Year);
         Invalidate;
       end;
+    209:                                        { CmDemissionieren 1000:16d0 }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_Demissionieren(Self, 0, FSave.Players);
+        Invalidate;
+      end;
     306:                                        { CmHofschmiede 1000:1c66 }
       if DS.Game.GameState = 1 then
         Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);

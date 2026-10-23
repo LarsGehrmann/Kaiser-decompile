@@ -12,7 +12,7 @@ unit Actions;
 interface
 
 uses
-  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn, War;
+  SysUtils, Strings, KaiserTypes, KaiserDS, Real48, Rules, KaiserUI, Turn, War, Game;
 
 { Land handeln (1040:7e4b): LANDDLG on a copy of all players; on OK the
   copy is taken over and buildings that no longer fit are lost }
@@ -74,6 +74,10 @@ function DeclareWar(Parent: Pointer; var Players: TPlayers; Me: Byte; var Target
   the e-mail game hand-over is not ported }
 procedure Do_KriegFuehren(Parent: Pointer; var Players: TPlayers; Me, NumPlayers: Byte;
   Year: Word);
+{ Demissionieren (CmDemissionieren 1000:16d0): after the confirmation a
+  computer ruler takes over, the next player moves (the e-mail hand-over is
+  not ported) }
+procedure Do_Demissionieren(Parent: Pointer; HWnd: Word; var Players: TPlayers);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -2140,6 +2144,30 @@ begin
   else
     AddNews(Players, NumPlayers, T, Me, 9);
   DS.Game.GameState := 1;
+end;
+
+{ -- Demissionieren --------------------------------------------------------- }
+
+procedure Do_Demissionieren(Parent: Pointer; HWnd: Word; var Players: TPlayers);
+var
+  D: TDialog;
+  R: SmallInt;
+begin
+  D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($0430))]);
+  R := UI.Execute(D);
+  UI.Done(D, 1);
+  if R <> 1 then
+    Exit;
+  InitComputerRuler(Players, DS.Game.CurrentPlayer);
+  Dec(DS.Game.HumanPlayers);
+  DS.Game.LastHuman := DS.Game.CurrentPlayer;
+  AddNews(Players, DS.Game.NumPlayers, DS.Game.CurrentPlayer, DS.Game.CurrentPlayer, $10);
+  NextPlayer(Parent, HWnd, Players);
+  if DS.Game.GameState = 1 then
+    if (DS.Game.EmailGameQ = 0) or (DS.Game.CurrentPlayer = DS.Game.LastHuman) then
+      BeginHumanTurn(Parent, HWnd, Players);
+  if (DS.Game.EmailGameQ <> 0) and (DS.Game.HumanPlayers < 2) then
+    DS.Game.EmailGameQ := 0;
 end;
 
 { -- Do_KornVerteilen ------------------------------------------------------ }
