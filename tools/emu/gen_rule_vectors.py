@@ -446,6 +446,7 @@ SPECS = {
                             # the counter is overwritten (an endless loop)
                             {'salt': (0, 3000000), 'beer': (0, 3000000), 'wine': (0, 3000000),
                              'weapons': (0, 3000000), 'taler': (-99999999, 999999999)}),
+    'Do_Hofschmiede': ('1040:6bab', ['Wnd', 'P'], 'none', ['smithies', 'population', 'land']),
     'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
                          ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
                           'population', 'granaries', 'title', 'h.goods_trade_enabled'],

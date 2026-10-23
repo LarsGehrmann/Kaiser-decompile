@@ -26,6 +26,8 @@ procedure Do_SteuernFestsetzen(Parent: Pointer; HWnd: Word; var P: TPlayer);
 { Handel mit Guetern (1040:1439): GUETERHANDELDLG on a copy of the player,
   the Prokurist (PROKURADLG) from its button 601 }
 procedure Do_HandelMitGuetern(Parent: Pointer; var P: TPlayer);
+{ Hofschmiede (1040:6bab): SCHMIEDEDLG, the smithies' output }
+procedure Do_Hofschmiede(Parent: Pointer; var P: TPlayer);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -685,6 +687,37 @@ begin
   else
     Result := False;
   end;
+end;
+
+{ -- Do_Hofschmiede ---------------------------------------------------------- }
+
+procedure Do_Hofschmiede(Parent: Pointer; var P: TPlayer);
+var
+  Output: LongInt;
+  S1, S2: array[0..255] of Char;
+  Num: array[0..11] of Char;
+  D: TDialog;
+begin
+  { "we can make N loads of weapons a year in your M smithies"; the second
+    line: iron is short (fewer than one load per smithy), more smithies
+    would help, or both match }
+  Output := SmithyOutput(P);
+  StrCopy(S1, DSText($29DE));
+  IntToPChar(Num, P.Smithies);
+  StrCat(S1, Num);
+  StrCat(S1, DSText($29FE));
+  IntToPChar(Num, MinLong(P.Smithies, Output));
+  StrCat(S1, Num);
+  StrCat(S1, DSText($2A13));
+  if Output < P.Smithies then
+    StrCopy(S2, DSText($2A2E))
+  else if Output > P.Smithies then
+    StrCopy(S2, DSText($2A70))
+  else
+    StrCopy(S2, DSText($2AB8));
+  D := UI.Dialog('Message2Dlg', $3472, [APtr(Parent), AStr(DSText($2AF7)), AStr(S1), AStr(S2)]);
+  UI.Execute(D);
+  UI.Done(D, 1);
 end;
 
 { -- Do_KornVerteilen ------------------------------------------------------ }

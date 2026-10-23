@@ -27,7 +27,7 @@ end;
 
 var
   Lines, F: TStringList;
-  I, Pass, Fail: Integer;
+  I, J, Pass, Fail: Integer;
   Op, Got, Want: string;
   A, B: TReal48;
 begin
@@ -83,6 +83,16 @@ begin
         except
           on E: ERealError do Got := 'E' + IntToStr(E.Code);
         end;
+      end
+      else if Op = 'str' then
+      begin
+        A := HexToR48(F[1]);
+        Want := F[4];
+        Got := '';
+        for J := 1 to Length(R48Str(A, StrToInt(F[2]), StrToInt(F[3]))) do
+          Got := Got + LowerCase(IntToHex(Ord(R48Str(A, StrToInt(F[2]), StrToInt(F[3]))[J]), 2));
+        if Got = '' then
+          Got := '-';
       end
       else if Op = 'random' then
       begin

@@ -104,6 +104,19 @@ def main():
                 out.write(f'{op} {a.hex()} {v}\n')
             except EmuError:
                 out.write(f'{op} {a.hex()} E{emu.last_runerror}\n')
+        elif op == 'str':
+            a = rand_real(rng)
+            if rng.random() < 0.5:                     # small numbers like rates
+                a = bytes([rng.randint(0x70, 0x90)]) + a[1:]
+            width = rng.choice([0, 1, 4, 8, 12, rng.randint(-3, 30)])
+            dec = rng.choice([0, 1, 2, 4, rng.randint(-15, 15)])
+            ra = regs(a)
+            emu.call_far('10c8:188a', [('word', ra[2]), ('word', ra[1]), ('word', ra[0]),
+                                       ('word', width & 0xFFFF), ('word', dec & 0xFFFF),
+                                       ('ptr', (emu.scratch_para, 0x100)), ('word', 255)])
+            n = emu.read(emu.scratch_para, 0x100, 1)[0]
+            txt = bytes(emu.read(emu.scratch_para, 0x101, n))
+            out.write(f'{op} {a.hex()} {width} {dec} {txt.hex() or "-"}\n')
         elif op == 'random':
             seed, rng_ = rng.getrandbits(32), rng.choice([rng.randint(1, 65535), 2, 10, 100, 0x14a])
             emu.rand_seed(seed)

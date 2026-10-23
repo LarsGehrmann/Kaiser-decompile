@@ -40,6 +40,11 @@ function R48Round(const A: TReal48): LongInt;
 function R48Trunc(const A: TReal48): LongInt;
 function R48Sqrt(const A: TReal48): TReal48;
 
+{ Str(A:Width:Decimals) of Borland (System _StrReal 10c8:188a with
+  _RealToStr / _RealToDigits / _RealScale10 / _RealMul10); Decimals < 0:
+  exponent format }
+function R48Str(const A: TReal48; Width, Decimals: SmallInt): RawByteString;
+
 { Conversions for display and tests only - not used by game rules }
 function R48ToDouble(const A: TReal48): Double;
 function DoubleToR48(D: Double): TReal48;
@@ -276,6 +281,267 @@ end;
 function R48Trunc(const A: TReal48): LongInt;
 begin
   Result := ToLong(A, False);
+end;
+
+{ -- Str(Real) ------------------------------------------------------------- }
+
+const
+  { _RealScale10's table (CS:1784): 1e0, 1e4, 1e8, ... 1e36 }
+  Pow10k: array[0..59] of Byte = (
+    $81, $00, $00, $00, $00, $00, $8E, $00, $00, $00, $40, $1C, $9B, $00, $00, $20, $BC, $3E,
+    $A8, $00, $10, $A5, $D4, $68, $B6, $04, $BF, $C9, $1B, $0E, $C3, $AC, $C5, $EB, $78, $2D,
+    $D0, $CD, $CE, $1B, $C2, $53, $DE, $F9, $78, $39, $3F, $01, $EB, $2B, $A8, $AD, $C5, $1D,
+    $F8, $C9, $7B, $CE, $97, $40);
+  Mask48 = QWord($FFFFFFFFFFFF);
+
+function ToM48(const A: TReal48): QWord;
+var
+  I: Integer;
+begin
+  Result := 0;
+  for I := 5 downto 0 do
+    Result := (Result shl 8) or A[I];
+end;
+
+function FromM48(M: QWord): TReal48;
+var
+  I: Integer;
+begin
+  for I := 0 to 5 do
+  begin
+    Result[I] := Byte(M);
+    M := M shr 8;
+  end;
+end;
+
+{ _RealMul10 (10c8:17c0): times 10 as 1.25 * 8, rounded at the byte }
+procedure RealMul10(var A: TReal48);
+var
+  E: Byte;
+  M, S: QWord;
+begin
+  if A[0] = 0 then
+    Exit;
+  E := A[0];
+  M := (ToM48(A) and not QWord($FF)) or (QWord($80) shl 40);
+  S := M + (M shr 2);
+  if S > Mask48 then
+  begin
+    S := S shr 1;                       { RCR with the carry }
+    if E = $FF then
+    begin
+      A := FromM48(S and Mask48);
+      Exit;
+    end;
+    Inc(E);
+  end;
+  S := S + $80;
+  if S > Mask48 then
+  begin
+    S := (S and $FFFFFFFF) or (QWord($8000) shl 32);   { RCR DX only }
+    if E = $FF then
+    begin
+      A := FromM48(S);
+      Exit;
+    end;
+    Inc(E);
+  end;
+  A := FromM48(S and Mask48);
+  A[5] := A[5] and $7F;
+  A[0] := Byte(E + 3);
+end;
+
+{ _RealScale10 (10c8:1734): A * 10^N for -38 <= N <= 38 }
+procedure RealScale10(var A: TReal48; N: ShortInt);
+var
+  P: TReal48;
+  K, I: Integer;
+begin
+  if (N < -38) or (N > 38) then
+    Exit;
+  K := Abs(N);
+  Move(Pow10k[(K and $FC) div 4 * 6], P, 6);
+  for I := 1 to K and 3 do
+    RealMul10(P);
+  if N < 0 then
+    A := R48Div(A, P)
+  else
+    A := R48Mul(A, P);
+end;
+
+{ _RealToDigits (10c8:15bf): 12 decimal digits of |A| and the exponent }
+function RealToDigits(A: TReal48; var Digits: array of Char): SmallInt;
+var
+  T: SmallInt;
+  Sh, I: Integer;
+  M: QWord;
+begin
+  if A[0] = 0 then
+  begin
+    for I := 0 to 11 do
+      Digits[I] := '0';
+    Digits[12] := #0;
+    Exit(0);
+  end;
+  A[5] := A[5] and $7F;
+  T := SmallInt(ShortInt(A[0] - $80)) * $4D + 5;
+  Result := ShortInt(Hi(Word(T)));
+  if Result = -39 then
+    Result := -38;
+  RealScale10(A, ShortInt(-Result));
+  if A[0] < $81 then
+  begin
+    RealMul10(A);
+    Dec(Result);
+  end;
+  M := (ToM48(A) or (QWord($80) shl 40)) and not QWord($FF);
+  Sh := Byte($84 - A[0]);
+  for I := 1 to Sh do
+    M := M shr 1;
+  for I := 0 to 11 do
+  begin
+    Digits[I] := Chr(Byte((M shr 44) + $30));
+    M := ((M and ((QWord(1) shl 44) - 1)) * 10) and Mask48;
+  end;
+  Digits[12] := #0;
+end;
+
+{ _RealToStr (10c8:14c7) }
+function RealToStr(const A: TReal48; Decimals: SmallInt): RawByteString;
+var
+  Digits: array[0..12] of Char;
+  E, SI, CX, D: SmallInt;
+  Neg: Boolean;
+
+  function NextDigit: Char;
+  begin
+    Result := Digits[SI];
+    Inc(SI);
+    if Result = #0 then
+    begin
+      Result := '0';
+      Dec(SI);
+    end;
+  end;
+
+begin
+  if Decimals > 11 then Decimals := 11;
+  if Decimals < -11 then Decimals := -11;
+  D := Decimals;
+  Neg := A[5] and $80 <> 0;
+  E := RealToDigits(A, Digits);
+  Result := '';
+  SI := D;
+  if SI >= 0 then
+    SI := SI + E + 1
+  else
+    SI := -SI;
+  if (D >= 0) and (SI < 0) then
+    Digits[0] := #0
+  else
+  begin
+    if Word(SI) >= 12 then
+      SI := 11;
+    if Digits[SI] < '5' then
+      Digits[SI] := #0
+    else
+    begin
+      Digits[SI] := #0;
+      repeat
+        Dec(SI);
+        if SI < 0 then
+        begin
+          Digits[0] := '1';
+          Digits[1] := #0;
+          Inc(E);
+          Break;
+        end;
+        Inc(Digits[SI]);
+        if Digits[SI] <= '9' then
+          Break;
+        Digits[SI] := #0;
+      until False;
+    end;
+  end;
+  SI := 0;
+  if D >= 0 then
+  begin
+    if Neg then
+      Result := Result + '-';
+    CX := E;
+    if CX < 0 then
+      Result := Result + '0'
+    else
+      repeat
+        Result := Result + NextDigit;
+        Dec(CX);
+      until CX < 0;
+    if D = 0 then
+      Exit;
+    Result := Result + '.';
+    repeat
+      Inc(CX);
+      if CX = 0 then
+        Break;
+      Result := Result + '0';
+      Dec(D);
+    until D = 0;
+    repeat
+      Dec(D);
+      if D < 0 then
+        Break;
+      Result := Result + NextDigit;
+    until False;
+  end
+  else
+  begin
+    if Neg then
+      Result := Result + '-'
+    else
+      Result := Result + ' ';
+    Result := Result + NextDigit;
+    Inc(D);
+    if D <> 0 then
+    begin
+      Result := Result + '.';
+      repeat
+        Result := Result + NextDigit;
+        Inc(D);
+      until D = 0;
+    end;
+    Result := Result + 'E';
+    if E < 0 then
+    begin
+      Result := Result + '-';
+      E := -E;
+    end
+    else
+      Result := Result + '+';
+    Result := Result + Chr(Byte(E div 10 + $30)) + Chr(Byte(E mod 10 + $30));   { IDIV DL }
+  end;
+end;
+
+function R48Str(const A: TReal48; Width, Decimals: SmallInt): RawByteString;
+const
+  MaxLen = 255;
+var
+  CX, W: SmallInt;
+  S: RawByteString;
+begin
+  CX := Decimals;
+  if CX < 0 then
+  begin
+    CX := 6 - Width;
+    if CX > -2 then
+      CX := -2;
+  end;
+  S := RealToStr(A, CX);
+  CX := Length(S);
+  W := Width;
+  if W > MaxLen then W := MaxLen;
+  if CX > MaxLen then CX := MaxLen;
+  if W < CX then W := CX;
+  Result := StringOfChar(' ', W - CX) + Copy(S, 1, CX);
 end;
 
 function R48ToDouble(const A: TReal48): Double;
