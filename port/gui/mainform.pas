@@ -396,6 +396,13 @@ begin
       MI.Caption := Utf8(M.Items[I].Text);
     MI.Tag := M.Items[I].Id;
     MI.Checked := M.Items[I].Flags and $8 <> 0;           { MF_CHECKED }
+    { the usual macOS shortcuts for the file commands }
+    case MI.Tag of
+      101: MI.ShortCut := ShortCut(VK_N, [ssMeta]);         { Neues Spiel }
+      102: MI.ShortCut := ShortCut(VK_O, [ssMeta]);         { Öffnen }
+      103: MI.ShortCut := ShortCut(VK_S, [ssMeta]);         { Speichern }
+      401: MI.ShortCut := ShortCut(VK_E, [ssMeta]);         { Runde beenden }
+    end;
     if M.Items[I].Flags and $10 <> 0 then
       AddItems(MI, M.Items[I])
     else

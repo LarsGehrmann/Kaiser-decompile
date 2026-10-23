@@ -80,9 +80,9 @@ type
     procedure TimerTick(Sender: TObject);
   public
     { TroopDlg_DrawHeer / DrawGarde (1038:84a1 / 8699): the grids of the
-      Heer (65 x 161) and the Garde (113 x 113, in walls) with the unit
-      icons (sprites 1100+type / 1200+type, a hero 1150+picture), the
-      selected cells red }
+      Heer (64 x 160) and the Garde (112 x 112, in walls) on the dialog's
+      background with the unit icons (sprites 1100+type / 1200+type, a hero
+      1150+picture), the selected cells red }
     procedure DrawTroops;
     { UnitInfoDlg.DrawPortrait (1058:0af8): the sprite 1100 + type (Blink:
       1300 + type) on the dialog's background, 32 x 32 at (12, 64) of a
@@ -106,32 +106,13 @@ uses
 { -- TKaiserDialog ----------------------------------------------------------- }
 
 function TKaiserDialog.GetCheck(Id: SmallInt): Boolean;
-var
-  C: TControl;
 begin
-  C := Item(Id);
-  if C is TCheckBox then
-    Result := TCheckBox(C).Checked
-  else if C is TRadioButton then
-    Result := TRadioButton(C).Checked
-  else
-    Result := False;
+  Result := Checked(Id);
 end;
 
 procedure TKaiserDialog.SetCheck(Id: SmallInt; On: Boolean);
-var
-  C: TControl;
 begin
-  C := Item(Id);
-  Inc(FQuiet);
-  try
-    if C is TCheckBox then
-      TCheckBox(C).Checked := On
-    else if C is TRadioButton then
-      TRadioButton(C).Checked := On;
-  finally
-    Dec(FQuiet);
-  end;
+  SetChecked(Id, On);
 end;
 
 function TKaiserDialog.GetPosition(Id: SmallInt): Integer;
@@ -479,7 +460,10 @@ end;
 procedure TLogicDialog.DrawTroops;
 var
   P: PPlayer;
+  Buf: TBitmap;
 
+  { the grid is drawn off screen and then shown (drawing on the TImage's own
+    bitmap left the Cocoa window showing only the first frame) }
   function Grid(var Img: TImage; X, Y, W, H: Integer): TCanvas;
   begin
     if Img = nil then
@@ -490,11 +474,11 @@ var
       Img.OnMouseMove := @GridMouseMove;
     end;
     Img.SetBounds(X, Y, W, H);
-    Img.Picture.Bitmap.SetSize(W, H);
-    Result := Img.Picture.Bitmap.Canvas;
-    Result.Brush.Color := clWhite;
-    Result.Pen.Color := clBlack;
-    Result.Rectangle(0, 0, W, H);
+    Buf.SetSize(W, H);
+    Result := Buf.Canvas;
+    { the dialog brush (DS:63a6) and NULL_PEN: no frame }
+    Result.Brush.Color := DialogBackground;
+    Result.FillRect(0, 0, W, H);
   end;
 
   procedure Icon(Cv: TCanvas; const U: TUnit; Base, X, Y: Integer; Selected: Boolean);
@@ -505,8 +489,7 @@ var
     if Selected then
     begin
       Cv.Brush.Color := clRed;
-      Cv.Pen.Color := clBlack;
-      Cv.Rectangle(X, Y, X + 32, Y + 32);
+      Cv.FillRect(X, Y, X + 31, Y + 31);           { NULL_PEN: one pixel smaller }
     end;
     if U.UnitType = 9 then
       N := Base + 50 + PByte(@U)[$1A]                 { a hero: his picture }
@@ -523,27 +506,35 @@ var
   Wall: TBitmap;
 begin
   P := PPlayer(@D.Data[$34]);
-  Cv := Grid(FHeer, PSmallInt(@D.Data[$710])^, PSmallInt(@D.Data[$712])^, 65, 161);
-  for I := 1 to P^.Army1Count do
-    if I <= 8 then
-      Icon(Cv, P^.Army1[I], 1100, DS.TroopHeerX[I] * 32, DS.TroopHeerY[I] * 32,
-        (D.Data[$70A] = I) or (D.Data[$70B] = I));
-  Cv := Grid(FGarde, PSmallInt(@D.Data[$714])^, PSmallInt(@D.Data[$716])^, 113, 113);
-  Wall := ResBitmap('MAUER');
-  if Wall <> nil then
-  begin
-    Cv.Brush.Bitmap := Wall;
-    Cv.FillRect(0, 0, 8, 113);
-    Cv.FillRect(105, 0, 113, 113);
-    Cv.FillRect(0, 105, 113, 113);
-    Cv.FillRect(0, 0, 40, 8);
-    Cv.FillRect(72, 0, 113, 8);
-    Cv.Brush.Bitmap := nil;
+  Buf := TBitmap.Create;
+  try
+    Cv := Grid(FHeer, PSmallInt(@D.Data[$710])^, PSmallInt(@D.Data[$712])^, 64, 160);
+    for I := 1 to P^.Army1Count do
+      if I <= 8 then
+        Icon(Cv, P^.Army1[I], 1100, DS.TroopHeerX[I] * 32, DS.TroopHeerY[I] * 32,
+          (D.Data[$70A] = I) or (D.Data[$70B] = I));
+    FHeer.Picture.Assign(Buf);
+    Cv := Grid(FGarde, PSmallInt(@D.Data[$714])^, PSmallInt(@D.Data[$716])^, 112, 112);
+    Wall := ResBitmap('MAUER');
+    if Wall <> nil then
+    begin
+      Cv.Brush.Bitmap := Wall;
+      { the walls, the gate on the left (Rectangle with NULL_PEN) }
+      Cv.FillRect(0, 0, 111, 7);
+      Cv.FillRect(105, 8, 111, 104);
+      Cv.FillRect(0, 104, 111, 111);
+      Cv.FillRect(0, 8, 7, 39);
+      Cv.FillRect(0, 72, 7, 104);
+      Cv.Brush.Bitmap := nil;
+    end;
+    for I := 1 to P^.Army2Count do
+      if I <= 9 then
+        Icon(Cv, P^.Army2[I], 1200, DS.TroopGardeX[I] * 32 + 8, DS.TroopGardeY[I] * 32 + 8,
+          (D.Data[$70C] = I) or (D.Data[$70D] = I));
+    FGarde.Picture.Assign(Buf);
+  finally
+    Buf.Free;
   end;
-  for I := 1 to P^.Army2Count do
-    if I <= 9 then
-      Icon(Cv, P^.Army2[I], 1200, DS.TroopGardeX[I] * 32 + 8, DS.TroopGardeY[I] * 32 + 8,
-        (D.Data[$70C] = I) or (D.Data[$70D] = I));
 end;
 
 function TLogicDialog.CanClose: Boolean;

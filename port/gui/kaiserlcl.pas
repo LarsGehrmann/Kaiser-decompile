@@ -30,6 +30,7 @@ type
     procedure ControlClick(Sender: TObject);
     function DU(V: Integer; Horz: Boolean): Integer;
     function IndexOf(C: TControl): Integer;
+    procedure ShowStates;
   protected
     { > 0 while the program changes controls (no notifications) }
     FQuiet: Integer;
@@ -40,6 +41,9 @@ type
     function Item(Id: SmallInt): TControl;
     procedure SetItemText(Id: SmallInt; const Raw: RawByteString);
     procedure EnableItem(Id: SmallInt; On: Boolean);
+    { the check state of a check box or radio button (BM_GETCHECK/SETCHECK) }
+    function Checked(Id: SmallInt): Boolean;
+    procedure SetChecked(Id: SmallInt; On: Boolean);
     { a button without its own handler: ids 1 (OK) and 2 (Cancel) end the
       dialog; others end it too for the choice dialogs }
     procedure Command(Id: SmallInt); virtual;
@@ -439,25 +443,75 @@ begin
   C := FItems[K];
   if FQuiet > 0 then
   begin
-    FState[K] := CheckedOf(C);
+    if FAuto[K] then
+      FState[K] := CheckedOf(C);
     Exit;
   end;
-  if ((C is TCheckBox) or (C is TRadioButton)) and not FAuto[K] then
+  if FAuto[K] then
+    FState[K] := CheckedOf(C);
+  { BS_CHECKBOX / BS_RADIOBUTTON: only the program changes the state; LCL has
+    also unchecked the other radio buttons of the form }
+  ShowStates;
+  Notify(FIds[K]);
+end;
+
+{ the non-auto buttons show the state the game set: LCL unchecks all other
+  radio buttons of a parent when one is checked, Windows leaves them alone }
+procedure TTemplateForm.ShowStates;
+var
+  I: Integer;
+  Pass: Boolean;
+begin
+  Inc(FQuiet);
+  try
+    for Pass in Boolean do              { the unchecked ones first }
+      for I := 0 to High(FItems) do
+        if not FAuto[I] and (FState[I] = Pass) then
+          if FItems[I] is TCheckBox then
+            TCheckBox(FItems[I]).Checked := Pass
+          else if FItems[I] is TRadioButton then
+            TRadioButton(FItems[I]).Checked := Pass;
+  finally
+    Dec(FQuiet);
+  end;
+end;
+
+function TTemplateForm.Checked(Id: SmallInt): Boolean;
+var
+  K: Integer;
+begin
+  K := IndexOf(Item(Id));
+  if K < 0 then
+    Exit(False);
+  if FAuto[K] then
+    FState[K] := CheckedOf(FItems[K]);
+  Result := FState[K];
+end;
+
+procedure TTemplateForm.SetChecked(Id: SmallInt; On: Boolean);
+var
+  K, I: Integer;
+begin
+  K := IndexOf(Item(Id));
+  if K < 0 then
+    Exit;
+  FState[K] := On;
+  if FAuto[K] then
   begin
-    { BS_CHECKBOX / BS_RADIOBUTTON: only the program changes the state }
     Inc(FQuiet);
     try
-      if C is TCheckBox then
-        TCheckBox(C).Checked := FState[K]
-      else
-        TRadioButton(C).Checked := FState[K];
+      if FItems[K] is TCheckBox then
+        TCheckBox(FItems[K]).Checked := On
+      else if FItems[K] is TRadioButton then
+        TRadioButton(FItems[K]).Checked := On;
     finally
       Dec(FQuiet);
     end;
-  end
-  else
-    FState[K] := CheckedOf(C);
-  Notify(FIds[K]);
+    for I := 0 to High(FItems) do
+      if FAuto[I] then
+        FState[I] := CheckedOf(FItems[I]);
+  end;
+  ShowStates;
 end;
 
 procedure TTemplateForm.Notify(Id: SmallInt);
@@ -527,7 +581,8 @@ begin
   if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
   begin
     FAutoTimer := TTimer.Create(Self);
-    FAutoTimer.Interval := 300;
+    { KAISER_AUTODELAY=MS: how long each dialog stays open }
+    FAutoTimer.Interval := StrToIntDef(GetEnvironmentVariable('KAISER_AUTODELAY'), 300);
     FAutoTimer.OnTimer := @AutoTick;
   end;
   ShowModal;
