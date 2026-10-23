@@ -35,10 +35,12 @@ whether to march on the capital. If yes, it calls `Battle(1, …)` again. This i
 and it is always fought at the city (seg01 lines 1231-1250, 2493-2500). Result 1 posts news item 8
 (war won). Any other result posts item 9.
 
-**There is no automatic resolution.** Every battle, including computer against computer, opens
-the battle window. A side whose player record has `cpu_level != 0` is played by the AI from the
-window timer (§10). Header byte 0x14 (`initiative_enabled`) only switches the initiative-point
-costs on or off (1068:3282 returns 0 when it is clear).
+**Computer against computer has no battle window**: `Ai_ChooseWarTarget` resolves it with
+`Ai_AutoBattle` (ratings, see ai.md). The battle window opens whenever a human is involved
+(a human attacks, or a computer attacks a human via `ResolveWar`); a side whose player record
+has `cpu_level != 0` is played by the AI from the window timer (§10). Header byte 0x14
+(`initiative_enabled`) only switches the initiative-point costs on or off (1068:3282 returns 0
+when it is clear).
 
 ## 2. Setup – `BattleSetup` 1018:0225
 
