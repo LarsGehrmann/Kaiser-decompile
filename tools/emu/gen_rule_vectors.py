@@ -429,6 +429,12 @@ SPECS = {
     # segments 8 and 9: the menu actions with their dialog types (DIALOG_TESTS)
     'Do_LandHandeln': ('1040:7e4b', ['Wnd', 'A', 'I', 'N'], 'none',
                        ['taler', 'land', 'land_used', 'land_price', 'J.land']),
+    'Do_KornVerteilen': ('1040:8551', ['Wnd', 'P', 'B:0:1'], 'none',
+                         ['taler', 'grain', 'grain_distributed', 'grain_price', 'brew_beer',
+                          'population', 'granaries', 'title', 'h.goods_trade_enabled'],
+                         # below 20 people the need rounds to 0 and the gauge
+                         # (1040:9081) divides by it: runtime error 200
+                         {'population': (50, 3000000)}),
     # segment 1: the turn loop, a whole round of computer players
     'CmNeuesSpiel': ('1000:0ce6', ['NIL', 'SELF'], 'none',
                      ['h.immortality', 'h.goods_trade_enabled', 'h.initiative_enabled']),
@@ -1102,6 +1108,7 @@ HUMAN_BATTLE_FUNCS = ('Battle_EndAction', 'Battle_CmWarten', 'Battle_CmFertig',
 # templates of their dialogs, in the order they open
 DIALOG_TESTS = {
     'Do_LandHandeln': ['LANDDLG'],
+    'Do_KornVerteilen': ['KORNDLG'],
 }
 
 

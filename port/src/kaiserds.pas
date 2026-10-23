@@ -23,7 +23,8 @@ type
     AiKingRewardBonus: array[0..4] of Byte;  { +0x530 their rank bonus }
     Pad535: array[0..2346] of Byte;
     AiMaxUnits: array[0..35] of Byte;  { +0xe60 computer players recruit at most this many of a unit type (Ai_CanRecruitType 1030:06d9) }
-    PadE84: array[0..3395] of Byte;
+    PadE84: array[0..3379] of Byte;
+    GrainTradeAmounts: array[0..3] of LongInt;  { +0x1bb8 KORNDLG buttons: 100000, 10000, 1000, 100 Scheffel }
     LandTradeAmounts: array[0..4] of LongInt;  { +0x1bc8 LANDDLG buttons: 10000, 1000, 100, 10, 1 Hufen }
     Pad1BDC: array[0..4006] of Byte;
     BattleHardness: array[0..14] of Byte;  { +0x2b83 AttackObject: Random(hardness) per terrain code (wall 5, market 5, mill 4, palace 8, cathedral 10, ...) }

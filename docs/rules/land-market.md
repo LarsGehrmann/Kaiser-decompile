@@ -61,6 +61,18 @@ per gross ("Preis a gros" = 144 units): trading n grain costs/earns `n × grain_
 buying adds 1 Taler, every trade is at least 1 Taler; purchases may go into debt down to
 −CreditLimit. Running total: `total_grain_trade` (0x8b).
 
+Exact (`GrainDlg_Trade` 1040:8bc9, from the port): `cost = n × grain_price div 144`
+(truncated toward zero, n < 0 for a sale), `+1` if n > 0, and `cost = 1` if it is 0, then
+`taler −= cost`. So a sale too small to earn anything costs 1 Taler. A purchase must fit
+into the granaries (`grain + n <= GrainCapacity`) and leave `taler − n × price div 144`
+above −CreditLimit; the buttons trade 100,000 / 10,000 / 1,000 / 100 (DS:1bb8), ">benötigt"
+and ">Maximum" sell the surplus above, "benötigt" / "Maximum" buy up to the need / maximum
+and distribute it. The distribution never exceeds the stock. "Bier brauen" (`brew_beer`)
+is only enabled with goods trade.
+
+Original bug: with fewer than 20 inhabitants the need rounds to 0 and the dialog's gauge
+(1040:9081) divides by it: runtime error 200 when the dialog opens.
+
 ## Goods (needs `goods_trade_enabled`, header 0x13)
 
 Stocks `salt`, `beer`, `wine`, `weapons`; space = `warehouses × 1000` (`WarehouseFreeSpace`).

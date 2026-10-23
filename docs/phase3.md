@@ -82,6 +82,7 @@ port/bin/real48test port/tests/real48.vec       # runtime vs. original
 port/bin/ruletest Kaiser port/tests/rules.vec   # rule functions vs. original
 port/bin/ruletest Kaiser port/tests/turn.vec    # turn processing, AI, turn loop vs. original
 port/bin/ruletest Kaiser port/tests/battle.vec  # battle window, setup and aftermath vs. original
+port/bin/ruletest Kaiser port/tests/actions.vec # menu actions with the original's dialogs
 port/bin/ksrsim Kaiser/LARS23.KSR 100 1 out.ksr # play on 100 turns, save the result
 port/bin/ksrsim new:2:5:3 100 1                 # new game: 2 humans, 5 computers, level 3
 tools/emu/sim_compare.sh 100 1 /tmp/cmp         # all savegames: port vs. original, turn by turn
@@ -173,6 +174,28 @@ recording:
 - **Port** (`port/tests/replayui.pas`): `TReplayUI` formats each call the same way, compares it
   with the next recorded call and returns the recorded answer. A vector passes only if the
   sequence of UI calls (`ui=`) is identical, too.
+
+## How the dialog types are tested
+
+The menu actions (`Do_*`, segments 8 and 9) run with the original's own dialog objects
+(`tools/emu/dlg_driver.py`); `DIALOG_TESTS` in `gen_rule_vectors.py` lists the actions and
+their templates:
+
+- The OWL control constructors (`TStatic`, `TButton`, `TScrollBar`, `TCheckBox`, `TListBox`,
+  `TComboBox`, `TEdit` `InitResource`) return fake controls with a state model (text, check,
+  range and position, items, selection, enabled from the template's `WS_DISABLED`); their
+  methods are logged (`SetText(c201,s:…)`, `Enable(c107)`, `SetPosition(c301,4)` …).
+- `TDialog.Execute` becomes a script driver: `SetupWindow`, then the events of `dlg=`
+  (`c<id>` click, `s<id>:<pos>` scroll, `l<id>:<idx>` list selection, `t<id>:<hex>` typed
+  text, `ok`, `cancel`, dialogs separated by `/`) through the type's DMT handlers. OK runs
+  `CanClose` and ends with 1, Cancel ends with 2; events on disabled controls are ignored.
+  Memory comes from a bump allocator; GDI calls (drawing) return 0 unlogged.
+- The port: dialog types are `TDialogLogic` classes in `port/src/actions.pas`, registered by
+  the constructor name; they work on `D.Data` laid out like the original object and reach the
+  controls through `TDlgControls`. `port/tests/scriptcontrols.pas` is the same control model
+  and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`).
+
+`port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100).
 
 ## The headless simulator
 

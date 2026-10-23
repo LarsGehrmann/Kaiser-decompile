@@ -61,6 +61,8 @@ type
     function SetSelIndex(Id: SmallInt; I: SmallInt): SmallInt; virtual; abstract;
     procedure ComboSetText(Id: SmallInt; S: PChar); virtual; abstract;
     procedure EndDlg(Code: SmallInt); virtual; abstract;
+    { the scroll bar's LineMagnitude (no notification, nothing logged) }
+    procedure SetLineStep(Id: SmallInt; N: SmallInt); virtual;
   end;
 
   { the methods of a game dialog type (TDialog descendant of the original):
@@ -117,6 +119,10 @@ var
   Window: Pointer;             { the parent window the original passes around }
 
 implementation
+
+procedure TDlgControls.SetLineStep(Id: SmallInt; N: SmallInt);
+begin
+end;
 
 var
   LogicNames: array of string;

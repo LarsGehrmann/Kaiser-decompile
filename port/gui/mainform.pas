@@ -165,6 +165,12 @@ begin
     CmdSave: CmSpeichern(FSaveFile = '');
     CmdSaveAs: CmSpeichern(True);
     CmdEndTurn: CmBeenden;
+    201:                                        { CmKornVerteilen 1000:1598 }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_KornVerteilen(Self, FSave.Players[DS.Game.CurrentPlayer], 0);
+        Invalidate;
+      end;
     202:                                        { CmLandHandeln 1000:15d7 }
       if DS.Game.GameState = 1 then
         Do_LandHandeln(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);

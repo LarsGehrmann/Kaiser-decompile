@@ -598,6 +598,7 @@ begin
               OutSize := -1;                            { two records }
             end;
           'Do_LandHandeln': begin Do_LandHandeln(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
+          'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin
               BattleInit(BW, Window, nil, Pl^, Save.Players[ArgI(0)], ArgI(1), ArgI(2));

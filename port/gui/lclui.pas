@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Forms, LCLType, NERes, KaiserTypes, KaiserDS, KaiserUI, Real48,
-  KaiserLCL, KaiserDlgs;
+  KaiserLCL, KaiserDlgs, Rules, Actions;
 
 type
   TLclUI = class(TGameUI)
@@ -100,7 +100,12 @@ var
   S: TFileStream;
 begin
   Result := 0;
-  if Name = 'PlaySound' then
+  { the ported menu actions the turn calls }
+  if Name = 'Do_KornVerteilen' then
+    Do_KornVerteilen(Args[0].P, PPlayer(Args[1].P)^, Byte(Args[2].V))
+  else if Name = 'Do_LandHandeln' then
+    Do_LandHandeln(Args[0].P, PPlayers(Args[1].P)^, Byte(Args[2].V), Byte(Args[3].V))
+  else if Name = 'PlaySound' then
   begin
     { WAVEDATA resource n, played by afplay (sndPlaySound, asynchronous) }
     Data := Exe.FindNamedType('WAVEDATA', '', Word(Args[0].V));

@@ -134,6 +134,7 @@ type
     procedure SetRange(Id: SmallInt; Lo, Hi: SmallInt); override;
     procedure SetPosition(Id: SmallInt; V: SmallInt); override;
     function GetPosition(Id: SmallInt): SmallInt; override;
+    procedure SetLineStep(Id: SmallInt; N: SmallInt); override;
     function AddString(Id: SmallInt; S: PChar): SmallInt; override;
     function GetSelIndex(Id: SmallInt): SmallInt; override;
     function SetSelIndex(Id: SmallInt; I: SmallInt): SmallInt; override;
@@ -810,6 +811,15 @@ end;
 function TFormControls.GetPosition(Id: SmallInt): SmallInt;
 begin
   Result := F.GetPosition(Id);
+end;
+
+procedure TFormControls.SetLineStep(Id: SmallInt; N: SmallInt);
+var
+  Ctl: TControl;
+begin
+  Ctl := F.Item(Id);
+  if Ctl is TScrollBar then
+    TScrollBar(Ctl).SmallChange := N;
 end;
 
 function TFormControls.AddString(Id: SmallInt; S: PChar): SmallInt;
