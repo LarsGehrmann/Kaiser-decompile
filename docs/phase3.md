@@ -56,8 +56,8 @@ original resources. Deliverables: the macOS app and a Windows 11 executable (mil
 | 4 | Turn processing: PlayerTurnStart/End, events, promotion, revolution, AI year | differential tests; whole computer years from savegames | ✅ segment 3 (`port/src/turn.pas`: all 25 logic functions, the rest are dialog classes, plus `FormatPlayerTitle`), segments 2 and 7 (`ai.pas`, all 36), the turn loop of segment 1 (`game.pas`: `NextPlayer`, `CpuTurn`, `ResolveWar`); UI calls replayed (below); 59,039 vectors (1,000 per function) identical, the one exception a test artefact (stale players from an earlier vector, fixed) |
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | ✅ `port/bin/ksrsim` plays a savegame or a new game on (`NewGame`, `EndHumanTurn`, `BeginHumanTurn` in `game.pas`); the humans just end their turns. `tools/emu/sim_compare.sh` runs the same in the emulated original: all 30 savegames (seeds 1–3, up to 300 turns each) and 10 new games of different sizes agree turn by turn, 5,093 turns in all: 97 of 100 games identical to the end, the other 3 identical until the original crashes (an original bug: sabotage action 6 puts a 9th unit into a full Garde, `Ai_ArrangeArmies` then overruns its stack; docs/rules/ai.md) |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | ✅ `port/src/battle.pas`: all logic of the battle window (Init, combat, movement, healing, desertion, the AI, the timer, the human's clicks, buttons and combat options, GetResults); `port/src/war.pas`: segment 4 (BattleSetup, BattleFameAndXp, BattleAftermath, Battle, FightRaiders) and segment 6 (battlefield choice, plunder, burning, massacre, retreat losses). 13,343 vectors over 66 functions identical, from battle states the original's AI played (`port/tests/battle.vec`: 660 of them); 668 whole AI battles from all savegames identical (`battle_compare.py 2 2000`). Found on the way: an endless recursion of the original (`StopTimer` → `AiStep`, battle.md) |
-| 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | |
-| 8 | Windows 11 executable: the same sources built for Win64 (x86_64, LCL win32 widgetset), cross-compiled from macOS (FPC cross compiler `ppcrossx64` and the LCL built for `win64`); the macOS-only parts (sounds via `afplay`, the settings in Application Support) get Windows equivalents (`PlaySound`/`sndPlaySound`, `%APPDATA%\Kaiser`) | the test programs (`ruletest`, `real48test`) pass when run on Windows (or Wine); the GUI starts and plays a game on Windows 11 | |
+| 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | ✅ `port/bin/Kaiser.app` (7a–7d below): every menu command, the dialogs with their ported logic, the battle window, the main window, help; checked by autopilot runs and a visual sweep (below); the manual play-through against DOSBox-X is the user's. Not ported: the MIDI music, the e-mail game |
+| 8 | Windows 11 executable: the same sources built for Win64 (x86_64, LCL win32 widgetset), cross-compiled from macOS (FPC cross compiler `ppcrossx64` and the LCL built for `win64`); the macOS-only parts (sounds via `afplay`, the settings in Application Support) get Windows equivalents (`PlaySound`/`sndPlaySound`, `%APPDATA%\Kaiser`) | the test programs (`ruletest`, `real48test`) pass when run on Windows (or Wine); the GUI starts and plays a game on Windows 11 | built: `port/build-win.sh`, `port/package-win.sh` → `port/bin/Kaiser-win64.zip` (below); not yet run on Windows (no Wine on this Mac: Homebrew's Wine casks are disabled) |
 
 Milestone 7 in steps (the GUI is the UI segments 1, 5, 8, 9, 10 drawing, 12, 13, 15–17 ported
 onto the LCL):
@@ -150,6 +150,31 @@ code found, and fixed:
 Kept as in the original: the "⌘"-like `ORNAMENTICON` and the "U" of `UNIICON` (the icons look
 so), the Lagerhalle count 4 units lower (INVESTDLG template), the clipped descender of the
 fourth line of RANGLISTENDLG (7 units high in the template).
+
+## The Windows build (milestone 8)
+
+- **Cross compiler.** FPC 3.2.2 from source, `make crossinstall CPU_TARGET=x86_64
+  OS_TARGET=win64 PP=fpc OPT="-XR$(xcrun --show-sdk-path) -k-ld_classic"
+  INSTALL_PREFIX=~/kaiser-toolchain/fpc` in `~/kaiser-toolchain/fpc-3.2.2` (outside the
+  project: FPC's makefiles break on the space in "Kaiser decompile"; `-XR` gives the host
+  compiler's link the SDK, `-n` builds have no fpc.cfg). Win64 needs no binutils (internal
+  assembler and linker). x86_64-darwin (to run the x86_64 code under Rosetta) does not build
+  from an arm64 host: internal error 2014051001 in genmath.inc (80-bit extended).
+- **LCL.** In `tools/lazarus`: `packager/registration`, `components/lazutils`,
+  `components/freetype`, then `make lcl LCL_PLATFORM=win32`, all with `CPU_TARGET=x86_64
+  OS_TARGET=win64 PP=ppcrossx64 OPT="-n -Fu<cross units>/*"`. The GUI's unit paths put the
+  LCL before FPC's packages (Free Vision has a `Menus` unit of its own).
+- **Sources.** `{$ifdef windows}`: KAISER.INI, KAISER.SCO and KAISER.REC in
+  `%APPDATA%\Kaiser`, sounds with `sndPlaySound` (what the original calls), no Cocoa
+  appearance. Floating point: `Extended` is `Double` on win64 as on arm64; the game's
+  arithmetic is the integer Real48 emulation anyway.
+- **Build and package.** `port/build-win.sh` → `port/bin/win64/` (Kaiser.exe, ksrtool,
+  ksrsim, ksrbattle, real48test, ruletest); `port/package-win.sh` → `port/bin/Kaiser-win64/`
+  and the zip: `KaiserPort.exe` (Windows ignores case, so not `Kaiser.exe` next to the
+  original's `kaiser.exe`), the original in `Kaiser\`, the vectors in `tests\`, the help
+  (`docs\manual.md`, `extracted\help\KAISER.hpj`) and `run-tests.bat` (the checks of
+  "Running").
+- **Open:** running `run-tests.bat` and a game on Windows 11 (or under Wine).
 
 ## Running
 
