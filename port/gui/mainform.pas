@@ -199,6 +199,30 @@ begin
         Do_HandelMitGuetern(Self, FSave.Players[DS.Game.CurrentPlayer]);
         Invalidate;
       end;
+    213:                                        { CmManoeverAbhalten 1000:18fe }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_ManoeverAbhalten(Self, FSave.Players[DS.Game.CurrentPlayer], DS.Game.CurrentPlayer);
+        Invalidate;
+      end;
+    301:                                        { CmDemographischeDaten 1000:1b70 }
+      if DS.Game.GameState = 1 then
+        Do_DemographischeDaten(Self, 0, FSave.Players[DS.Game.CurrentPlayer]);
+    302:                                        { CmFinanzhaushalt 1000:1b9f }
+      if DS.Game.GameState = 1 then
+      begin
+        Do_Finanzhaushalt(Self, FSave.Players, DS.Game.CurrentPlayer, DS.Game.NumPlayers);
+        Invalidate;
+      end;
+    303:                                        { CmKarriereberatung 1000:1bd9 }
+      if DS.Game.GameState = 1 then
+        Do_Karriereberatung(Self, FSave.Players[DS.Game.CurrentPlayer]);
+    304:                                        { CmInternationalerVergleich 1000:1c42 }
+      if DS.Game.GameState = 1 then
+        Do_InternationalerVergleich(Self, FSave.Players, DS.Game.NumPlayers);
+    306:                                        { CmHofschmiede 1000:1c66 }
+      if DS.Game.GameState = 1 then
+        Do_Hofschmiede(Self, FSave.Players[DS.Game.CurrentPlayer]);
     203:                                        { CmGebaeude 1000:1611 }
       if DS.Game.GameState = 1 then
       begin

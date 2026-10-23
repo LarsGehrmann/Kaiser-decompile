@@ -39,7 +39,7 @@ REGS = {'ax': UC_X86_REG_AX, 'bx': UC_X86_REG_BX, 'cx': UC_X86_REG_CX,
 
 # segments with game logic (the others hold UI code, which tests stub out,
 # and the runtime); their ENTER frames get zeroed locals
-LOGIC_SEGMENTS = (2, 3, 4, 6, 7, 13, 14)
+LOGIC_SEGMENTS = (2, 3, 4, 6, 7, 9, 13, 14)
 
 
 def ghidra_seg(addr):

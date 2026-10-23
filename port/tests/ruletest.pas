@@ -606,6 +606,7 @@ begin
           'Do_Finanzhaushalt': begin Do_Finanzhaushalt(Window, Save.Players, ArgI(0), ArgI(1)); Got := '-'; end;
           'Do_InternationalerVergleich': begin Do_InternationalerVergleich(Window, Save.Players, ArgI(0)); Got := '-'; end;
           'Do_Karriereberatung': begin Do_Karriereberatung(Window, Pl^); Got := '-'; end;
+          'Do_ManoeverAbhalten': begin Do_ManoeverAbhalten(Window, Pl^, ArgI(0)); Got := '-'; end;
           'Do_KornVerteilen': begin Do_KornVerteilen(Window, Pl^, ArgI(0)); Got := '-'; end;
           'BattleInit':
             begin

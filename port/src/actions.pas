@@ -38,6 +38,9 @@ procedure Do_InternationalerVergleich(Parent: Pointer; var Players: TPlayers; Nu
 { Karriereberatung (1040:3a9d): KARRIEREDLG with the promotion criteria, or
   KARRIEREOKDLG when the next title is reached }
 procedure Do_Karriereberatung(Parent: Pointer; P: TPlayer);
+{ Manoever abhalten (1040:4ede): costs money (and an initiative point),
+  every unit of the Heer gains 1..5 experience }
+procedure Do_ManoeverAbhalten(Parent: Pointer; var P: TPlayer; Unused: Word);
 { Korn verteilen (1040:8551): KORNDLG on a copy of the player; Mode 1 (the
   turn start) proposes the need }
 procedure Do_KornVerteilen(Parent: Pointer; var P: TPlayer; Mode: Byte);
@@ -972,6 +975,66 @@ begin
   C.SetCheck(105, Ord(P^.PalaceParts >= DS.PromotionPalaceParts[T]));
   C.SetCheck(106, Ord(P^.CathedralParts >= DS.PromotionCathedralParts[T]));
   C.SetCheck(107, Ord(P^.Taler >= DS.PromotionTaler[T]));
+end;
+
+{ -- Do_ManoeverAbhalten ----------------------------------------------------- }
+
+procedure Do_ManoeverAbhalten(Parent: Pointer; var P: TPlayer; Unused: Word);
+var
+  D: TDialog;
+  Cost: LongInt;
+  Num: array[0..11] of Char;
+  S: array[0..79] of Char;
+  WithIp: Byte;
+  Last, I: Byte;
+  Gains: THeroGains;
+begin
+  if (DS.Game.InitiativeEnabled <> 0) and (P.Initiative <= 0) then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($26B2))]);   { no initiative }
+    UI.Execute(D);
+    UI.Done(D, 1);
+    Exit;
+  end;
+  if (P.Army1Count = 0) or (P.ArmyAway <> 0) then
+  begin
+    D := UI.Dialog('KaiserDlg', $3364, [APtr(Parent), AStr(DSText($26BA))]);   { MANOEVERNODLG }
+    UI.Execute(D);
+    UI.Done(D, 1);
+    Exit;
+  end;
+  Cost := ManoeuvreCost(P);
+  IntToPChar(Num, Cost);
+  if DS.Game.InitiativeEnabled = 0 then
+  begin
+    StrCopy(S, DSText($26EC));
+    StrCat(S, Num);
+    StrCat(S, DSText($26FD));
+    D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText($2705)), AStr(S)]);
+    WithIp := 0;
+  end
+  else
+  begin
+    StrCopy(S, DSText($26C8));
+    StrCat(S, Num);
+    StrCat(S, DSText($26D5));
+    D := UI.Dialog('MessageDlg', $33C6, [APtr(Parent), AStr(DSText($26E0)), AStr(S)]);
+    WithIp := 1;
+  end;
+  if UI.Execute(D) = 1 then
+  begin
+    P.Taler := LongInt(P.Taler - Cost);
+    P.TotalMilitarySpendingQ := LongInt(P.TotalMilitarySpendingQ - Cost);
+    Inc(P.ManoeuvresHeld);
+    P.Initiative := ShortInt(P.Initiative - WithIp);
+    FillChar(Gains, SizeOf(Gains), 0);
+    Last := P.Army1Count;
+    if Last <> 0 then
+      for I := 1 to Last do
+        if UnitGainExperience(P.Army1[I], Gains, Random(5) + 1, P.Spell) then
+          UI.Call('ShowHeroLevelUp', [APtr(Parent), ARec(@Gains, SizeOf(Gains))]);
+  end;
+  UI.Done(D, 1);
 end;
 
 { -- Do_KornVerteilen ------------------------------------------------------ }

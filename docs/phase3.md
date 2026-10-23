@@ -198,7 +198,7 @@ their templates:
   and script runner; the GUI binds the same classes to LCL forms (`TLogicDialog`).
 
 `port/tests/actions.vec`: `Do_LandHandeln` (50), `Do_KornVerteilen` (100), `Do_Gebaeude` (100), `Do_SteuernFestsetzen` (100),
-`Do_HandelMitGuetern` with the Prokurist (100).
+`Do_HandelMitGuetern` with the Prokurist (100), `Do_Hofschmiede` (50), `Do_DemographischeDaten`, `Do_Finanzhaushalt`, `Do_InternationalerVergleich`, `Do_Karriereberatung`, `Do_ManoeverAbhalten` (100 each). Segment 9 frames are zeroed like the logic segments.
 
 ## The headless simulator
 
