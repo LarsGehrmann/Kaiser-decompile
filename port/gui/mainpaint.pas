@@ -90,6 +90,9 @@ function LastGameTool(Bar: TKaiserToolbar): Integer;
 
 implementation
 
+uses
+  HelpView;
+
 const
   ClGray = $C0C0C0;           { RGB(192, 192, 192) pens, LTGRAY_BRUSH }
   ClDark = $808080;           { RGB(128, 128, 128) toolbar shadow pen }
@@ -794,8 +797,17 @@ var
   I: Integer;
 begin
   inherited MouseDown(Button, Shift, X, Y);
+  if Button = mbRight then
+  begin
+    { the context help (1080:0991 / VMT DS:44c4: WinHelp HELP_CONTEXTPOPUP,
+      the command + 1000) }
+    for I := 0 to High(FTools) do
+      if HitTest(I, X, Y) then
+        ShowHelpTopic(FTools[I].Cmd + 1000);
+    Exit;
+  end;
   if Button <> mbLeft then
-    Exit;     { the right button opens the context help popup (Cmd + 1000) in the original }
+    Exit;
   FCaptured := -1;
   for I := 0 to High(FTools) do
     if HitTest(I, X, Y) then

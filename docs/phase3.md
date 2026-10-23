@@ -113,8 +113,9 @@ GUI links with `-k-ld_classic`.
   restore (WMSize), EndGame and "Schalmeienklänge", stopped by a minimise, the painting of a
   game and the window's end; Windows: MCI (`mciSendString`), macOS: `AVMIDIPlayer` with the
   system's General MIDI sounds.
-- **Not ported / different:** the toolbar's right-click context help (WinHelp
-  HELP_CONTEXTPOPUP, command + 1000); map clicks do
+- **Toolbar right click:** the help topic command + 1000 (1080:0991, WinHelp
+  HELP_CONTEXTPOPUP), in the help window.
+- **Not ported / different:** map clicks do
   nothing without a running game (the original reads the stale player); for
   1024×768 the original enables toolbar indices up to DS:4556 = 72 and stops with runtime error
   213 (ui-infra.md), the port clamps to the last tool; after a resolution change the window keeps
