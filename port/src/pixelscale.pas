@@ -13,11 +13,18 @@ unit PixelScale;
 interface
 
 type
+  { how pictures are made larger: xBRZ-style edge blending (the default),
+    ScaleNx (Scale2x / Scale3x, sharper), or plain big pixels }
+  TScaleMethod = (smXBRZ, smScaleNx, smNearest);
+
   { pixels $AARRGGBB, row by row from the top }
   TPixImage = record
     W, H: Integer;
     Px: array of LongWord;
   end;
+
+var
+  ScaleMethod: TScaleMethod = smXBRZ;
 
 function NewPixImage(W, H: Integer): TPixImage;
 function Scale2x(const S: TPixImage): TPixImage;
@@ -31,6 +38,9 @@ function SupportedFactor(N: Integer): Integer;
 function LowerFactor(N: Integer): Integer;
 
 implementation
+
+uses
+  XBRZ;
 
 function NewPixImage(W, H: Integer): TPixImage;
 begin
@@ -119,17 +129,35 @@ end;
 
 function ScalePix(const S: TPixImage; N: Integer): TPixImage;
 begin
-  { the factors of 2x and 3x steps; others the next larger of them }
-  case SupportedFactor(N) of
-    1: Result := S;
-    2: Result := Scale2x(S);
-    3: Result := Scale3x(S);
-    4: Result := Scale2x(Scale2x(S));
-    6: Result := Scale2x(Scale3x(S));
-    8: Result := Scale2x(Scale2x(Scale2x(S)));
-    9: Result := Scale3x(Scale3x(S));
+  N := SupportedFactor(N);
+  if N = 1 then
+    Exit(S);
+  case ScaleMethod of
+    smNearest:
+      Result := ScaleNearest(S, N);
+    smScaleNx:
+      { the factors of 2x and 3x steps }
+      case N of
+        2: Result := Scale2x(S);
+        3: Result := Scale3x(S);
+        4: Result := Scale2x(Scale2x(S));
+        6: Result := Scale2x(Scale3x(S));
+        8: Result := Scale2x(Scale2x(Scale2x(S)));
+        9: Result := Scale3x(Scale3x(S));
+      else
+        Result := Scale2x(Scale2x(Scale3x(S)));      { 12 }
+      end;
   else
-    Result := Scale2x(Scale2x(Scale3x(S)));          { 12 }
+    { xBRZ at 2, 3, 4; larger ones its 3x / 4x in exact big pixels (the
+      window scales the picture down smoothly from there) }
+    case N of
+      2, 3, 4: Result := ScaleXBRZ(S, N);
+      6: Result := ScaleNearest(ScaleXBRZ(S, 3), 2);
+      8: Result := ScaleNearest(ScaleXBRZ(S, 4), 2);
+      9: Result := ScaleNearest(ScaleXBRZ(S, 3), 3);
+    else
+      Result := ScaleNearest(ScaleXBRZ(S, 4), 3);    { 12 }
+    end;
   end;
 end;
 

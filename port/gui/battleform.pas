@@ -284,9 +284,9 @@ begin
   FGrass := TBitmap.Create;
   FGrass.SetSize(Z(MapW), Z(MapH));
   if B^.Winter <> 0 then
-    Bmp := ScaledBitmap('SCHNEE', 0, FF)
+    Bmp := ScaledPattern('SCHNEE', FF)
   else
-    Bmp := ScaledBitmap('LAND', 0, FF);
+    Bmp := ScaledPattern('LAND', FF);
   if Bmp <> nil then
   begin
     Y := 0;

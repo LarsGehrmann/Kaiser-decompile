@@ -18,11 +18,21 @@ function FromPix(const P: TPixImage): TBitmap;
 function ScaledSprite(Id: Word; N: Integer): TBitmap;
 { the BITMAP resource (KaiserLCL.ResBitmap) N times larger }
 function ScaledBitmap(const Name: RawByteString; Id: Word; N: Integer): TBitmap;
+{ a tiling pattern (8 x 8 brushes: LAND, MUSTER, MAUER, SCHNEE) N times
+  larger with its edges scaled as the neighbouring tiles continue them (no
+  seams between the tiles) }
+function ScaledPattern(const Name: RawByteString; N: Integer): TBitmap;
 { any bitmap N times larger, kept by its address: a bitmap that is freed
   must be forgotten first (ForgetScaled), or a new one at the same address
   would get its picture }
 function ScaledOf(B: TBitmap; N: Integer): TBitmap;
 procedure ForgetScaled(B: TBitmap);
+{ a bitmap shown transparent the Windows way (its bottom-left colour is
+  the see-through one) N times larger, that colour turned into real
+  transparency first (scaling would blend it into its neighbours) }
+function ScaledKeyed(B: TBitmap; N: Integer): TBitmap;
+{ all scaled pictures away (another ScaleMethod) }
+procedure ClearScaled;
 
 implementation
 
@@ -90,12 +100,10 @@ begin
   K := Cache.IndexOf(Key);
   if K >= 0 then
     Exit(TBitmap(Cache.Objects[K]));
-  if Src = nil then
-    Result := nil
-  else if N <= 1 then
-    Result := Src
-  else
-    Result := FromPix(ScalePix(ToPix(Src), N));
+  { (factor 1 is the picture itself: not kept, the cache owns its entries) }
+  if (Src = nil) or (N <= 1) then
+    Exit(Src);
+  Result := FromPix(ScalePix(ToPix(Src), N));
   Cache.AddObject(Key, Result);
 end;
 
@@ -153,10 +161,71 @@ begin
   for I := Cache.Count - 1 downto 0 do
     if Copy(Cache[I], 1, Length(Prefix)) = Prefix then
     begin
-      if Cache.Objects[I] <> B then
-        Cache.Objects[I].Free;
+      Cache.Objects[I].Free;
       Cache.Delete(I);
     end;
+end;
+
+function ScaledPattern(const Name: RawByteString; N: Integer): TBitmap;
+var
+  K, X, Y: Integer;
+  Key: string;
+  Src: TBitmap;
+  P, T, Big: TPixImage;
+begin
+  N := SupportedFactor(N);
+  Src := ResBitmap(Name);
+  if (Src = nil) or (N <= 1) then
+    Exit(Src);
+  Key := 'T' + UpperCase(Name) + 'x' + IntToStr(N);
+  K := Cache.IndexOf(Key);
+  if K >= 0 then
+    Exit(TBitmap(Cache.Objects[K]));
+  { 3 x 3 copies scaled, the middle one kept }
+  P := ToPix(Src);
+  T := NewPixImage(P.W * 3, P.H * 3);
+  for Y := 0 to T.H - 1 do
+    for X := 0 to T.W - 1 do
+      T.Px[Y * T.W + X] := P.Px[(Y mod P.H) * P.W + X mod P.W];
+  Big := ScalePix(T, N);
+  P := NewPixImage(Src.Width * N, Src.Height * N);
+  for Y := 0 to P.H - 1 do
+    for X := 0 to P.W - 1 do
+      P.Px[Y * P.W + X] := Big.Px[(Y + P.H) * Big.W + X + P.W];
+  Result := FromPix(P);
+  Cache.AddObject(Key, Result);
+end;
+
+function ScaledKeyed(B: TBitmap; N: Integer): TBitmap;
+var
+  K, I: Integer;
+  Key: string;
+  P: TPixImage;
+  KeyColor: LongWord;
+begin
+  if B = nil then
+    Exit(nil);
+  N := SupportedFactor(N);
+  Key := 'K' + IntToHex(PtrUInt(B), 16) + 'x' + IntToStr(N);
+  K := Cache.IndexOf(Key);
+  if K >= 0 then
+    Exit(TBitmap(Cache.Objects[K]));
+  P := ToPix(B);
+  KeyColor := P.Px[(P.H - 1) * P.W];
+  for I := 0 to High(P.Px) do
+    if P.Px[I] = KeyColor then
+      P.Px[I] := 0;
+  Result := FromPix(ScalePix(P, N));
+  Cache.AddObject(Key, Result);
+end;
+
+procedure ClearScaled;
+var
+  I: Integer;
+begin
+  for I := 0 to Cache.Count - 1 do
+    Cache.Objects[I].Free;
+  Cache.Clear;
 end;
 
 initialization

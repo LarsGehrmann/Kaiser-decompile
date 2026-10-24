@@ -58,6 +58,7 @@ end;
 var
   S, R: TPixImage;
   N, I: Integer;
+  M: TScaleMethod;
   Same: Boolean;
 begin
   { a white corner on black: W B / B B }
@@ -71,19 +72,24 @@ begin
   { transparency is a colour of its own: a sprite corner against it }
   S := Img(2, 2, [B, T, T, T]);
   Check(Rows(Scale2x(S), 0, 0, 2) = 'BB/BT', 'Scale2x transparent corner');
-  { uniform stays uniform, every factor; the sizes }
+  { uniform stays uniform, every factor and method; the sizes }
   S := Img(3, 2, [B, B, B, B, B, B]);
-  for N := 1 to 12 do
+  for M := Low(TScaleMethod) to High(TScaleMethod) do
   begin
-    R := ScalePix(S, N);
-    Check((R.W = 3 * SupportedFactor(N)) and (R.H = 2 * SupportedFactor(N)),
-      'ScalePix size ' + IntToStr(N));
-    Same := True;
-    for I := 0 to High(R.Px) do
-      if R.Px[I] <> B then
-        Same := False;
-    Check(Same, 'uniform at ' + IntToStr(N));
+    ScaleMethod := M;
+    for N := 1 to 12 do
+    begin
+      R := ScalePix(S, N);
+      Check((R.W = 3 * SupportedFactor(N)) and (R.H = 2 * SupportedFactor(N)),
+        'ScalePix size ' + IntToStr(N));
+      Same := True;
+      for I := 0 to High(R.Px) do
+        if R.Px[I] <> B then
+          Same := False;
+      Check(Same, 'uniform at ' + IntToStr(N));
+    end;
   end;
+  ScaleMethod := smScaleNx;
   Check(SupportedFactor(5) = 6, 'factor 5 -> 6');
   Check(SupportedFactor(7) = 8, 'factor 7 -> 8');
   Check(SupportedFactor(10) = 12, 'factor 10 -> 12');
@@ -93,6 +99,21 @@ begin
   S := Img(2, 3, [W, B, W, B, W, B]);
   R := Scale2x(S);
   Check(Rows(R, 0, 0, 4) = 'WWBB/WWBB/WWBB/WWBB', 'Scale2x straight edge: ' + Rows(R, 0, 0, 4));
+  { xBRZ: a diagonal edge gets blended pixels, a straight one does not }
+  ScaleMethod := smXBRZ;
+  S := Img(4, 4, [W, W, W, B,  W, W, B, B,  W, B, B, B,  B, B, B, B]);
+  R := ScalePix(S, 4);
+  Same := True;
+  for I := 0 to High(R.Px) do
+    if (R.Px[I] <> W) and (R.Px[I] <> B) then
+      Same := False;
+  Check(not Same, 'xBRZ blends a diagonal');
+  S := Img(2, 3, [W, B, W, B, W, B]);
+  R := ScalePix(S, 3);
+  Check(Rows(R, 0, 0, 6) = 'WWWBBB/WWWBBB/WWWBBB/WWWBBB/WWWBBB/WWWBBB', 'xBRZ straight edge: ' + Rows(R, 0, 0, 6));
+  S := Img(2, 2, [B, T, T, T]);
+  R := ScalePix(S, 2);
+  Check(R.Px[0] = B, 'xBRZ keeps the corner pixel');
   if Failed = 0 then
     WriteLn('scaletest: all passed')
   else

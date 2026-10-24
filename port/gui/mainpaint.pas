@@ -227,7 +227,7 @@ begin
     Exit;
   end;
   { the 8x8 pattern scaled, its tiles aligned to the DC's origin as before }
-  P := ScaledBitmap(Name, 0, RenderScale);
+  P := ScaledPattern(Name, RenderScale);
   if P = nil then
     Exit;
   TS := 8 * RenderScale;

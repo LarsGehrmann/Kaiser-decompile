@@ -5,8 +5,9 @@ differential tests. The branch `remastered` builds a modernised game on top of i
 
 ## Decisions (2026-10-24)
 
-- **Graphics:** a pixel-art scaler computed by the game at start (ScaleNx now, xBRZ-style edge
-  scaling later): sharp at any size, the original look, no external tools.
+- **Graphics:** a pixel-art scaler computed by the game when a picture is first needed
+  (xBRZ-style edge blending; ScaleNx and plain big pixels to choose): sharp at any size, the
+  original look, no external tools.
 - **Game:** crashes and clear bugs of the original are fixed; the rules and the balance stay the
   original's, and savegames stay compatible both ways.
 - **Windows:** freely resizable (and full screen): the main window, the battle and the dialogs
@@ -33,8 +34,8 @@ differential tests. The branch `remastered` builds a modernised game on top of i
 | R3 | The dialogs scaled: template layout and fonts × `s`, the painted parts (troop grids, unit card, portraits, the war map, the crown) through the scaled canvas | every dialog of the autopilot sweep at 1× and 2× ✅ |
 | R4 | The battle window scaled (map, units, status panels, buttons, cursors) | autopilot battles at 1× and 2× ✅ |
 | R5 | The original's bugs fixed (list below), each with a test; the differential tests stay green where the rules are untouched | ✅ |
-| R6 | A better scaler (xBRZ-style edge detection) replacing ScaleNx; quality settings | side-by-side shots |
-| R7 | The Windows build of the remastered game; packaging | the zip like `main`'s |
+| R6 | A better scaler (xBRZ-style edge detection) replacing ScaleNx; quality settings | ✅ `port/src/xbrz.pas` (2×–4×, larger factors in exact big pixels on top); patterns scaled seamlessly (3×3 tiles); Windows-transparent bitmaps keyed first; menu "Grafik" (weich / scharf / Pixel), INI key `Grafik` |
+| R7 | The Windows build of the remastered game; packaging | ✅ built (`port/build-win.sh`, `port/package-win.sh` with `scaletest` and `fixtest`); not yet run on Windows |
 
 ## The original's bugs (R5)
 

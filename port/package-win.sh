@@ -14,7 +14,7 @@ OUT=port/bin/Kaiser-win64
 rm -rf "$OUT" port/bin/Kaiser-win64.zip
 mkdir -p "$OUT/tests" "$OUT/docs" "$OUT/extracted/help" "$OUT/Kaiser"
 cp port/bin/win64/Kaiser.exe "$OUT/KaiserPort.exe"
-cp port/bin/win64/{ksrtool,ksrsim,ksrbattle,real48test,ruletest}.exe "$OUT/"
+cp port/bin/win64/{ksrtool,ksrsim,ksrbattle,real48test,ruletest,scaletest,fixtest}.exe "$OUT/"
 cp port/tests/*.vec "$OUT/tests/"
 cp docs/manual.md "$OUT/docs/"
 cp extracted/help/KAISER.hpj "$OUT/extracted/help/"
@@ -25,6 +25,8 @@ cp Kaiser/* "$OUT/Kaiser/"
   printf 'cd /d "%%~dp0"\r\n'
   printf 'for %%%%f in (Kaiser\\*.KSR) do ksrtool.exe roundtrip "%%%%f"\r\n'
   printf 'real48test.exe tests\\real48.vec\r\n'
+  printf 'scaletest.exe\r\n'
+  printf 'fixtest.exe\r\n'
   for v in rules turn battle actions troops dialogs; do
     printf 'ruletest.exe Kaiser tests\\%s.vec\r\n' "$v"
   done

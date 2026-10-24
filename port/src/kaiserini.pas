@@ -10,7 +10,7 @@ unit KaiserIni;
 interface
 
 uses
-  SysUtils, IniFiles, Strings, KaiserDS;
+  SysUtils, IniFiles, Strings, KaiserDS, PixelScale;
 
 { Unit18_InitGlobals: background RGB(255,255,172), Delta 0/0, Schlacht-Timer
   400, the runtime name tables from the built-in names, no human names }
@@ -73,6 +73,14 @@ begin
     DS.OptSound := OnOff(Ini, 'Krach & Geschrei', 'an');
     DS.OptMusic := OnOff(Ini, 'Schalmeienkl'#$E4'nge', 'an');
     DS.OptDebug := OnOff(Ini, 'Debug', 'aus');
+    { remastered: how the pictures are made larger }
+    S := Ini.ReadString(Section, 'Grafik', 'xBRZ');
+    if CompareText(S, 'ScaleNx') = 0 then
+      ScaleMethod := smScaleNx
+    else if CompareText(S, 'Pixel') = 0 then
+      ScaleMethod := smNearest
+    else
+      ScaleMethod := smXBRZ;
     S := Ini.ReadString(Section, 'Aufl'#$F6'sung', '640x480');
     if CompareText(S, '800x600') = 0 then
       DS.OptResolution := 1
@@ -106,6 +114,7 @@ procedure WriteSettings(const FileName: string);
 const
   AnAus: array[Boolean] of RawByteString = ('aus', 'an');
   Res: array[0..2] of RawByteString = ('640x480', '800x600', '1024x768');
+  Methods: array[TScaleMethod] of RawByteString = ('xBRZ', 'ScaleNx', 'Pixel');
 var
   Ini: TIniFile;
   I: Integer;
@@ -117,6 +126,7 @@ begin
     Ini.WriteString(Section, 'Krach & Geschrei', AnAus[DS.OptSound <> 0]);
     Ini.WriteString(Section, 'Schalmeienkl'#$E4'nge', AnAus[DS.OptMusic <> 0]);
     Ini.WriteString(Section, 'Aufl'#$F6'sung', Res[DS.OptResolution mod 3]);
+    Ini.WriteString(Section, 'Grafik', Methods[ScaleMethod]);
     Ini.WriteInteger(Section, 'Hintergrund rot', DS.OptBackground[0]);
     Ini.WriteInteger(Section, 'Hintergrund gr'#$FC'n', DS.OptBackground[1]);
     Ini.WriteInteger(Section, 'Hintergrund blau', DS.OptBackground[2]);

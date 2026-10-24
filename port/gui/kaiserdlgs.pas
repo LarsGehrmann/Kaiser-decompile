@@ -613,7 +613,7 @@ begin
   B := Buffer(112, 112, DialogBackground);
   try
     Cv := B.Canvas;
-    Wall := ScaledBitmap('MAUER', 0, FF);
+    Wall := ScaledPattern('MAUER', FF);
     if Wall <> nil then
     begin
       Cv.Brush.Bitmap := Wall;
@@ -737,7 +737,7 @@ var
 begin
   B := Buffer(64, 64, clGreen);
   try
-    Land := ScaledBitmap('LAND', 0, FF);
+    Land := ScaledPattern('LAND', FF);
     if Land <> nil then
       B.Canvas.Brush.Bitmap := Land;
     B.Canvas.Pen.Color := clBlack;

@@ -10,7 +10,7 @@ interface
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
   NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music, Math, PixelScale,
-  MacAppearance;
+  MacAppearance, RGraphics;
 
 type
   TKaiserForm = class(TForm)
@@ -33,6 +33,7 @@ type
     procedure FormMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
     procedure BuildMenu;
+    procedure AddGraphicsItems;
     procedure AddItems(Into: TMenuItem; const M: TMenuTemplate);
     procedure MenuClick(Sender: TObject);
     function FindItem(Id: Word): TMenuItem;
@@ -506,10 +507,39 @@ begin
   end;
 end;
 
+{ remastered: "Grafik" after the resolutions (commands 650..652: the
+  scaler xBRZ, ScaleNx, big pixels) }
+procedure TKaiserForm.AddGraphicsItems;
+const
+  Names: array[0..2] of string = ('Grafik: weich (xBRZ)', 'Grafik: scharf (ScaleNx)',
+    'Grafik: Pixel');
+var
+  Res, Into, MI: TMenuItem;
+  I: Integer;
+begin
+  Res := FindItem(611);
+  if Res = nil then
+    Exit;
+  Into := Res.Parent;
+  MI := TMenuItem.Create(Self);
+  MI.Caption := '-';
+  Into.Add(MI);
+  for I := 0 to 2 do
+  begin
+    MI := TMenuItem.Create(Self);
+    MI.Caption := Names[I];
+    MI.Tag := 650 + I;
+    MI.RadioItem := True;
+    MI.OnClick := @MenuClick;
+    Into.Add(MI);
+  end;
+end;
+
 procedure TKaiserForm.BuildMenu;
 begin
   FMenu := TMainMenu.Create(Self);
   AddItems(FMenu.Items, Exe.Menu('MAINMENU'));
+  AddGraphicsItems;
   Menu := FMenu;
 end;
 
@@ -567,6 +597,8 @@ begin
   EnableCommand(CmdEndTurn, Running);
   { UpdateSettingsMenu (1060:019c) }
   CheckCommand(601, DS.OptAutosave <> 0);
+  for I := 0 to 2 do
+    CheckCommand(650 + I, Ord(ScaleMethod) = I);
   CheckCommand(602, DS.OptSound <> 0);
   CheckCommand(603, DS.OptMusic <> 0);
   for I := 0 to 2 do
@@ -804,6 +836,12 @@ begin
         DS.OptMusic := Ord(DS.OptMusic = 0);
       end;
     610..612: SetResolution(Id - 610);              { Cm640x480, Cm800x600, CmResolution1024 }
+    650..652:                                   { remastered: the scaler }
+      begin
+        ScaleMethod := TScaleMethod(Id - 650);
+        ClearScaled;
+        Invalidate;
+      end;
     501, 503: CmHilfe;                              { Hilfe, Ueber die Hilfe }
     701..708:                                   { Berichte: the reports at turn start }
       if DS.Game.GameState = 1 then

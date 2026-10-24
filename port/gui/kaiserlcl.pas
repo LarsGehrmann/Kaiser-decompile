@@ -451,8 +451,7 @@ begin
       if Bmp <> nil then
       begin
         { remastered: the scaler's picture shown DialogScale times larger }
-        TImage(C).Picture.Assign(ScaledOf(Bmp, DialogFactor));
-        TImage(C).Transparent := True;
+        TImage(C).Picture.Assign(ScaledKeyed(Bmp, DialogFactor));
         TImage(C).Stretch := True;
         TImage(C).AntialiasingMode := amOn;
         TImage(C).SetBounds(0, 0, Round(Bmp.Width * DialogScale), Round(Bmp.Height * DialogScale));
