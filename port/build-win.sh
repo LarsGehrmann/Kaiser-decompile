@@ -20,6 +20,7 @@ cross tools/ksrbattle.pas
 cross tests/real48test.pas
 cross tests/ruletest.pas
 cross tests/scaletest.pas
+cross tests/fixtest.pas
 if [ "${1:-}" != "--no-gui" ]; then
   gui/build-win.sh
 fi

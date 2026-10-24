@@ -358,7 +358,9 @@ end;
 
 procedure Ai_ArrangeArmies(var P: TPlayer; Mode: Byte);
 var
-  T: array[0..16] of TUnit;
+  { remastered: room for all 17 units (8 Heer, 9 Garde); the original's 16
+    overran the stack with a full army: a crash (docs/remastered.md) }
+  T: array[0..17] of TUnit;
   Tmp: TUnit;
   I, J, Last, Total, N1: Byte;
 begin

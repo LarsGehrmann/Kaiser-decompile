@@ -460,7 +460,7 @@ begin
   D.Data[$81] := P^.Title;
   D.Data[$82] := P^.IsFemale;
   FormatPlayerTitle(P^, Buf, 0, 0);
-  StrCopy(PChar(@D.Data[$2E]), Buf);
+  StrLCopy(PChar(@D.Data[$2E]), Buf, 80);             { (remastered: within its 81 bytes) }
   UI.ExecDialog(D);
   P^.Title := T;
   GainFame(P^.Fame, 10);

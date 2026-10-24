@@ -1514,12 +1514,25 @@ begin
   B.CursorShown := 0;
 end;
 
+var
+  StopTimerTick: Boolean = False;
+
 procedure StopTimer(var B: TBattleWnd);
 begin
   { KillTimer; a hidden cursor is drawn again by a WM_TIMER sent at once,
-    which for a computer side runs a whole AI step }
-  if B.CursorShown = 0 then
-    WMTimer(B);
+    which for a computer side runs a whole AI step. Remastered: not again
+    from inside that step: AiStep's retreat calls StopTimer, and for a
+    certain retreat (a fleeing hero) the original recursed until the stack
+    overflowed (docs/rules/battle.md) }
+  if (B.CursorShown = 0) and not StopTimerTick then
+  begin
+    StopTimerTick := True;
+    try
+      WMTimer(B);
+    finally
+      StopTimerTick := False;
+    end;
+  end;
 end;
 
 procedure WMTimer(var B: TBattleWnd);

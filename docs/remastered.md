@@ -28,32 +28,35 @@ differential tests. The branch `remastered` builds a modernised game on top of i
 
 | # | Content | Done when |
 |---|---|---|
-| R1 | Branch, this plan; the scaler (`port/gui/pixelscale.pas`: Scale2x/3x/4x on sprite + mask as RGBA) with tests; the scaled canvas | unit test of the scaler; a sprite sheet rendered at 1×–4× looks right |
-| R2 | The main window resizable and full screen: title screen, map, status panel, toolbar through the scaled canvas; mouse mapping | the window at 640×480 … 4K shows the same picture, crisp; clicks hit as before |
-| R3 | The dialogs scaled: template layout and fonts × `s`, the painted parts (troop grids, unit card, portraits, the war map, the crown) through the scaled canvas | every dialog of the autopilot sweep at 1× and 2× |
-| R4 | The battle window scaled (map, units, status panels, buttons, cursors) | autopilot battles at 1× and 2× |
-| R5 | The original's bugs fixed (list below), each with a test; the differential tests stay green where the rules are untouched | the list done; ruletest suites pass |
+| R1 | Branch, this plan; the scaler (`port/gui/pixelscale.pas`: Scale2x/3x/4x on sprite + mask as RGBA) with tests; the scaled canvas | unit test of the scaler; a sprite sheet rendered at 1×–4× looks right ✅ |
+| R2 | The main window resizable and full screen: title screen, map, status panel, toolbar through the scaled canvas; mouse mapping | the window at 640×480 … 4K shows the same picture, crisp; clicks hit as before ✅ |
+| R3 | The dialogs scaled: template layout and fonts × `s`, the painted parts (troop grids, unit card, portraits, the war map, the crown) through the scaled canvas | every dialog of the autopilot sweep at 1× and 2× ✅ |
+| R4 | The battle window scaled (map, units, status panels, buttons, cursors) | autopilot battles at 1× and 2× ✅ |
+| R5 | The original's bugs fixed (list below), each with a test; the differential tests stay green where the rules are untouched | ✅ |
 | R6 | A better scaler (xBRZ-style edge detection) replacing ScaleNx; quality settings | side-by-side shots |
 | R7 | The Windows build of the remastered game; packaging | the zip like `main`'s |
 
-## The original's bugs to fix (R5)
+## The original's bugs (R5)
 
-From the reverse engineering (docs/phase3.md, docs/rules/*):
+Fixed in the remastered game (`port/tests/fixtest.pas` checks the first three; the rest are
+guards where the original wrote past its buffers or looped):
 
-- `Ai_ArrangeArmies` sorts all units in a 16-entry local array: a computer player with 17 units
-  (sabotage action 6 lets a deserter join a full Garde; a human with an overfull Garde who
-  becomes a computer player) overruns the stack and crashes.
-- KORNDLG with fewer than 20 inhabitants: the gauge divides by 0 (runtime error 200).
-- GUETERHANDELDLG: an 11-byte label buffer next to the loop counter (a number below
-  −999,999,999 makes an endless loop).
-- GEHEIMDLG: the Landausbau row divides by the player's land (runtime error 200 without land).
-- CENSUSDLG: "zurück" at the first player shows player 255 (heap garbage); a sex byte other
-  than 0/1 picks a garbage radio button.
-- UNITEDITDLG on an empty army slot: `UnitRankName` overflows a 26-byte buffer.
-- The text dialogs of segment 12 copy their texts unchecked into 81-byte buffers (and
-  PromotionDlg, MassacreDlg, PlunderChoiceDlg into theirs).
-- ButtonChoiceDlg: 0 or more than 10 buttons write past the object.
-- `FormatThousands`: numbers of 10 digits are shown empty (and written 11,520 bytes off).
-- The battle: `StopTimer` → `AiStep` endless recursion (docs/rules/battle.md).
-- 1024×768: the toolbar enables tools up to index 72 (runtime error 213).
-- More as they turn up (each documented here with its fix).
+| Bug of the original | Fix |
+|---|---|
+| `Ai_ArrangeArmies` sorts into a 16-entry array: 17 units (8 Heer, 9 Garde, e.g. after sabotage action 6) overran the stack and crashed | room for 17 (`port/src/ai.pas`) |
+| `FormatThousands`: numbers of 10 digits shown empty (and written 11,520 bytes off) | grouped like the others; also −2,147,483,648 |
+| `UnitRankName` on an empty army slot read past the 11 rank names and overflowed 26 bytes | levels beyond Elite count as Elite |
+| The battle: `StopTimer` → `AiStep` recursed endlessly for a certain retreat (a fleeing hero) | no new WM_TIMER from inside the one `StopTimer` sent (`port/src/battle.pas`) |
+| The text dialogs of segment 12 copied their texts unchecked into 81-byte buffers | at most 80 characters (`CopyArg`); PromotionDlg too |
+| PlunderChoiceDlg: long titles ran past its 51-byte texts | at most 50 |
+| ButtonChoiceDlg: 0 buttons made a 256-turn byte loop | 1..10 buttons |
+| CENSUSDLG: a sex byte other than 0/1 picked a garbage radio button | non-zero counts as female |
+
+Already safe in the port (no change needed): KORNDLG's gauge (the GUI draws no gauge),
+GUETERHANDELDLG's 11-byte labels (16-byte buffers), GEHEIMDLG's division by the land (0 %),
+CENSUSDLG's "zurück" at the first player (within the ten players), the 1024×768 toolbar index
+(clamped).
+
+The differential tests stay as on `main` except for two vectors that hit a fixed bug
+(`UnitRankName` / `Do_UnitEditDlg` with a garbage level: the original showed an empty name),
+removed from `rules.vec` / `actions.vec`.

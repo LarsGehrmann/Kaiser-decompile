@@ -345,8 +345,9 @@ begin
   FillChar(LoseTitle, SizeOf(LoseTitle), 0);
   FormatPlayerTitle(Winner, WinTitle, 0, 0);
   FormatPlayerTitle(Loser, LoseTitle, 0, 0);
-  StrCopy(PChar(@D.Data[$34]), WinTitle);
-  StrCopy(PChar(@D.Data[$67]), LoseTitle);
+  { remastered: within the 51-byte texts (a long title ran into the next) }
+  StrLCopy(PChar(@D.Data[$34]), WinTitle, 50);
+  StrLCopy(PChar(@D.Data[$67]), LoseTitle, 50);
   Choice := Byte(UI.Execute(D));
   UI.Done(D, 1);
   case Choice of

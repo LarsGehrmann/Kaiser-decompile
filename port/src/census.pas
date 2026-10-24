@@ -169,8 +169,10 @@ begin
   SetNum(C, 115, P^.Lifetime);
   C.SetSelIndex(201, P^.Title);
   C.SetSelIndex(202, P^.Spell);
-  C.SetCheck(501 + P^.IsFemale, 1);                       { (radio +0x44da + sex*4) }
-  C.SetCheck(501 + (P^.IsFemale + 1) mod 2, 0);
+  { (radio +0x44da + sex*4); remastered: a sex byte other than 0/1 picked
+    a garbage radio button: it counts as female }
+  C.SetCheck(501 + Ord(P^.IsFemale <> 0), 1);
+  C.SetCheck(501 + Ord(P^.IsFemale = 0), 0);
   C.SetPosition(601, P^.CpuLevel);
   C.SetPosition(701, P^.AiAggressionQ);
   SetNum(C, 602, P^.CpuLevel);

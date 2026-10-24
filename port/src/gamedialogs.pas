@@ -233,11 +233,13 @@ begin
   Move(D.Data[Off], Result, 4);
 end;
 
-{ StrCopy of a string argument into the object (nil: nothing) }
+{ StrCopy of a string argument into the object's 81-byte text (nil:
+  nothing). Remastered: at most 80 characters (the original copied without
+  a limit into the next text and the static control's pointer behind it) }
 procedure CopyArg(D: TDialog; Off: Word; const A: TUIArg);
 begin
   if (A.Kind = uaStr) and (PtrUInt(A.P) >= $10000) then
-    StrCopy(PChar(@D.Data[Off]), PChar(A.P));
+    StrLCopy(PChar(@D.Data[Off]), PChar(A.P), 80);
 end;
 
 procedure DisableButton2(D: TDialog);
@@ -432,6 +434,12 @@ procedure TButtonChoiceDlg.SetupWindow;
 var
   I, Last: Byte;
 begin
+  { remastered: 1..10 buttons (0 made the original's byte loop create 256
+    and write past the object) }
+  if D.Data[$2E] = 0 then
+    D.Data[$2E] := 1;
+  if D.Data[$2E] > 10 then
+    D.Data[$2E] := 10;
   Last := Byte(D.Data[$2E] - 1);
   I := 0;
   repeat

@@ -2045,8 +2045,12 @@ begin
       StrCat(Dest, Tmp);
     end;
   end
+  else if U.Level <= 3 then
+    StrCopy(Dest, DS.RankNames[U.Level])
   else
-    StrCopy(Dest, DS.RankNames[U.Level]);
+    { remastered: a level beyond Elite (an empty army slot's garbage) read
+      past the 11 names and overflowed the caller's 26 bytes }
+    StrCopy(Dest, DS.RankNames[3]);
 end;
 
 procedure RaiderVictoryReward(var P: TPlayer; Kind: Byte);
@@ -2485,7 +2489,9 @@ var
   Len, OutLen, Count, I, K: SmallInt;
 begin
   { digits in groups of three separated by ',' and a leading '-' }
-  if V < 0 then
+  if V = Low(LongInt) then
+    StrCopy(Digits, '2147483648')                      { (-V does not fit) }
+  else if V < 0 then
     IntToPChar(Digits, LongInt(-V))
   else
     IntToPChar(Digits, V);
@@ -2494,15 +2500,13 @@ begin
   Len := StrLen(Digits);
   if Len = 0 then
     Exit;
-  OutLen := PSmallInt(@PByte(@DS)[$42F0 + 2 * Len])^;  { length with separators }
-  if Len >= 10 then
-  begin
-    { the table ends at 9 digits: the original writes the digits 11520 bytes
-      away (a stray write) and keeps the empty string }
-    if V < 0 then
-      StrCat(Dest, DSText($4305));
-    Exit;
-  end;
+  { length with separators (DS:42f0 for 1..9 digits). Remastered: the
+    original's table ends at 9 digits; a 10-digit number was shown empty
+    (and written 11,520 bytes off): now it is grouped like the others }
+  if Len <= 9 then
+    OutLen := PSmallInt(@PByte(@DS)[$42F0 + 2 * Len])^
+  else
+    OutLen := Len + (Len - 1) div 3;
   Count := 0;
   I := Len - 1;
   K := OutLen - 1;
