@@ -427,7 +427,7 @@ begin
       101: MI.ShortCut := ShortCut(VK_N, [ssMeta]);         { Neues Spiel }
       102: MI.ShortCut := ShortCut(VK_O, [ssMeta]);         { Öffnen }
       103: MI.ShortCut := ShortCut(VK_S, [ssMeta]);         { Speichern }
-      401: MI.ShortCut := ShortCut(VK_E, [ssMeta]);         { Runde beenden }
+      401: MI.ShortCut := ShortCut(VK_R, [ssMeta]);         { Runde beenden (Ctrl+R) }
     end;
     {$endif}
     if M.Items[I].Flags and $10 <> 0 then

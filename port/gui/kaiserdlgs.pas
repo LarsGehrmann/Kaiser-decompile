@@ -134,7 +134,7 @@ function DialogClassOf(const Name: string): TKaiserDialogClass;
 implementation
 
 uses
-  Math, Rules, Real48, Turn, KaiserRes, HelpView;
+  Math, Rules, Real48, Turn, KaiserRes, HelpView, WinScroll;
 
 { -- TKaiserDialog ----------------------------------------------------------- }
 
@@ -155,6 +155,8 @@ begin
   C := Item(Id);
   if C is TScrollBar then
     Result := TScrollBar(C).Position
+  else if C is TWinScrollBar then
+    Result := TWinScrollBar(C).Position
   else if C is TSpinBar then
     Result := TSpinBar(C).Pos
   else
@@ -174,6 +176,8 @@ begin
         empty range, which LCL refuses }
       TScrollBar(C).SetParams(TScrollBar(C).Position, Lo, Max(Lo, Hi), 0);
     end
+    else if C is TWinScrollBar then
+      TWinScrollBar(C).SetParams(TWinScrollBar(C).Position, Lo, Hi)
     else if C is TSpinBar then
     begin
       TSpinBar(C).Lo := Lo;
@@ -193,6 +197,8 @@ begin
   try
     if C is TScrollBar then
       TScrollBar(C).Position := V
+    else if C is TWinScrollBar then
+      TWinScrollBar(C).Position := V
     else if C is TSpinBar then
       TSpinBar(C).Pos := V;
   finally
@@ -372,6 +378,8 @@ begin
   Ctl := F.Item(Id);
   if Ctl is TScrollBar then
     TScrollBar(Ctl).SmallChange := N
+  else if Ctl is TWinScrollBar then
+    TWinScrollBar(Ctl).SmallChange := N
   else if Ctl is TSpinBar then
     TSpinBar(Ctl).Step := N;
 end;
@@ -900,6 +908,11 @@ begin
       FInfo.OnMouseMove := @GridMouseMove;
     end;
     FInfo.SetBounds(PSmallInt(@D.Data[$718])^, PSmallInt(@D.Data[$71A])^, W - 1, 64);
+    { the dialog's own colour through it (text drawn into a bitmap shifts
+      Cocoa's colour of the background a little) }
+    B.TransparentColor := DialogBackground;
+    B.Transparent := True;
+    FInfo.Transparent := True;
     FInfo.Picture.Assign(B);
   finally
     B.Free;
@@ -931,6 +944,8 @@ var
 begin
   if Name = 'UnitLookDlg' then
     Exit(D.Data[$4D] + 200);                        { the unit type + 200 }
+  if Name = 'RecruitDlg' then
+    Exit(PWord(@D.Data[$2E])^);                     { kept by the logic: the type + 200 }
   for I := 0 to High(Names) do
     if Names[I] = Name then
       Exit(Contexts[I]);

@@ -61,6 +61,7 @@ type
     procedure Notify(Id: SmallInt); virtual;
     { the autopilot moves the mouse to (X, Y) before its snapshot }
     procedure AutoMouse(X, Y: Integer); virtual;
+    procedure AutoClicks(const Points: string);
     function Run: SmallInt;
     { EndDlg(code) }
     procedure EndWith(Code: SmallInt);
@@ -91,7 +92,7 @@ function Utf8(const Raw: RawByteString): string;
 implementation
 
 uses
-  Process, IntfGraphics, FPImage, GraphType, Buttons;
+  Process, IntfGraphics, FPImage, GraphType, Buttons, WinScroll;
 
 function Utf8(const Raw: RawByteString): string;
 begin
@@ -364,11 +365,15 @@ begin
       TEdit(C).Text := Utf8(It.Text);
     end
     else if It.ClassName = 'LISTBOX' then
-      C := TListBox.Create(Self)
+    begin
+      C := TListBox.Create(Self);
+      TListBox(C).OnClick := @ControlClick;            { LBN_SELCHANGE -> IdNNN }
+    end
     else if It.ClassName = 'COMBOBOX' then
     begin
       C := TComboBox.Create(Self);
       TComboBox(C).Style := csDropDownList;
+      TComboBox(C).OnSelect := @ControlClick;          { CBN_SELCHANGE -> IdNNN }
     end
     else if (It.ClassName = 'SCROLLBAR') and (It.Style and 1 <> 0) and (It.CY <= 2 * It.CX) then
     begin
@@ -379,11 +384,18 @@ begin
     end
     else if It.ClassName = 'SCROLLBAR' then
     begin
+      {$ifdef darwin}
+      { with arrows like Windows' (macOS' own has none) }
+      C := TWinScrollBar.Create(Self);
+      TWinScrollBar(C).Vertical := It.Style and 1 <> 0;
+      TWinScrollBar(C).OnChange := @ControlClick;
+      {$else}
       C := TScrollBar.Create(Self);
       if It.Style and 1 <> 0 then
         TScrollBar(C).Kind := sbVertical;
       TScrollBar(C).OnChange := @ControlClick;
       TScrollBar(C).LargeChange := 10;                { OWL's PageMagnitude }
+      {$endif}
     end
     else if (It.ClassName = 'STATIC') and (It.Style and $F = 3) then
     begin
@@ -600,6 +612,36 @@ procedure TTemplateForm.AutoMouse(X, Y: Integer);
 begin
 end;
 
+type
+  TControlAccess = class(TControl);
+
+procedure TTemplateForm.AutoClicks(const Points: string);
+var
+  L: TStringList;
+  I: Integer;
+  P: TPoint;
+  C: TControl;
+begin
+  L := TStringList.Create;
+  try
+    L.Delimiter := ';';
+    L.DelimitedText := Points;
+    for I := 0 to L.Count - 1 do
+    begin
+      P.X := StrToIntDef(Copy(L[I], 1, Pos(':', L[I]) - 1), 0);
+      P.Y := StrToIntDef(Copy(L[I], Pos(':', L[I]) + 1, 9), 0);
+      C := ControlAtPos(P, [capfRecursive, capfAllowWinControls]);
+      if C = nil then
+        Continue;
+      P := C.ScreenToClient(ClientToScreen(P));
+      TControlAccess(C).MouseDown(mbLeft, [], P.X, P.Y);
+      TControlAccess(C).MouseUp(mbLeft, [], P.X, P.Y);
+    end;
+  finally
+    L.Free;
+  end;
+end;
+
 procedure TTemplateForm.ButtonClick(Sender: TObject);
 begin
   Command(TComponent(Sender).Tag);
@@ -626,6 +668,36 @@ begin
     its default button (else OK) }
   FAutoTimer.Enabled := False;
   Inc(AutoCount);
+  { KAISER_AUTOCLICK=NAME=X:Y;X:Y,...: left clicks on the controls at those
+    client points of dialog NAME first (mouse down and up straight to the
+    control: synthetic OS clicks do not reach an inactive app) }
+  with TStringList.Create do
+  try
+    CommaText := GetEnvironmentVariable('KAISER_AUTOCLICK');
+    if IndexOfName(FTemplate.Name) >= 0 then
+      AutoClicks(Values[FTemplate.Name]);
+  finally
+    Free;
+  end;
+  { KAISER_AUTOSELECT=NAME=ID:INDEX,...: the user picks entry INDEX of the
+    combo box ID first }
+  with TStringList.Create do
+  try
+    CommaText := GetEnvironmentVariable('KAISER_AUTOSELECT');
+    if IndexOfName(FTemplate.Name) >= 0 then
+    begin
+      Answer := Values[FTemplate.Name];
+      if Item(StrToIntDef(Copy(Answer, 1, Pos(':', Answer) - 1), 0)) is TComboBox then
+        with TComboBox(Item(StrToIntDef(Copy(Answer, 1, Pos(':', Answer) - 1), 0))) do
+        begin
+          ItemIndex := StrToIntDef(Copy(Answer, Pos(':', Answer) + 1, 9), 0);
+          if Assigned(OnSelect) then
+            OnSelect(Item(StrToIntDef(Copy(Answer, 1, Pos(':', Answer) - 1), 0)));
+        end;
+    end;
+  finally
+    Free;
+  end;
   { KAISER_AUTOMOUSE=NAME=X:Y,...: the mouse at (X, Y) of dialog NAME first }
   with TStringList.Create do
   try

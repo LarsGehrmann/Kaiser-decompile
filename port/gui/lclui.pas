@@ -31,7 +31,7 @@ type
 implementation
 
 uses
-  {$ifdef windows}MMSystem,{$endif} Process, Music;
+  Process, Music, WaveSound;
 
 { the port writes its annals and records next to its KAISER.INI; it reads
   the original's next to kaiser.exe until it has its own }
@@ -65,8 +65,8 @@ begin
     Result := '';
 end;
 
-{ PlaySound (1070:0002): WAVEDATA resource N (macOS: afplay, Windows:
-  sndPlaySound) when "Krach &
+{ PlaySound (1070:0002): WAVEDATA resource N (WaveSound: in the process,
+  like sndPlaySound) when "Krach &
   Geschrei" is on; Async = 0 (the battle) waits for its end (sndPlaySound
   SND_SYNC): the battle's animations show their frames meanwhile. Without
   sound the original counts 500,000 loops instead. (Silent under the
@@ -100,37 +100,7 @@ begin
       S.Free;
     end;
   end;
-  {$ifdef windows}
-  { what the original calls: sndPlaySound (MMSYSTEM.2); the wide version
-    for a temp folder with non-ASCII characters }
-  if Async then
-    sndPlaySoundW(PWideChar(UnicodeString(UTF8Decode(FN))), SND_ASYNC or SND_NODEFAULT)
-  else
-    sndPlaySoundW(PWideChar(UnicodeString(UTF8Decode(FN))), SND_SYNC or SND_NODEFAULT);
-  {$else}
-  with TProcess.Create(nil) do
-  try
-    { asynchronous: a shell that starts afplay in the background and ends
-      at once (waited for, so no exited child is left behind) }
-    if Async then
-    begin
-      Executable := '/bin/sh';
-      Parameters.Add('-c');
-      Parameters.Add('/usr/bin/afplay "$1" >/dev/null 2>&1 &');
-      Parameters.Add('sh');
-      Parameters.Add(FN);
-    end
-    else
-    begin
-      Executable := '/usr/bin/afplay';
-      Parameters.Add(FN);
-    end;
-    Options := [poWaitOnExit];
-    Execute;
-  finally
-    Free;
-  end;
-  {$endif}
+  PlayWaveFile(FN, not Async);
 end;
 
 function TLclUI.FormOf(D: TDialog): TKaiserDialog;

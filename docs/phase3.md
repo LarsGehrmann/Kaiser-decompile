@@ -57,7 +57,7 @@ original resources. Deliverables: the macOS app and a Windows 11 executable (mil
 | 5 | Headless simulator: run a game with computer players only | compare with the emulated original year by year | ✅ `port/bin/ksrsim` plays a savegame or a new game on (`NewGame`, `EndHumanTurn`, `BeginHumanTurn` in `game.pas`); the humans just end their turns. `tools/emu/sim_compare.sh` runs the same in the emulated original: all 30 savegames (seeds 1–3, up to 300 turns each) and 10 new games of different sizes agree turn by turn, 5,093 turns in all: 97 of 100 games identical to the end, the other 3 identical until the original crashes (an original bug: sabotage action 6 puts a 9th unit into a full Garde, `Ai_ArrangeArmies` then overruns its stack; docs/rules/ai.md) |
 | 6 | Battle engine (segment 10) | scripted battles, differential where possible | ✅ `port/src/battle.pas`: all logic of the battle window (Init, combat, movement, healing, desertion, the AI, the timer, the human's clicks, buttons and combat options, GetResults); `port/src/war.pas`: segment 4 (BattleSetup, BattleFameAndXp, BattleAftermath, Battle, FightRaiders) and segment 6 (battlefield choice, plunder, burning, massacre, retreat losses). 13,343 vectors over 66 functions identical, from battle states the original's AI played (`port/tests/battle.vec`: 660 of them); 668 whole AI battles from all savegames identical (`battle_compare.py 2 2000`). Found on the way: an endless recursion of the original (`StopTimer` → `AiStep`, battle.md) |
 | 7 | GUI (Lazarus): main window, menus, dialogs from the extracted dialog templates, bitmaps, sounds | manual play-through against the original in DOSBox-X | ✅ `port/bin/Kaiser.app` (7a–7d below): every menu command, the dialogs with their ported logic, the battle window, the main window, help; checked by autopilot runs and a visual sweep (below); the manual play-through against DOSBox-X is the user's. Not ported: the e-mail game |
-| 8 | Windows 11 executable: the same sources built for Win64 (x86_64, LCL win32 widgetset), cross-compiled from macOS (FPC cross compiler `ppcrossx64` and the LCL built for `win64`); the macOS-only parts (sounds via `afplay`, the settings in Application Support) get Windows equivalents (`PlaySound`/`sndPlaySound`, `%APPDATA%\Kaiser`) | the test programs (`ruletest`, `real48test`) pass when run on Windows (or Wine); the GUI starts and plays a game on Windows 11 | built: `port/build-win.sh`, `port/package-win.sh` → `port/bin/Kaiser-win64.zip` (below); not yet run on Windows (no Wine on this Mac: Homebrew's Wine casks are disabled) |
+| 8 | Windows 11 executable: the same sources built for Win64 (x86_64, LCL win32 widgetset), cross-compiled from macOS (FPC cross compiler `ppcrossx64` and the LCL built for `win64`); the macOS-only parts (sounds via NSSound, the settings in Application Support) get Windows equivalents (`PlaySound`/`sndPlaySound`, `%APPDATA%\Kaiser`) | the test programs (`ruletest`, `real48test`) pass when run on Windows (or Wine); the GUI starts and plays a game on Windows 11 | built: `port/build-win.sh`, `port/package-win.sh` → `port/bin/Kaiser-win64.zip` (below); not yet run on Windows (no Wine on this Mac: Homebrew's Wine casks are disabled) |
 
 Milestone 7 in steps (the GUI is the UI segments 1, 5, 8, 9, 10 drawing, 12, 13, 15–17 ported
 onto the LCL):
@@ -108,9 +108,15 @@ GUI links with `-k-ld_classic`.
   [MAP], the anchor of `docs/manual.md`); the dialog types whose port does not keep the help
   context (+0x2e) take the constants of their `HelpDlg.Init` calls.
 - **Right click** on a unit of the map: `ShowUnitLookDlg` (1040:330f).
+- **Scroll bars** on macOS: `port/gui/winscroll.pas` draws them like Windows 3.1 (arrows one
+  step, repeating while held; the trough OWL's page of 10; the thumb), macOS' own have no
+  arrows. Combo and list boxes report a new selection to the dialog's logic (CBN_SELCHANGE /
+  LBN_SELCHANGE -> IdNNN).
+- Autopilot hooks for these checks: `KAISER_AUTOCLICK=NAME=X:Y;…` (clicks straight to the
+  controls), `KAISER_AUTOSELECT=NAME=ID:INDEX`.
 - **Keys** (`MENUKEYS`, read from kaiser.exe): the original's accelerators (F1–F12, Ctrl+N/O/S/R/L/P …,
   single letters such as `b`, the boss key: the game to boss.ksr and closed, 1000:3944; Ctrl+L
-  loads KAISER.INI's last game, 1000:1292, which loading now records); on macOS also Cmd+N/O/S/E.
+  loads KAISER.INI's last game, 1000:1292, which loading now records); on macOS also Cmd+N/O/S/R.
   Closing during a game asks like `CanClose` (1000:0af4). "Geschichtsschreibung" writes
   autosave.ksr at every human turn start (next to the port's KAISER.INI).
 - **Music** (`port/gui/music.pas`): kaiser.mid in a loop on the title screen like MidiOpen /
@@ -281,7 +287,7 @@ form; the end code is `BattleEndCode` after the message that called `EndBattle`)
   that was opened during the battle. The window cannot be closed (WMClose does nothing).
 - **Sounds**: the battle plays its sounds synchronously (mode 0, `sndPlaySound` SND_SYNC), so
   the animations show their frames for the length of a sound: the form shows what was drawn,
-  then `afplay` runs to its end; without sound the original's counting loop is a 100 ms pause.
+  then the sound plays to its end (`port/gui/wavesound.pas`: NSSound in the process, each file loaded once; starting `afplay` for every sound had stalled the battle for up to a second per strike); without sound the original's counting loop is a 100 ms pause.
 - **Approximations**: while a message is handled (an AI step, a click, a dialog opened from
   the battle) further timer ticks and mouse events are dropped (Windows would deliver the
   window's WM_TIMER inside the nested modal loop of a dialog, and queue clicks); a repaint is
