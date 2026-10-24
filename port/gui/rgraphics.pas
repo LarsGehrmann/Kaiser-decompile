@@ -96,6 +96,7 @@ end;
 function Cached(const Key: string; Src: TBitmap; N: Integer): TBitmap;
 var
   K: Integer;
+  P: TPixImage;
 begin
   K := Cache.IndexOf(Key);
   if K >= 0 then
@@ -103,7 +104,11 @@ begin
   { (factor 1 is the picture itself: not kept, the cache owns its entries) }
   if (Src = nil) or (N <= 1) then
     Exit(Src);
-  Result := FromPix(ScalePix(ToPix(Src), N));
+  P := ToPix(Src);
+  if IsPhoto(P) then
+    Result := FromPix(ScaleSmooth(P, SupportedFactor(N)))     { a photo: smooth }
+  else
+    Result := FromPix(ScalePix(P, N));
   Cache.AddObject(Key, Result);
 end;
 

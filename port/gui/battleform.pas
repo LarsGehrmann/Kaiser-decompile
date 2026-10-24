@@ -26,7 +26,8 @@ interface
 uses
   SysUtils, Classes, Graphics, Controls, Forms, StdCtrls, ExtCtrls, LCLType, LCLIntf,
   Math, IntfGraphics, FPImage, GraphType,
-  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, Rules, Battle, KaiserLCL, HelpView, RGraphics;
+  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, Rules, Battle, KaiserLCL, HelpView, RGraphics,
+  MacAppearance;
 
 const
   MapW = 480;               { 15 cells of 32 pixels }
@@ -304,7 +305,8 @@ begin
   { the buttons of Init (TButton.Init at 201, 352 / 378 / 404, 80 x 26) }
   for K := 0 to 2 do
   begin
-    FButtons[K] := TButton.Create(Self);
+    FButtons[K] := TFlexButton.Create(Self);
+    TFlexButton(FButtons[K]).Flexible := FS <> 1;
     FButtons[K].Parent := Self;
     FButtons[K].Caption := Utf8(PChar(@PByte(@DS)[Captions[K]]));
     FButtons[K].SetBounds(Round($C9 * FS), Round(($160 + K * $1A) * FS), Round($50 * FS),

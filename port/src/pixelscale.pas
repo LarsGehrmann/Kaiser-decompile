@@ -36,11 +36,18 @@ function ScalePix(const S: TPixImage; N: Integer): TPixImage;
 function SupportedFactor(N: Integer): Integer;
 { the largest supported factor below N (at least 1) }
 function LowerFactor(N: Integer): Integer;
+{ bilinear, N times larger (photos: the pixel scalers break their
+  gradients into blotches) }
+function ScaleSmooth(const S: TPixImage; N: Integer): TPixImage;
+{ the number of different colours, counting stops at Limit }
+function ColourCount(const S: TPixImage; Limit: Integer): Integer;
+{ a photo rather than pixel art: more than 64 colours }
+function IsPhoto(const S: TPixImage): Boolean;
 
 implementation
 
 uses
-  XBRZ;
+  Math, XBRZ;
 
 function NewPixImage(W, H: Integer): TPixImage;
 begin
@@ -171,6 +178,91 @@ begin
     if F[I] >= N then
       Exit(F[I]);
   Result := 12;
+end;
+
+function ScaleSmooth(const S: TPixImage; N: Integer): TPixImage;
+var
+  X, Y, X0, Y0, X1, Y1, Sh: Integer;
+  FX, FY, W00, W01, W10, W11, A, C: Double;
+  P00, P01, P10, P11: LongWord;
+  V: LongWord;
+
+  function Chan(P: LongWord; Sh: Integer): Double; inline;
+  begin
+    Result := (P shr Sh) and $FF;
+  end;
+
+begin
+  Result := NewPixImage(S.W * N, S.H * N);
+  for Y := 0 to Result.H - 1 do
+  begin
+    FY := (Y + 0.5) / N - 0.5;
+    Y0 := Floor(FY);
+    FY := FY - Y0;
+    Y1 := Min(Y0 + 1, S.H - 1);
+    Y0 := Max(Y0, 0);
+    for X := 0 to Result.W - 1 do
+    begin
+      FX := (X + 0.5) / N - 0.5;
+      X0 := Floor(FX);
+      FX := FX - X0;
+      X1 := Min(X0 + 1, S.W - 1);
+      X0 := Max(X0, 0);
+      P00 := S.Px[Y0 * S.W + X0]; P01 := S.Px[Y0 * S.W + X1];
+      P10 := S.Px[Y1 * S.W + X0]; P11 := S.Px[Y1 * S.W + X1];
+      W00 := (1 - FX) * (1 - FY); W01 := FX * (1 - FY);
+      W10 := (1 - FX) * FY; W11 := FX * FY;
+      { alpha-weighted colours (no dark fringes at transparent edges) }
+      A := W00 * Chan(P00, 24) + W01 * Chan(P01, 24) + W10 * Chan(P10, 24) + W11 * Chan(P11, 24);
+      if A < 0.5 then
+      begin
+        Result.Px[Y * Result.W + X] := 0;
+        Continue;
+      end;
+      V := LongWord(Round(A)) shl 24;
+      Sh := 0;
+      while Sh <= 16 do
+      begin
+        C := (W00 * Chan(P00, 24) * Chan(P00, Sh) + W01 * Chan(P01, 24) * Chan(P01, Sh) +
+          W10 * Chan(P10, 24) * Chan(P10, Sh) + W11 * Chan(P11, 24) * Chan(P11, Sh)) / A;
+        V := V or (LongWord(Min(255, Round(C))) shl Sh);
+        Inc(Sh, 8);
+      end;
+      Result.Px[Y * Result.W + X] := V;
+    end;
+  end;
+end;
+
+function ColourCount(const S: TPixImage; Limit: Integer): Integer;
+var
+  Seen: array of LongWord;
+  I, J: Integer;
+  Found: Boolean;
+begin
+  SetLength(Seen, 0);
+  for I := 0 to High(S.Px) do
+  begin
+    Found := False;
+    for J := 0 to High(Seen) do
+      if Seen[J] = S.Px[I] then
+      begin
+        Found := True;
+        Break;
+      end;
+    if not Found then
+    begin
+      SetLength(Seen, Length(Seen) + 1);
+      Seen[High(Seen)] := S.Px[I];
+      if Length(Seen) >= Limit then
+        Break;
+    end;
+  end;
+  Result := Length(Seen);
+end;
+
+function IsPhoto(const S: TPixImage): Boolean;
+begin
+  Result := ColourCount(S, 65) > 64;
 end;
 
 function LowerFactor(N: Integer): Integer;

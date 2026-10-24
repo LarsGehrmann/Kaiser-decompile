@@ -114,6 +114,13 @@ begin
   S := Img(2, 2, [B, T, T, T]);
   R := ScalePix(S, 2);
   Check(R.Px[0] = B, 'xBRZ keeps the corner pixel');
+  { photos: smooth scaling, a colour count }
+  S := Img(2, 1, [W, B]);
+  R := ScaleSmooth(S, 4);
+  Check((R.W = 8) and (R.Px[0] = W) and (R.Px[7] = B) and (R.Px[3] <> W) and (R.Px[3] <> B),
+    'ScaleSmooth blends');
+  Check(ColourCount(Img(2, 2, [W, B, W, T]), 100) = 3, 'ColourCount');
+  Check(not IsPhoto(Img(2, 2, [W, B, W, T])), 'IsPhoto pixel art');
   if Failed = 0 then
     WriteLn('scaletest: all passed')
   else

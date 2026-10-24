@@ -15,22 +15,36 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, StdCtrls, ExtCtrls, ComCtrls, Dialogs, LCLType,
-  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48;
+  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, WinScroll;
 
 type
   { a vertical scroll bar no taller than two arrows (9 x 9 units): Windows
     shows only its arrows, LCL's TScrollBar a knob without them. The
     position works like the scroll bar's: the upper arrow is SB_LINEUP (-1) }
+  {$ifdef darwin}
+  { (remastered: macOS' stepper keeps its size; the Windows look scales) }
+  TSpinBar = class(TWinScrollBar)
+  private
+    procedure SetLo(V: Integer);
+    procedure SetHi(V: Integer);
+  public
+    property Pos: Integer read FPosition write SetPosition;
+    property Lo: Integer read FMin write SetLo;
+    property Hi: Integer read FMax write SetHi;
+    property Step: Integer read FSmallChange write FSmallChange;   { SetLineStep }
+  end;
+  {$else}
   TSpinBar = class(TUpDown)
   public
     Pos, Lo, Hi: Integer;
     Step: Integer;                  { SetLineStep }
   end;
+  {$endif}
 
   TTemplateForm = class(TForm)
   private
     FTemplate: TDlgTemplate;
-    FBaseX, FBaseY: Integer;
+    FBaseX, FBaseY: Double;         { the dialog base units (remastered: unrounded when scaled) }
     FItems: array of TControl;
     FIds: array of SmallInt;
     FAuto: array of Boolean;        { auto check box / radio button style }
@@ -98,7 +112,7 @@ function DialogFactor: Integer;
 implementation
 
 uses
-  Process, IntfGraphics, FPImage, GraphType, Buttons, WinScroll, Math, PixelScale, RGraphics,
+  Process, IntfGraphics, FPImage, GraphType, Buttons, Math, PixelScale, RGraphics,
   MacAppearance;
 
 function DialogFactor: Integer;
@@ -334,7 +348,12 @@ begin
   try
     Measure.SetSize(4, 4);
     Measure.Canvas.Font := Font;
-    FBaseX := (Measure.Canvas.TextWidth(Sample) div 26 + 1) div 2;
+    if DialogScale = 1 then
+      FBaseX := (Measure.Canvas.TextWidth(Sample) div 26 + 1) div 2
+    else
+      { scaled: the average character width unrounded (rounded, the layout
+        came out several percent narrower than its texts) }
+      FBaseX := Measure.Canvas.TextWidth(Sample) / 52;
     FBaseY := Measure.Canvas.TextHeight(Sample);
   finally
     Measure.Free;
@@ -382,7 +401,7 @@ begin
               Cap.Color := DialogBackground;
               Cap.Transparent := False;
               Cap.Left := DU(It.X, True) + 6;
-              Cap.Top := DU(It.Y, False) + FBaseY div 2 - Cap.Canvas.TextHeight('X') div 2;
+              Cap.Top := DU(It.Y, False) + Round(FBaseY / 2) - Cap.Canvas.TextHeight('X') div 2;
             end;
           end;
       else
@@ -397,7 +416,8 @@ begin
         end
         else
         begin
-          C := TButton.Create(Self);
+          C := TFlexButton.Create(Self);
+          TFlexButton(C).Flexible := DialogScale <> 1;
           TButton(C).Caption := Utf8(It.Text);
           TButton(C).Default := Kind = 1;
           TButton(C).OnClick := @ButtonClick;
@@ -424,9 +444,15 @@ begin
     else if (It.ClassName = 'SCROLLBAR') and (It.Style and 1 <> 0) and (It.CY <= 2 * It.CX) then
     begin
       C := TSpinBar.Create(Self);
-      TSpinBar(C).Orientation := udVertical;
       TSpinBar(C).Step := 1;
+      {$ifdef darwin}
+      TSpinBar(C).Vertical := True;
+      TSpinBar(C).Spin := True;
+      TSpinBar(C).OnChange := @ControlClick;
+      {$else}
+      TSpinBar(C).Orientation := udVertical;
       TSpinBar(C).OnClick := @SpinClick;
+      {$endif}
     end
     else if It.ClassName = 'SCROLLBAR' then
     begin
@@ -445,10 +471,15 @@ begin
     end
     else if (It.ClassName = 'STATIC') and (It.Style and $F = 3) then
     begin
-      { SS_ICON: the bitmap (or icon) of that name }
+      { SS_ICON: the icon of that name (Windows loads only icons: BOMBE
+        and LAGER are also smaller / grey bitmaps), else a bitmap }
       C := TImage.Create(Self);
-      Bmp := ResBitmap(It.Text);
-      if Bmp <> nil then
+      Bmp := nil;
+      if Exe.IconFile(It.Text) = nil then
+        Bmp := ResBitmap(It.Text);
+      if Bmp = nil then
+        Sized := LoadIcon(TImage(C), It.Text)
+      else
       begin
         { remastered: the scaler's picture shown DialogScale times larger }
         TImage(C).Picture.Assign(ScaledKeyed(Bmp, DialogFactor));
@@ -456,9 +487,7 @@ begin
         TImage(C).AntialiasingMode := amOn;
         TImage(C).SetBounds(0, 0, Round(Bmp.Width * DialogScale), Round(Bmp.Height * DialogScale));
         Sized := True;
-      end
-      else
-        Sized := LoadIcon(TImage(C), It.Text);
+      end;
     end
     else
     begin
@@ -488,8 +517,8 @@ begin
     begin
       { Windows draws a group box's frame half a text line below its top,
         with or without a caption }
-      C.Top := C.Top + FBaseY div 2;
-      C.Height := C.Height - FBaseY div 2;
+      C.Top := C.Top + Round(FBaseY / 2);
+      C.Height := C.Height - Round(FBaseY / 2);
       C.SendToBack;
     end;
     FItems[I] := C;
@@ -502,9 +531,9 @@ end;
 function TTemplateForm.DU(V: Integer; Horz: Boolean): Integer;
 begin
   if Horz then
-    Result := V * FBaseX div 4
+    Result := Round(V * FBaseX / 4)
   else
-    Result := V * FBaseY div 8;
+    Result := Round(V * FBaseY / 8);
 end;
 
 function TTemplateForm.Item(Id: SmallInt): TControl;
@@ -578,10 +607,23 @@ begin
   Notify(FIds[K]);
 end;
 
+{$ifdef darwin}
+procedure TSpinBar.SetLo(V: Integer);
+begin
+  SetParams(FPosition, V, Math.Max(V, FMax));
+end;
+
+procedure TSpinBar.SetHi(V: Integer);
+begin
+  SetParams(FPosition, FMin, V);
+end;
+{$endif}
+
 procedure TTemplateForm.SpinClick(Sender: TObject; Button: TUDBtnType);
 var
   B: TSpinBar;
 begin
+  {$ifndef darwin}                      { (macOS: the spin is a TWinScrollBar) }
   B := TSpinBar(Sender);
   if Button = btNext then
     Dec(B.Pos, B.Step)
@@ -592,6 +634,7 @@ begin
   if B.Pos > B.Hi then
     B.Pos := B.Hi;
   ControlClick(Sender);
+  {$endif}
 end;
 
 { the non-auto buttons show the state the game set: LCL unchecks all other

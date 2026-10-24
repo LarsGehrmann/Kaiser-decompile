@@ -14,10 +14,11 @@ uses
 
 type
   TWinScrollBar = class(TCustomControl)
-  private
+  protected
     FMin, FMax, FPosition: Integer;
     FSmallChange, FLargeChange: Integer;
     FVertical: Boolean;
+    FSpin: Boolean;
     FOnChange: TNotifyEvent;
     FRepeat: TTimer;
     FPart: Integer;           { what the button is held on: 1 / 2 arrows, 3 / 4 trough, 5 thumb }
@@ -46,6 +47,9 @@ type
     property SmallChange: Integer read FSmallChange write FSmallChange;
     property LargeChange: Integer read FLargeChange write FLargeChange;
     property Vertical: Boolean read FVertical write FVertical;
+    { only the two arrows, each half of it (a 9 x 9 unit scroll bar: the
+      spin buttons of SABOTAGEBUDGETDLG; macOS' stepper keeps its size) }
+    property Spin: Boolean read FSpin write FSpin;
     { the user moved it (WM_HSCROLL / WM_VSCROLL to the dialog) }
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
@@ -103,7 +107,9 @@ begin
     Result := Width
   else
     Result := Height;
-  if Result * 2 + 4 > Len then
+  if FSpin then
+    Result := Len div 2
+  else if Result * 2 + 4 > Len then
     Result := (Len - 4) div 2;
 end;
 
@@ -128,7 +134,9 @@ begin
   else
     P := X;
   T := ThumbAt;
-  if P < Thick then
+  if FSpin then
+    Result := 1 + Ord(P >= Len div 2)
+  else if P < Thick then
     Result := 1
   else if P >= Len - Thick then
     Result := 2
@@ -320,7 +328,7 @@ begin
     else
       C.Rectangle(R(A + T, Len - T));
   end;
-  if Enabled and (FMax > FMin) then
+  if Enabled and (FMax > FMin) and not FSpin then
   begin
     A := ThumbAt;
     Button3D(R(A, A + T), False);

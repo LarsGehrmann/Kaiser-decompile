@@ -139,7 +139,7 @@ function DialogClassOf(const Name: string): TKaiserDialogClass;
 implementation
 
 uses
-  Math, Rules, Real48, Turn, KaiserRes, HelpView, WinScroll, RGraphics;
+  Math, Rules, Real48, Turn, KaiserRes, HelpView, WinScroll, RGraphics, PixelScale;
 
 { -- TKaiserDialog ----------------------------------------------------------- }
 
@@ -492,7 +492,22 @@ end;
 
 procedure TLogicDialog.Show(var Img: TImage; X, Y, LW, LH: Integer; B: TBitmap;
   Mouse: Boolean);
+var
+  P: TPixImage;
+  Key: LongWord;
+  I: Integer;
+  T: TBitmap;
 begin
+  { the dialog colour made transparent: macOS converts a stretched bitmap's
+    colours differently from the window's own background (a lighter box
+    around the troop grids) }
+  P := ToPix(B);
+  Key := $FF000000 or (LongWord(Red(DialogBackground)) shl 16) or
+    (LongWord(Green(DialogBackground)) shl 8) or LongWord(Blue(DialogBackground));
+  for I := 0 to High(P.Px) do
+    if P.Px[I] = Key then
+      P.Px[I] := 0;
+  T := FromPix(P);
   if Img = nil then
   begin
     Img := TImage.Create(Self);
@@ -506,7 +521,11 @@ begin
   Img.SetBounds(X, Y, Max(1, Round(LW * FS)), Max(1, Round(LH * FS)));
   Img.Stretch := True;
   Img.AntialiasingMode := amOn;
-  Img.Picture.Assign(B);
+  try
+    Img.Picture.Assign(T);
+  finally
+    T.Free;
+  end;
 end;
 
 { a font of the original's LOGFONT -12 bold Comic Sans, FF times larger }
@@ -937,17 +956,12 @@ begin
           Utf8(DSText($53D8 + U.Ability * 25)));
       end;
     end;
-    { the dialog's own colour through it (text drawn into a bitmap shifts
-      Cocoa's colour of the background a little) }
-    B.TransparentColor := DialogBackground;
-    B.Transparent := True;
     if FInfo = nil then
     begin
       FInfo := TImage.Create(Self);
       FInfo.Parent := Self;
       FInfo.OnMouseMove := @GridMouseMove;
     end;
-    FInfo.Transparent := True;
     Show(FInfo, PSmallInt(@D.Data[$718])^, PSmallInt(@D.Data[$71A])^, W - 1, 64, B, False);
   finally
     B.Free;

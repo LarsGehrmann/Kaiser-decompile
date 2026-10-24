@@ -10,7 +10,7 @@ interface
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
   NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music, Math, PixelScale,
-  MacAppearance, RGraphics;
+  MacAppearance, RGraphics, HelpView;
 
 type
   TKaiserForm = class(TForm)
@@ -50,6 +50,8 @@ type
     procedure FormWindowStateChange(Sender: TObject);
     procedure FormPaint(Sender: TObject);
     procedure AutoStart(Sender: TObject);
+    { tests: KAISER_RESIZE=WxH, the window resized 3 s after the start }
+    procedure ResizeTick(Sender: TObject);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
       X, Y: Integer);
     procedure ApplyWindowSize;
@@ -142,7 +144,9 @@ begin
   end;
   if Shots <> '' then
     MainShots(Shots, 'game');
-  if (Shots <> '') or (GetEnvironmentVariable('KAISER_AUTOGAME') <> '') then
+  { (KAISER_STAY: the window stays open for looking at it) }
+  if ((Shots <> '') or (GetEnvironmentVariable('KAISER_AUTOGAME') <> '')) and
+     (GetEnvironmentVariable('KAISER_STAY') = '') then
     Close;
 end;
 
@@ -232,9 +236,32 @@ begin
     Caption := S;
 end;
 
+{ "WxH" of an environment variable }
+function SizeFromEnv(const Name: string; out W, H: Integer): Boolean;
+var
+  S: string;
+begin
+  S := GetEnvironmentVariable(Name);
+  W := StrToIntDef(Copy(S, 1, Pos('x', S) - 1), 0);
+  H := StrToIntDef(Copy(S, Pos('x', S) + 1, 9), 0);
+  Result := (W > 0) and (H > 0);
+end;
+
+procedure TKaiserForm.ResizeTick(Sender: TObject);
+var
+  W, H: Integer;
+begin
+  TTimer(Sender).Enabled := False;
+  if SizeFromEnv('KAISER_RESIZE', W, H) then
+  begin
+    ClientWidth := W;
+    ClientHeight := H;
+  end;
+end;
+
 procedure TKaiserForm.ApplyWindowSize;
 var
-  K: Integer;
+  K, W, H: Integer;
 begin
   { SetupWindow / Cm640x480 (1000:0268 / 1ed4): the layout by the
     resolution, the client height ResolutionHeight - 40. Remastered: the
@@ -246,6 +273,17 @@ begin
     K := 1;                                       { the snapshots at 1x }
   if GetEnvironmentVariable('KAISER_WINDOWSCALE') <> '' then
     K := StrToIntDef(GetEnvironmentVariable('KAISER_WINDOWSCALE'), K);
+  { tests: KAISER_WINDOWSIZE=WxH the client size, any scale }
+  if SizeFromEnv('KAISER_WINDOWSIZE', W, H) then
+  begin
+    Constraints.MinWidth := MainClientWidth div 2;
+    Constraints.MinHeight := MainClientHeight div 2;
+    ClientWidth := W;
+    ClientHeight := H;
+    DialogScale := Min(W / MainClientWidth, H / MainClientHeight);
+    FToolbar.SetBounds(0, 0, FToolbar.BarWidth - 1, MainClientHeight);
+    Exit;
+  end;
   Constraints.MinWidth := MainClientWidth div 2;
   Constraints.MinHeight := MainClientHeight div 2;
   ClientWidth := MainClientWidth * K;
@@ -368,28 +406,11 @@ begin
 end;
 
 procedure TKaiserForm.CmHilfe;
-var
-  Dir, F: string;
-  I: Integer;
 begin
   { CmHilfe / CmUeberDieHilfe (1000:38ed / 38cf) call WinHelp on
-    KAISER.HLP; here the manual converted by tools/help_to_md.py }
-  if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
-    Exit;
-  Dir := ExtractFilePath(ParamStr(0));
-  F := '';
-  for I := 0 to 6 do
-  begin
-    if FileExists(Dir + 'docs/manual.md') then
-    begin
-      F := ExpandFileName(Dir + 'docs/manual.md');
-      Break;
-    end;
-    Dir := Dir + '../';
-  end;
-  if F <> '' then
-    OpenDocument(F)
-  else
+    KAISER.HLP; here the contents of the manual converted by
+    tools/help_to_md.py, in the game's help window }
+  if not ShowHelpContents then
     Application.MessageBox('Die Hilfe (KAISER.HLP) ist in dieser Fassung nicht enthalten; ' +
       'docs/manual.md wurde nicht gefunden.', 'Kaiser', MB_OK);
 end;
@@ -471,6 +492,12 @@ begin
     Tm := TTimer.Create(Self);
     Tm.Interval := 200;
     Tm.OnTimer := @AutoStart;
+  end;
+  if GetEnvironmentVariable('KAISER_RESIZE') <> '' then
+  begin
+    Tm := TTimer.Create(Self);
+    Tm.Interval := 3000;
+    Tm.OnTimer := @ResizeTick;
   end;
 end;
 

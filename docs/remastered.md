@@ -61,3 +61,25 @@ CENSUSDLG's "zurück" at the first player (within the ten players), the 1024×76
 The differential tests stay as on `main` except for two vectors that hit a fixed bug
 (`UnitRankName` / `Do_UnitEditDlg` with a garbage level: the original showed an empty name),
 removed from `rules.vec` / `actions.vec`.
+
+## Visual review (2026-10-24)
+
+The main window, the dialogs and the battle were captured at 1×, ~1.2×, 1.5×, 2× and in odd
+window shapes (letterboxed wide / tall, live resizing, the 1024×768 layout). Found and fixed:
+
+| Seen | Fix |
+|---|---|
+| The panel photos (castle, cathedral) blotchy from the pixel-art scaler | pictures of more than 64 colours are scaled smoothly (`IsPhoto`, `ScaleSmooth`) |
+| A lighter box around the troop grids at fractional scales | the dialog colour keyed out before the painted parts are stretched |
+| "Asylrecht:" cut off at 1.2× | the dialog base units unrounded when scaled |
+| Push buttons: macOS keeps the rounded button 21 pt high, the scaled caption ran out of it | `TFlexButton` (`macappearance.pas`): the square bezel, which fills the template's rectangle like Windows' button, set again whenever LCL re-creates the native button |
+| The spin buttons of SABOTAGEBUDGETDLG stayed tiny (macOS' stepper has fixed sizes) | on macOS a `TWinScrollBar` in spin mode (two arrows) |
+| SS_ICON "BOMBE" showed the 16-pixel bitmap of that name | SS_ICON loads the icon first, as Windows does (BOMBE, LAGER) |
+| The menu "Hilfe" handed `docs/manual.md` to another program (none on Windows for .md) | the help window shows the contents; topics with their links, "Inhalt" / "Zurück", scaled like the dialogs |
+
+Seen and kept: the dark bars when the window's shape differs from the game's; the battle window's
+7-pixel strip under the status panels (the original's window size); the original's texts
+("erkärte", "verfübar") and layouts.
+
+Test hooks: `KAISER_WINDOWSIZE=WxH` (start size), `KAISER_RESIZE=WxH` (resized after 3 s),
+`KAISER_STAY=1` (the window stays open after the autopilot, also the help window).
