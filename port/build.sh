@@ -8,3 +8,4 @@ fpc -Mobjfpc -Sa -O2 -Fusrc -FUobj -FEbin tools/ksrsim.pas
 fpc -Mobjfpc -Sa -O2 -Fusrc -FUobj -FEbin tools/ksrbattle.pas
 fpc -Mobjfpc -Sa -O2 -Fusrc -FUobj -FEbin tests/real48test.pas
 fpc -Mobjfpc -Sa -O2 -Fusrc -FUobj -FEbin tests/ruletest.pas
+fpc -Mobjfpc -Sa -O2 -Fusrc -FUobj -FEbin tests/scaletest.pas

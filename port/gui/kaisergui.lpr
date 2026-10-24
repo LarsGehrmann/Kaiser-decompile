@@ -5,7 +5,7 @@ program KaiserGui;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, Forms, Graphics, SysUtils, MacAppearance, KaiserIni, NERes, KaiserDS, KaiserUI, KaiserLCL, KaiserDlgs, LclUI, MainForm;
+  Interfaces, Forms, Graphics, SysUtils, Types, MacAppearance, KaiserIni, NERes, KaiserDS, KaiserUI, KaiserLCL, KaiserDlgs, LclUI, MainForm, RGraphics;
 
 { -snapshot DIALOG OUT.png: the dialog built from its template, as an image
   (checks the rendering without a screen capture) }
@@ -30,6 +30,51 @@ end;
 
 
 
+{ -spritesheet OUT.png N: the unit sprites 1100..1135 and the heroes'
+  pictures, each nearest neighbour (left) and by the scaler (right) at
+  factor N, on the dialog colour (the remastered branch's look) }
+procedure SpriteSheet(const OutFile: string; N: Integer);
+var
+  B, S: TBitmap;
+  P: TPortableNetworkGraphic;
+  I, X, Y, Cell: Integer;
+begin
+  Cell := 32 * N + 8;
+  B := TBitmap.Create;
+  try
+    B.SetSize(8 * 2 * Cell, 6 * Cell);
+    B.Canvas.Brush.Color := DialogBackground;
+    B.Canvas.FillRect(0, 0, B.Width, B.Height);
+    for I := 0 to 47 do
+    begin
+      X := (I mod 8) * 2 * Cell + 4;
+      Y := (I div 8) * Cell + 4;
+      if I < 36 then
+        S := Sprite(1100 + I)
+      else
+        S := Sprite(1150 + I - 36);
+      if S = nil then
+        Continue;
+      B.Canvas.StretchDraw(Rect(X, Y, X + 32 * N, Y + 32 * N), S);
+      if I < 36 then
+        S := ScaledSprite(1100 + I, N)
+      else
+        S := ScaledSprite(1150 + I - 36, N);
+      if S <> nil then
+        B.Canvas.Draw(X + Cell, Y, S);
+    end;
+    P := TPortableNetworkGraphic.Create;
+    try
+      P.Assign(B);
+      P.SaveToFile(OutFile);
+    finally
+      P.Free;
+    end;
+  finally
+    B.Free;
+  end;
+end;
+
 var
   TheUI: TLclUI;
 begin
@@ -40,6 +85,11 @@ begin
   InitGlobals;
   ReadSettings(SettingsFile);
   DialogBackground := RGBToColor(DS.OptBackground[0], DS.OptBackground[1], DS.OptBackground[2]);
+  if ParamStr(1) = '-spritesheet' then
+  begin
+    SpriteSheet(ParamStr(2), StrToIntDef(ParamStr(3), 3));
+    Halt(0);
+  end;
   if ParamStr(1) = '-snapshot' then
   begin
     Snapshot(ParamStr(2), ParamStr(3));
