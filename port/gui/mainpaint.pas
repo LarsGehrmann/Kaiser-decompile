@@ -19,6 +19,12 @@ uses
   SysUtils, Classes, Graphics, Controls, Forms, LCLType, IntfGraphics, FPImage, GraphType,
   KaiserTypes, KaiserDS, Real48, Rules, KaiserLCL;
 
+var
+  { the remastered game: everything is drawn RenderScale times larger (a
+    factor of PixelScale.SupportedFactor), the logical coordinates stay the
+    original's; the window scales the picture to its size }
+  RenderScale: Integer = 1;
+
 { the window size of the current resolution (DS:4536 / DS:453c, by
   DS.OptResolution) }
 function ResolutionWidth: Integer;
@@ -76,6 +82,14 @@ type
   public
     OnCommand: TToolCommand;
     constructor Create(AOwner: TComponent); override;
+    { the remastered window draws the toolbar into its picture (PaintTo) and
+      hands it the mouse in logical coordinates; the control stays hidden }
+    procedure ToolMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    procedure ToolMouseMove(Shift: TShiftState; X, Y: Integer);
+    procedure ToolMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+    { while a button is held on a tool }
+    function Captured: Boolean;
+    procedure Invalidate; override;
     { Toolbar::SetResource (1080:01df): a new set of tools, all enabled }
     procedure SetResource(const ResName: RawByteString);
     { Menu_Enable/DisableGameCommands: tools 0..Last by collection index }
@@ -96,7 +110,13 @@ function LastGameTool(Bar: TKaiserToolbar): Integer;
 implementation
 
 uses
-  HelpView;
+  Math, HelpView, RGraphics;
+
+{ a logical coordinate in the picture drawn RenderScale times larger }
+function Z(V: Integer): Integer; inline;
+begin
+  Result := V * RenderScale;
+end;
 
 const
   ClGray = $C0C0C0;           { RGB(192, 192, 192) pens, LTGRAY_BRUSH }
@@ -147,7 +167,7 @@ begin
     Exit;
   C.Brush.Style := bsSolid;
   C.Brush.Color := Color;
-  C.FillRect(X1, Y1, X2, Y2);
+  C.FillRect(Z(X1), Z(Y1), Z(X2), Z(Y2));
 end;
 
 var
@@ -195,12 +215,36 @@ end;
 { fill with a pattern brush whose origin is the DC's origin }
 procedure FillPattern(C: TCanvas; X1, Y1, X2, Y2: Integer; const Name: RawByteString);
 var
-  T: TBitmap;
+  T, P: TBitmap;
+  TS, TX, TY, AX1, AY1, AX2, AY2, L, R, U, D: Integer;
 begin
   if (X2 <= X1) or (Y2 <= Y1) then
     Exit;
-  T := TiledPattern(Name);
-  C.CopyRect(Rect(X1, Y1, X2, Y2), T.Canvas, Rect(X1, Y1, X2, Y2));
+  if RenderScale = 1 then
+  begin
+    T := TiledPattern(Name);
+    C.CopyRect(Rect(X1, Y1, X2, Y2), T.Canvas, Rect(X1, Y1, X2, Y2));
+    Exit;
+  end;
+  { the 8x8 pattern scaled, its tiles aligned to the DC's origin as before }
+  P := ScaledBitmap(Name, 0, RenderScale);
+  if P = nil then
+    Exit;
+  TS := 8 * RenderScale;
+  AX1 := Z(X1); AY1 := Z(Y1); AX2 := Z(X2); AY2 := Z(Y2);
+  TY := (AY1 div TS) * TS;
+  while TY < AY2 do
+  begin
+    TX := (AX1 div TS) * TS;
+    while TX < AX2 do
+    begin
+      L := Max(TX, AX1); R := Min(TX + TS, AX2);
+      U := Max(TY, AY1); D := Min(TY + TS, AY2);
+      C.CopyRect(Rect(L, U, R, D), P.Canvas, Rect(L - TX, U - TY, R - TX, D - TY));
+      Inc(TX, TS);
+    end;
+    Inc(TY, TS);
+  end;
 end;
 
 type
@@ -242,8 +286,8 @@ begin
   else
   begin
     C.Pen.Color := Pen;
-    C.Pen.Width := 1;
-    C.Line(Cur.X, Cur.Y, X, Y);
+    C.Pen.Width := RenderScale;
+    C.Line(Z(Cur.X), Z(Cur.Y), Z(X), Z(Y));
   end;
   Cur := Point(X, Y);
 end;
@@ -253,7 +297,9 @@ procedure BmpDrawPart(C: TCanvas; B: TBitmap; X, Y, SX, SY, W, H: Integer);
 begin
   if B = nil then
     Exit;
-  C.CopyRect(Rect(X, Y, X + W, Y + H), B.Canvas, Rect(SX, SY, SX + W, SY + H));
+  B := ScaledOf(B, RenderScale);
+  C.CopyRect(Rect(Z(X), Z(Y), Z(X + W), Z(Y + H)), B.Canvas,
+    Rect(Z(SX), Z(SY), Z(SX + W), Z(SY + H)));
 end;
 
 procedure BmpDraw(C: TCanvas; B: TBitmap; X, Y, W, H: Integer);
@@ -268,9 +314,9 @@ var
 begin
   if (Id < 0) or (Id > $FFFF - 1000) then
     Exit;
-  B := Sprite(Id);
+  B := ScaledSprite(Id, RenderScale);
   if B <> nil then
-    C.Draw(X, Y, B);
+    C.Draw(Z(X), Z(Y), B);
 end;
 
 var
@@ -292,6 +338,13 @@ begin
     Exit;
   DW := R48Round(R48Mul(R48FromLong(W), Scale));
   DH := R48Round(R48Mul(R48FromLong(H), Scale));
+  if RenderScale > 1 then
+  begin
+    { the scaler to at least the size, then smoothly down to it }
+    C.StretchDraw(Rect(Z(X), Z(Y), Z(X + DW), Z(Y + DH)),
+      ScaledOf(Src, Ceil(Z(DW) / W)));
+    Exit;
+  end;
   Key := Name + '#' + IntToStr(DW) + 'x' + IntToStr(DH);
   K := Stretched.IndexOf(Key);
   if K >= 0 then
@@ -325,18 +378,22 @@ begin
   S := Utf8(Raw);
   C.Brush.Style := bsClear;
   C.Font.Color := Color;
+  X := Z(X);
   if Right then
     Dec(X, C.TextWidth(S));
-  C.TextOut(X, Y, S);
+  C.TextOut(X, Z(Y), S);
 end;
 
 { the LOGFONT DS:60c8 of Unit13_Init (1060:2241): -12 px, bold, Comic Sans MS }
 procedure SelectMapFont(C: TCanvas);
 begin
   C.Font.Name := 'Comic Sans MS';
-  C.Font.Height := -12;
+  C.Font.Height := -12 * RenderScale;
   C.Font.Style := [fsBold];
-  C.Font.Quality := fqNonAntialiased;
+  if RenderScale = 1 then
+    C.Font.Quality := fqNonAntialiased
+  else
+    C.Font.Quality := fqAntialiased;                  { (smooth when larger) }
 end;
 
 { -- the three pictures --------------------------------------------------------- }
@@ -350,9 +407,9 @@ begin
   H := ResolutionHeight - 40;
   M := TBitmap.Create;
   try
-    M.SetSize(W, H);
+    M.SetSize(Z(W), Z(H));
     GdiRectangle(M.Canvas, 0, 0, W, H, ClGray, bkPattern, 0, 'MUSTER');
-    C.Draw(32, 0, M);
+    C.Draw(Z(32), 0, M);
   finally
     M.Free;
   end;
@@ -375,11 +432,11 @@ begin
   Move(PByte(@DS)[$4542 + 6 * DS.OptResolution], S, 6);    { 1.0 / 1.25 / 1.6 }
   M := TBitmap.Create;
   try
-    M.SetSize(W, H);
+    M.SetSize(Z(W), Z(H));
     GdiRectangle(M.Canvas, 0, 0, W, H, ClGray, bkPattern, 0, 'MUSTER');
     BmpDrawStretched(M.Canvas, 'WAPPEN', Sc(188), Sc(30), 200, 250, S);
     BmpDrawStretched(M.Canvas, 'BIGLOGO', Sc(163), Sc(290), 250, 125, S);
-    C.Draw(32, 0, M);
+    C.Draw(Z(32), 0, M);
   finally
     M.Free;
   end;
@@ -425,7 +482,7 @@ begin
   Farm := (P.Land - P.LandUsed) div 1000;
   M := TBitmap.Create;
   try
-    M.SetSize(W - $21, H - $28);
+    M.SetSize(Z(W - $21), Z(H - $28));
     C2 := M.Canvas;
     { the land: LAND pattern, green pen }
     GdiRectangle(C2, 0, 0, PX, H - $28, $00FF00, bkPattern, 0, 'LAND');
@@ -600,7 +657,7 @@ begin
         T := ShortInt(U^.UnitType);
       BmpDrawMasked(C2, T + $4B0, Tile(OX, DSWord($39CE + 2 * I)), Tile(OY, DSWord($39DE + 2 * I)));
     end;
-    C.Draw(32, 0, M);
+    C.Draw(Z(32), 0, M);
   finally
     M.Free;
   end;
@@ -739,14 +796,14 @@ begin
   if FTools[I].Bmp = nil then
     Exit;
   if FTools[I].Enabled then
-    C.Draw(L + Off, T + Off, FTools[I].Bmp)                       { SRCCOPY }
+    C.Draw(Z(L + Off), Z(T + Off), ScaledOf(FTools[I].Bmp, RenderScale))   { SRCCOPY }
   else
   begin
     { ROP 00A803A9 = D and (P or S) with the GrayingBitmap pattern (origin
       0, 0 of the toolbar) over the LTGRAY face }
     if FTools[I].Grey <> nil then
     begin
-      C.Draw(L + Off, T + Off, FTools[I].Grey);
+      C.Draw(Z(L + Off), Z(T + Off), ScaledOf(FTools[I].Grey, RenderScale));
       Exit;
     end;
     if GrayImg = nil then
@@ -774,7 +831,7 @@ begin
       Dis := TBitmap.Create;
       Dis.LoadFromIntfImage(DI);
       FTools[I].Grey := Dis;
-      C.Draw(L + Off, T + Off, Dis);
+      C.Draw(Z(L + Off), Z(T + Off), ScaledOf(Dis, RenderScale));
     finally
       DI.Free;
       SI.Free;
@@ -782,12 +839,43 @@ begin
   end;
 end;
 
+procedure TKaiserToolbar.ToolMouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  MouseDown(Button, Shift, X, Y);
+end;
+
+procedure TKaiserToolbar.ToolMouseMove(Shift: TShiftState; X, Y: Integer);
+begin
+  MouseMove(Shift, X, Y);
+end;
+
+procedure TKaiserToolbar.ToolMouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  MouseUp(Button, Shift, X, Y);
+end;
+
+function TKaiserToolbar.Captured: Boolean;
+begin
+  Result := FCaptured >= 0;
+end;
+
+procedure TKaiserToolbar.Invalidate;
+begin
+  inherited Invalidate;
+  { hidden in the remastered window: the window shows it }
+  if not Visible and (Parent <> nil) then
+    Parent.Invalidate;
+end;
+
 procedure TKaiserToolbar.FreeGrey;
 var
   I: Integer;
 begin
   for I := 0 to High(FTools) do
+  begin
+    ForgetScaled(FTools[I].Grey);
     FreeAndNil(FTools[I].Grey);
+  end;
 end;
 
 destructor TKaiserToolbar.Destroy;

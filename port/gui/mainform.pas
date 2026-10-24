@@ -9,7 +9,8 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
-  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music;
+  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music, Math, PixelScale,
+  MacAppearance;
 
 type
   TKaiserForm = class(TForm)
@@ -21,7 +22,16 @@ type
     FToolbar: TKaiserToolbar;
     FBuffer: TBitmap;
     FBoss: Boolean;                 { CmBossKey: close without asking (Self+0x4958) }
+    { remastered: the picture (logical MainClientWidth x MainClientHeight)
+      shown FScale times larger at (FOffX, FOffY) }
+    FScale: Double;
+    FOffX, FOffY: Integer;
+    FToolDown: Boolean;             { a button went down on the toolbar }
     FAccel: TBytes;                 { ACCELERATORS MENUKEYS: flags, key, command (5 bytes) }
+    function ToLogical(X, Y: Integer): TPoint;
+    procedure FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure FormMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+      X, Y: Integer);
     procedure BuildMenu;
     procedure AddItems(Into: TMenuItem; const M: TMenuTemplate);
     procedure MenuClick(Sender: TObject);
@@ -186,7 +196,7 @@ begin
   { the class background: BLACK_BRUSH (KaiserWindow::GetWindowClass) }
   C.Brush.Style := bsSolid;
   C.Brush.Color := clBlack;
-  C.FillRect(0, 0, MainClientWidth, MainClientHeight);
+  C.FillRect(0, 0, MainClientWidth * RenderScale, MainClientHeight * RenderScale);
   case DS.Game.GameState of
     0: PaintTitleScreen(C);
     1: DrawPlayerBuildings(C, FSave.Players[DS.Game.CurrentPlayer], DS.Game.Year);
@@ -222,12 +232,30 @@ begin
 end;
 
 procedure TKaiserForm.ApplyWindowSize;
+var
+  K: Integer;
 begin
-  { SetupWindow / Cm640x480 (1000:0268 / 1ed4): the window by the
-    resolution, the client height ResolutionHeight - 40 }
-  ClientWidth := MainClientWidth;
-  ClientHeight := MainClientHeight;
-  FToolbar.SetBounds(0, 0, FToolbar.BarWidth - 1, ClientHeight);
+  { SetupWindow / Cm640x480 (1000:0268 / 1ed4): the layout by the
+    resolution, the client height ResolutionHeight - 40. Remastered: the
+    window the largest whole multiple of it that fits the screen (at
+    least 1); the user may resize it freely }
+  K := Max(1, Min(Trunc(Screen.WorkAreaWidth * 0.9 / MainClientWidth),
+    Trunc(Screen.WorkAreaHeight * 0.9 / MainClientHeight)));
+  if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
+    K := 1;                                       { the snapshots at 1x }
+  if GetEnvironmentVariable('KAISER_WINDOWSCALE') <> '' then
+    K := StrToIntDef(GetEnvironmentVariable('KAISER_WINDOWSCALE'), K);
+  Constraints.MinWidth := MainClientWidth div 2;
+  Constraints.MinHeight := MainClientHeight div 2;
+  ClientWidth := MainClientWidth * K;
+  ClientHeight := MainClientHeight * K;
+  FToolbar.SetBounds(0, 0, FToolbar.BarWidth - 1, MainClientHeight);
+end;
+
+function TKaiserForm.ToLogical(X, Y: Integer): TPoint;
+begin
+  Result.X := Floor((X - FOffX) / FScale);
+  Result.Y := Floor((Y - FOffY) / FScale);
 end;
 
 procedure TKaiserForm.SetResolution(R: Byte);
@@ -247,12 +275,46 @@ end;
 
 procedure TKaiserForm.FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
+var
+  P: TPoint;
 begin
+  P := ToLogical(X, Y);
+  { the toolbar's part of the picture }
+  if (P.X >= 0) and (P.X < FToolbar.BarWidth - 1) and (P.Y >= 0) and (P.Y < MainClientHeight) then
+  begin
+    FToolDown := True;
+    FToolbar.ToolMouseDown(Button, Shift, P.X, P.Y);
+    Exit;
+  end;
   { WMLButtonDblClk / WMRButtonDown (1000:039d / 03bb) }
   if (Button = mbLeft) and (ssDouble in Shift) then
-    HandleMapClick(True, X, Y)
+    HandleMapClick(True, P.X, P.Y)
   else if Button = mbRight then
-    HandleMapClick(False, X, Y);
+    HandleMapClick(False, P.X, P.Y);
+end;
+
+procedure TKaiserForm.FormMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+var
+  P: TPoint;
+begin
+  if FToolDown then
+  begin
+    P := ToLogical(X, Y);
+    FToolbar.ToolMouseMove(Shift, P.X, P.Y);
+  end;
+end;
+
+procedure TKaiserForm.FormMouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
+  X, Y: Integer);
+var
+  P: TPoint;
+begin
+  if FToolDown then
+  begin
+    FToolDown := False;
+    P := ToLogical(X, Y);
+    FToolbar.ToolMouseUp(Button, Shift, P.X, P.Y);
+  end;
 end;
 
 procedure TKaiserForm.HandleMapClick(Dbl: Boolean; X, Y: Integer);
@@ -366,8 +428,10 @@ var
 begin
   inherited CreateNew(AOwner);
   Caption := 'Kaiser';
-  BorderStyle := bsSingle;                        { no thick frame, no maximize box }
-  BorderIcons := [biSystemMenu, biMinimize];
+  { remastered: any size and full screen; the picture scales }
+  BorderStyle := bsSizeable;
+  BorderIcons := [biSystemMenu, biMinimize, biMaximize];
+  FScale := 1;
   Position := poScreenCenter;
   Color := clBlack;
   OnPaint := @FormPaint;
@@ -380,6 +444,8 @@ begin
   OnShow := @FormShow;
   OnWindowStateChange := @FormWindowStateChange;
   OnMouseDown := @FormMouseDown;
+  OnMouseMove := @FormMouseMove;
+  OnMouseUp := @FormMouseUp;
   FillChar(FSave, SizeOf(FSave), 0);
   FBuffer := TBitmap.Create;
   { the toolbar KAISERTOOLS_640 / _800, docked on the left (1000:0045) }
@@ -390,6 +456,7 @@ begin
   else
     FToolbar.SetResource(DSText($0234));
   FToolbar.OnCommand := @Command;
+  FToolbar.Visible := False;                      { drawn into the picture }
   FToolbar.EnableTools(LastGameTool(FToolbar), False);    { SetupWindow }
   ApplyWindowSize;
   BuildMenu;
@@ -883,12 +950,42 @@ begin
 end;
 
 procedure TKaiserForm.FormPaint(Sender: TObject);
+var
+  LW, LH, RS, DW, DH: Integer;
 begin
-  { KaiserWindow::Paint (1000:0b5d), drawn off screen and blitted }
+  { KaiserWindow::Paint (1000:0b5d), drawn off screen. Remastered: the
+    picture keeps the original layout of LW x LH; it is drawn RS times
+    larger (the pixel scaler's factor for the window's size in device
+    pixels) and goes smoothly scaled into the window, the aspect kept }
   UpdateWindowState;
-  FBuffer.SetSize(MainClientWidth, MainClientHeight);
-  RenderMain(FBuffer.Canvas);
-  Canvas.Draw(0, 0, FBuffer);
+  LW := MainClientWidth;
+  LH := MainClientHeight;
+  FScale := Min(ClientWidth / LW, ClientHeight / LH);
+  if FScale <= 0 then
+    FScale := 1;
+  RS := SupportedFactor(Ceil(FScale * BackingScale - 0.01));
+  { (at most ~16 million pixels of picture) }
+  while (RS > 1) and (Int64(LW * RS) * (LH * RS) > 16000000) do
+    RS := LowerFactor(RS);
+  RenderScale := RS;
+  try
+    FBuffer.SetSize(LW * RS, LH * RS);
+    RenderMain(FBuffer.Canvas);
+    FToolbar.PaintTo(FBuffer.Canvas, LH);
+  finally
+    RenderScale := 1;
+  end;
+  DW := Round(LW * FScale);
+  DH := Round(LH * FScale);
+  FOffX := (ClientWidth - DW) div 2;
+  FOffY := (ClientHeight - DH) div 2;
+  Canvas.Brush.Color := $101010;
+  if (DW < ClientWidth) or (DH < ClientHeight) then
+    Canvas.FillRect(0, 0, ClientWidth, ClientHeight);
+  if (DW = LW * RS) and (DH = LH * RS) then
+    Canvas.Draw(FOffX, FOffY, FBuffer)
+  else
+    Canvas.StretchDraw(Rect(FOffX, FOffY, FOffX + DW, FOffY + DH), FBuffer);
 end;
 
 end.

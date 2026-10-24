@@ -18,6 +18,11 @@ function FromPix(const P: TPixImage): TBitmap;
 function ScaledSprite(Id: Word; N: Integer): TBitmap;
 { the BITMAP resource (KaiserLCL.ResBitmap) N times larger }
 function ScaledBitmap(const Name: RawByteString; Id: Word; N: Integer): TBitmap;
+{ any bitmap N times larger, kept by its address: a bitmap that is freed
+  must be forgotten first (ForgetScaled), or a new one at the same address
+  would get its picture }
+function ScaledOf(B: TBitmap; N: Integer): TBitmap;
+procedure ForgetScaled(B: TBitmap);
 
 implementation
 
@@ -118,6 +123,40 @@ begin
   if K >= 0 then
     Exit(TBitmap(Cache.Objects[K]));
   Result := Cached(Key, ResBitmap(Name, Id), N);
+end;
+
+function ScaledOf(B: TBitmap; N: Integer): TBitmap;
+var
+  K: Integer;
+  Key: string;
+begin
+  if B = nil then
+    Exit(nil);
+  N := SupportedFactor(N);
+  if N <= 1 then
+    Exit(B);
+  Key := 'P' + IntToHex(PtrUInt(B), 16) + 'x' + IntToStr(N);
+  K := Cache.IndexOf(Key);
+  if K >= 0 then
+    Exit(TBitmap(Cache.Objects[K]));
+  Result := Cached(Key, B, N);
+end;
+
+procedure ForgetScaled(B: TBitmap);
+var
+  I: Integer;
+  Prefix: string;
+begin
+  if B = nil then
+    Exit;
+  Prefix := 'P' + IntToHex(PtrUInt(B), 16) + 'x';
+  for I := Cache.Count - 1 downto 0 do
+    if Copy(Cache[I], 1, Length(Prefix)) = Prefix then
+    begin
+      if Cache.Objects[I] <> B then
+        Cache.Objects[I].Free;
+      Cache.Delete(I);
+    end;
 end;
 
 initialization

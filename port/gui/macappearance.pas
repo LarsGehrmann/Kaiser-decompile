@@ -10,6 +10,8 @@ unit MacAppearance;
 interface
 
 procedure UseLightAppearance;
+{ device pixels per point of the main screen (2 on Retina; 1 elsewhere) }
+function BackingScale: Double;
 
 implementation
 
@@ -17,6 +19,15 @@ implementation
 uses
   CocoaAll, Cocoa_Extra;
 {$endif}
+
+function BackingScale: Double;
+begin
+  Result := 1;
+  {$ifdef darwin}
+  if NSScreen.mainScreen <> nil then
+    Result := NSScreen.mainScreen.backingScaleFactor;
+  {$endif}
+end;
 
 procedure UseLightAppearance;
 begin

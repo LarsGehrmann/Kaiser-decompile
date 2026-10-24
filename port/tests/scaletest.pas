@@ -87,6 +87,8 @@ begin
   Check(SupportedFactor(5) = 6, 'factor 5 -> 6');
   Check(SupportedFactor(7) = 8, 'factor 7 -> 8');
   Check(SupportedFactor(10) = 12, 'factor 10 -> 12');
+  Check((LowerFactor(6) = 4) and (LowerFactor(2) = 1) and (LowerFactor(1) = 1) and
+    (LowerFactor(12) = 9), 'LowerFactor');
   { a vertical edge stays straight (no diagonal there) }
   S := Img(2, 3, [W, B, W, B, W, B]);
   R := Scale2x(S);

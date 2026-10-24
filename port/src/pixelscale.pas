@@ -27,6 +27,8 @@ function ScaleNearest(const S: TPixImage; N: Integer): TPixImage;
 function ScalePix(const S: TPixImage; N: Integer): TPixImage;
 { the smallest factor >= N made of 2x and 3x steps (1, 2, 3, 4, 6, 8, 9, 12) }
 function SupportedFactor(N: Integer): Integer;
+{ the largest supported factor below N (at least 1) }
+function LowerFactor(N: Integer): Integer;
 
 implementation
 
@@ -141,6 +143,18 @@ begin
     if F[I] >= N then
       Exit(F[I]);
   Result := 12;
+end;
+
+function LowerFactor(N: Integer): Integer;
+const
+  F: array[0..7] of Integer = (1, 2, 3, 4, 6, 8, 9, 12);
+var
+  I: Integer;
+begin
+  Result := 1;
+  for I := 0 to High(F) do
+    if F[I] < N then
+      Result := F[I];
 end;
 
 end.
