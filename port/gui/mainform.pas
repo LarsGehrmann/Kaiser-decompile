@@ -249,6 +249,7 @@ begin
   Constraints.MinHeight := MainClientHeight div 2;
   ClientWidth := MainClientWidth * K;
   ClientHeight := MainClientHeight * K;
+  DialogScale := K;
   FToolbar.SetBounds(0, 0, FToolbar.BarWidth - 1, MainClientHeight);
 end;
 
@@ -963,6 +964,7 @@ begin
   FScale := Min(ClientWidth / LW, ClientHeight / LH);
   if FScale <= 0 then
     FScale := 1;
+  DialogScale := FScale;                          { the dialogs opened from now on }
   RS := SupportedFactor(Ceil(FScale * BackingScale - 0.01));
   { (at most ~16 million pixels of picture) }
   while (RS > 1) and (Int64(LW * RS) * (LH * RS) > 16000000) do

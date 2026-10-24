@@ -72,6 +72,9 @@ type
 
 var
   Exe: TNEFile;
+  { remastered: the dialogs are made DialogScale times larger than their
+    templates (the main window's scale, set when it paints) }
+  DialogScale: Double = 1;
   DialogBackground: TColor = $00ACFFFF;   { INI Hintergrund rot/gruen/blau = 255,255,172 }
 
 { kaiser.exe next to the program, in Kaiser/ or ../Kaiser or given as -exe PATH }
@@ -88,11 +91,20 @@ function ResBitmap(const Name: RawByteString; Id: Word = 0): TBitmap;
   transparent; Bmp_DrawMasked 1078:00c4) as a 32-bit bitmap with alpha }
 function Sprite(Id: Word): TBitmap;
 function Utf8(const Raw: RawByteString): string;
+{ the pixel scaler's factor for pictures in dialogs: DialogScale in device
+  pixels, made of 2x / 3x steps (PixelScale.SupportedFactor) }
+function DialogFactor: Integer;
 
 implementation
 
 uses
-  Process, IntfGraphics, FPImage, GraphType, Buttons, WinScroll;
+  Process, IntfGraphics, FPImage, GraphType, Buttons, WinScroll, Math, PixelScale, RGraphics,
+  MacAppearance;
+
+function DialogFactor: Integer;
+begin
+  Result := Min(6, SupportedFactor(Ceil(DialogScale * BackingScale - 0.01)));
+end;
 
 function Utf8(const Raw: RawByteString): string;
 begin
@@ -228,12 +240,16 @@ begin
 end;
 
 { an ICON resource into an image (SS_ICON statics) }
-procedure LoadIcon(Img: TImage; const Name: RawByteString);
+{ the ICON resource: remastered, drawn into a bitmap, made larger by the
+  scaler and shown DialogScale times larger (True when so sized) }
+function LoadIcon(Img: TImage; const Name: RawByteString): Boolean;
 var
   Data: TBytes;
   S: TMemoryStream;
   Ico: TIcon;
+  B, Big: TBitmap;
 begin
+  Result := False;
   Data := Exe.IconFile(Name);
   if Data = nil then
     Exit;
@@ -244,8 +260,34 @@ begin
     S.Position := 0;
     try
       Ico.LoadFromStream(S);
-      Img.Picture.Assign(Ico);
-      Img.AutoSize := True;
+      if DialogFactor <= 1 then
+      begin
+        Img.Picture.Assign(Ico);
+        Img.AutoSize := True;
+      end
+      else
+      begin
+        B := TBitmap.Create;
+        try
+          B.PixelFormat := pf32bit;
+          B.SetSize(Ico.Width, Ico.Height);
+          B.Canvas.Brush.Color := DialogBackground;
+          B.Canvas.FillRect(0, 0, B.Width, B.Height);
+          B.Canvas.Draw(0, 0, Ico);
+          Big := FromPix(ScalePix(ToPix(B), DialogFactor));
+          try
+            Img.Picture.Assign(Big);
+          finally
+            Big.Free;
+          end;
+          Img.Stretch := True;
+          Img.AntialiasingMode := amOn;
+          Img.SetBounds(0, 0, Round(Ico.Width * DialogScale), Round(Ico.Height * DialogScale));
+          Result := True;
+        finally
+          B.Free;
+        end;
+      end;
     except
     end;
   finally
@@ -266,6 +308,7 @@ var
   Kind: Byte;
   Bmp, Measure: TBitmap;
   Cap: TLabel;
+  Sized: Boolean;                   { a picture sized by its scaled bitmap }
 begin
   inherited CreateNew(AOwner);
   FTemplate := T;
@@ -278,10 +321,12 @@ begin
     Font.Name := Utf8(T.FontFace);
     { Windows laid the dialogs out at 96 DPI: there LCL converts the points
       itself, on macOS a point is a pixel }
+    { remastered: DialogScale times larger (the layout follows the font's
+      base units) }
     {$ifdef darwin}
-    Font.Size := Round(T.FontSize * 96 / 72);
+    Font.Size := Round(T.FontSize * 96 / 72 * DialogScale);
     {$else}
-    Font.Size := T.FontSize;
+    Font.Size := Round(T.FontSize * DialogScale);
     {$endif}
   end;
   { the dialog base units of the template font (GetDialogBaseUnits) }
@@ -305,6 +350,7 @@ begin
   for I := 0 to High(T.Items) do
   begin
     It := T.Items[I];
+    Sized := False;
     C := nil;
     if It.ClassName = 'BUTTON' then
     begin
@@ -404,12 +450,16 @@ begin
       Bmp := ResBitmap(It.Text);
       if Bmp <> nil then
       begin
-        TImage(C).Picture.Assign(Bmp);
+        { remastered: the scaler's picture shown DialogScale times larger }
+        TImage(C).Picture.Assign(ScaledOf(Bmp, DialogFactor));
         TImage(C).Transparent := True;
-        TImage(C).AutoSize := True;
+        TImage(C).Stretch := True;
+        TImage(C).AntialiasingMode := amOn;
+        TImage(C).SetBounds(0, 0, Round(Bmp.Width * DialogScale), Round(Bmp.Height * DialogScale));
+        Sized := True;
       end
       else
-        LoadIcon(TImage(C), It.Text);
+        Sized := LoadIcon(TImage(C), It.Text);
     end
     else
     begin
@@ -428,7 +478,7 @@ begin
     C.Left := DU(It.X, True);
     C.Top := DU(It.Y, False);
     C.Font.Color := clBlack;
-    if not ((C is TImage) and TImage(C).AutoSize) then
+    if not ((C is TImage) and (TImage(C).AutoSize or Sized)) then
     begin
       C.Width := DU(It.CX, True);
       C.Height := DU(It.CY, False);

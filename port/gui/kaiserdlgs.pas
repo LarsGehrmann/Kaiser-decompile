@@ -76,6 +76,12 @@ type
     FMap: TImage;                   { GEGNERDLG: the map of the countries }
     FPicture: TImage;               { UnitLookDlg / RecruitDlg: the unit; the crown }
     FInfo: TImage;                  { ANORDNENDLG: the card of the unit under the mouse }
+    { remastered: the dialog's scale and the scaler's factor (DialogScale,
+      DialogFactor when it was made) }
+    FS: Double;
+    FF: Integer;
+    function Buffer(LW, LH: Integer; Back: TColor): TBitmap;
+    procedure Show(var Img: TImage; X, Y, LW, LH: Integer; B: TBitmap; Mouse: Boolean);
     procedure GridMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -120,7 +126,6 @@ type
       Garde unit's card starts at 178 (ranged: 140) }
     procedure DrawUnitInfo;
     procedure AutoMouse(X, Y: Integer); override;
-    function PictureImage(X, Y, W, H: Integer): TImage;
     destructor Destroy; override;
     function Logic: TDialogLogic;
     procedure SetupWindow; override;
@@ -134,7 +139,7 @@ function DialogClassOf(const Name: string): TKaiserDialogClass;
 implementation
 
 uses
-  Math, Rules, Real48, Turn, KaiserRes, HelpView, WinScroll;
+  Math, Rules, Real48, Turn, KaiserRes, HelpView, WinScroll, RGraphics;
 
 { -- TKaiserDialog ----------------------------------------------------------- }
 
@@ -438,6 +443,8 @@ end;
 
 procedure TLogicDialog.SetupWindow;
 begin
+  FS := DialogScale;
+  FF := DialogFactor;
   FControls := TFormControls.Create;
   FControls.F := Self;
   Logic.C := FControls;
@@ -470,25 +477,66 @@ begin
     Logic.Timer;
 end;
 
+{ -- the painted parts (remastered: each drawn FF times larger into a
+  buffer of its logical size, shown FS times larger; positions that the
+  logic derives from the window size stay window coordinates, the fixed
+  pixel sizes and offsets of the original are logical units) -------------- }
+
+function TLogicDialog.Buffer(LW, LH: Integer; Back: TColor): TBitmap;
+begin
+  Result := TBitmap.Create;
+  Result.SetSize(Max(1, LW * FF), Max(1, LH * FF));
+  Result.Canvas.Brush.Color := Back;
+  Result.Canvas.FillRect(0, 0, Result.Width, Result.Height);
+end;
+
+procedure TLogicDialog.Show(var Img: TImage; X, Y, LW, LH: Integer; B: TBitmap;
+  Mouse: Boolean);
+begin
+  if Img = nil then
+  begin
+    Img := TImage.Create(Self);
+    Img.Parent := Self;
+    if Mouse then
+    begin
+      Img.OnMouseDown := @GridMouseDown;
+      Img.OnMouseMove := @GridMouseMove;
+    end;
+  end;
+  Img.SetBounds(X, Y, Max(1, Round(LW * FS)), Max(1, Round(LH * FS)));
+  Img.Stretch := True;
+  Img.AntialiasingMode := amOn;
+  Img.Picture.Assign(B);
+end;
+
+{ a font of the original's LOGFONT -12 bold Comic Sans, FF times larger }
+procedure SetPaintFont(Cv: TCanvas; F: Integer);
+begin
+  Cv.Font.Name := 'Comic Sans MS';
+  Cv.Font.Height := -12 * F;
+  Cv.Font.Style := [fsBold];
+  Cv.Font.Color := clBlack;
+  if F > 1 then
+    Cv.Font.Quality := fqAntialiased;
+end;
+
 procedure TLogicDialog.DrawPortrait(Blink: Byte);
 var
   B: TBitmap;
   Base: Word;
 begin
-  if FPortrait = nil then
-  begin
-    FPortrait := TImage.Create(Self);
-    FPortrait.Parent := Self;
-    FPortrait.Transparent := True;
-  end;
-  FPortrait.SetBounds(Round(12 * Width / 237), Round(64 * Height / 254), 32, 32);
   if Blink <> 0 then
     Base := 1300
   else
     Base := 1100;
-  B := Sprite(Base + ShortInt(D.Data[$4E]));
-  if B <> nil then
-    FPortrait.Picture.Assign(B);
+  B := Buffer(32, 32, DialogBackground);
+  try
+    if ScaledSprite(Base + ShortInt(D.Data[$4E]), FF) <> nil then
+      B.Canvas.Draw(0, 0, ScaledSprite(Base + ShortInt(D.Data[$4E]), FF));
+    Show(FPortrait, Round(12 * Width / 237), Round(64 * Height / 254), 32, 32, B, False);
+  finally
+    B.Free;
+  end;
 end;
 
 procedure TLogicDialog.FormMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
@@ -503,95 +551,87 @@ begin
   Logic.MouseMove(X, Y);
 end;
 
+{ in a painted part: its window position plus the logical offset }
 procedure TLogicDialog.GridMouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState;
   X, Y: Integer);
 begin
   if Button = mbLeft then
-    Logic.Mouse(TControl(Sender).Left + X, TControl(Sender).Top + Y);
+    Logic.Mouse(TControl(Sender).Left + Trunc(X / FS), TControl(Sender).Top + Trunc(Y / FS));
 end;
 
 procedure TLogicDialog.GridMouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
 begin
-  Logic.MouseMove(TControl(Sender).Left + X, TControl(Sender).Top + Y);
+  Logic.MouseMove(TControl(Sender).Left + Trunc(X / FS), TControl(Sender).Top + Trunc(Y / FS));
 end;
 
 procedure TLogicDialog.DrawTroops;
 var
   P: PPlayer;
-  Buf: TBitmap;
+  B: TBitmap;
+  Cv: TCanvas;
+  I: Integer;
+  Wall: TBitmap;
 
-  { the grid is drawn off screen and then shown (drawing on the TImage's own
-    bitmap left the Cocoa window showing only the first frame) }
-  function Grid(var Img: TImage; X, Y, W, H: Integer): TCanvas;
-  begin
-    if Img = nil then
-    begin
-      Img := TImage.Create(Self);
-      Img.Parent := Self;
-      Img.OnMouseDown := @GridMouseDown;
-      Img.OnMouseMove := @GridMouseMove;
-    end;
-    Img.SetBounds(X, Y, W, H);
-    Buf.SetSize(W, H);
-    Result := Buf.Canvas;
-    { the dialog brush (DS:63a6) and NULL_PEN: no frame }
-    Result.Brush.Color := DialogBackground;
-    Result.FillRect(0, 0, W, H);
-  end;
-
-  procedure Icon(Cv: TCanvas; const U: TUnit; Base, X, Y: Integer; Selected: Boolean);
+  procedure Icon(const U: TUnit; Base, X, Y: Integer; Selected: Boolean);
   var
-    B: TBitmap;
+    S: TBitmap;
     N: Integer;
   begin
     if Selected then
     begin
       Cv.Brush.Color := clRed;
-      Cv.FillRect(X, Y, X + 31, Y + 31);           { NULL_PEN: one pixel smaller }
+      Cv.FillRect(X * FF, Y * FF, (X + 31) * FF, (Y + 31) * FF);   { NULL_PEN: one pixel smaller }
     end;
     if U.UnitType = 9 then
       N := Base + 50 + PByte(@U)[$1A]                 { a hero: his picture }
     else
       N := Base + U.UnitType;
-    B := Sprite(N);
-    if B <> nil then
-      Cv.Draw(X, Y, B);
+    S := ScaledSprite(N, FF);
+    if S <> nil then
+      Cv.Draw(X * FF, Y * FF, S);
   end;
 
-var
-  Cv: TCanvas;
-  I: Integer;
-  Wall: TBitmap;
+  procedure Fill(X1, Y1, X2, Y2: Integer);
+  begin
+    Cv.FillRect(X1 * FF, Y1 * FF, X2 * FF, Y2 * FF);
+  end;
+
 begin
+  { the dialog brush (DS:63a6) and NULL_PEN: no frame }
   P := PPlayer(@D.Data[$34]);
-  Buf := TBitmap.Create;
+  B := Buffer(64, 160, DialogBackground);
   try
-    Cv := Grid(FHeer, PSmallInt(@D.Data[$710])^, PSmallInt(@D.Data[$712])^, 64, 160);
+    Cv := B.Canvas;
     for I := 1 to P^.Army1Count do
       if I <= 8 then
-        Icon(Cv, P^.Army1[I], 1100, DS.TroopHeerX[I] * 32, DS.TroopHeerY[I] * 32,
+        Icon(P^.Army1[I], 1100, DS.TroopHeerX[I] * 32, DS.TroopHeerY[I] * 32,
           (D.Data[$70A] = I) or (D.Data[$70B] = I));
-    FHeer.Picture.Assign(Buf);
-    Cv := Grid(FGarde, PSmallInt(@D.Data[$714])^, PSmallInt(@D.Data[$716])^, 112, 112);
-    Wall := ResBitmap('MAUER');
+    Show(FHeer, PSmallInt(@D.Data[$710])^, PSmallInt(@D.Data[$712])^, 64, 160, B, True);
+  finally
+    B.Free;
+  end;
+  B := Buffer(112, 112, DialogBackground);
+  try
+    Cv := B.Canvas;
+    Wall := ScaledBitmap('MAUER', 0, FF);
     if Wall <> nil then
     begin
       Cv.Brush.Bitmap := Wall;
       { the walls, the gate on the left (Rectangle with NULL_PEN) }
-      Cv.FillRect(0, 0, 111, 7);
-      Cv.FillRect(105, 8, 111, 104);
-      Cv.FillRect(0, 104, 111, 111);
-      Cv.FillRect(0, 8, 7, 39);
-      Cv.FillRect(0, 72, 7, 104);
+      Fill(0, 0, 111, 7);
+      Fill(105, 8, 111, 104);
+      Fill(0, 104, 111, 111);
+      Fill(0, 8, 7, 39);
+      Fill(0, 72, 7, 104);
       Cv.Brush.Bitmap := nil;
     end;
     for I := 1 to P^.Army2Count do
       if I <= 9 then
-        Icon(Cv, P^.Army2[I], 1200, DS.TroopGardeX[I] * 32 + 8, DS.TroopGardeY[I] * 32 + 8,
+        Icon(P^.Army2[I], 1200, DS.TroopGardeX[I] * 32 + 8, DS.TroopGardeY[I] * 32 + 8,
           (D.Data[$70C] = I) or (D.Data[$70D] = I));
-    FGarde.Picture.Assign(Buf);
+    Show(FGarde, PSmallInt(@D.Data[$714])^, PSmallInt(@D.Data[$716])^, 112, 112, B, True);
   finally
-    Buf.Free;
+    B.Free;
   end;
 end;
 
@@ -603,14 +643,26 @@ var
   C, Me, Cost: Byte;
   P: PPlayer;
 
-  function X(V: Integer): Integer;
+  { the original's scaled coordinates: window (WX, WY) and in the buffer
+    (logical times FF) }
+  function WX(V: Integer): Integer;
   begin
     Result := Trunc(V * SX + 0.5);
   end;
 
-  function Y(V: Integer): Integer;
+  function WY(V: Integer): Integer;
   begin
     Result := Trunc(V * SY + 0.5);
+  end;
+
+  function X(V: Integer): Integer;
+  begin
+    Result := Trunc(V * SX / FS * FF + 0.5);
+  end;
+
+  function Y(V: Integer): Integer;
+  begin
+    Result := Trunc(V * SY / FS * FF + 0.5);
   end;
 
 begin
@@ -622,24 +674,16 @@ begin
     SY := PSmallInt(@D.Data[$2C])^ / 335;
   Me := D.Data[$3C];
   P := PPlayer(@D.Data[$48 + Me * SizeOf(TPlayer)]);
-  if FMap = nil then
-  begin
-    FMap := TImage.Create(Self);
-    FMap.Parent := Self;
-  end;
-  FMap.SetBounds(X(340), Y(14), X(240) - 1, Y(200) - 1);
   B := TBitmap.Create;
   try
-    B.SetSize(X(240) - 1, Y(200) - 1);
+    B.SetSize(X(240) - FF, Y(200) - FF);
     Cv := B.Canvas;
     Cv.Brush.Color := clBlack;
     Cv.FillRect(0, 0, B.Width, B.Height);
     { LOGFONT DS:606c (Seg10_InitBattleFont): Comic Sans MS, -12, bold }
-    Cv.Font.Name := 'Comic Sans MS';
-    Cv.Font.Height := -12;
-    Cv.Font.Style := [fsBold];
-    Cv.Font.Color := clBlack;
+    SetPaintFont(Cv, FF);
     Cv.Pen.Color := clBlack;
+    Cv.Pen.Width := FF;
     for C := 0 to 9 do
     begin
       if ShortInt(D.Data[$449A + C]) < 0 then
@@ -672,21 +716,18 @@ begin
         Utf8(DS.CountryNamesRt[C]));
       Cv.Brush.Style := bsSolid;
     end;
+    if FMap = nil then
+    begin
+      FMap := TImage.Create(Self);
+      FMap.Parent := Self;
+    end;
+    FMap.SetBounds(WX(340), WY(14), WX(240) - 1, WY(200) - 1);
+    FMap.Stretch := True;
+    FMap.AntialiasingMode := amOn;
     FMap.Picture.Assign(B);
   finally
     B.Free;
   end;
-end;
-
-function TLogicDialog.PictureImage(X, Y, W, H: Integer): TImage;
-begin
-  if FPicture = nil then
-  begin
-    FPicture := TImage.Create(Self);
-    FPicture.Parent := Self;
-  end;
-  FPicture.SetBounds(X, Y, W, H);
-  Result := FPicture;
 end;
 
 procedure TLogicDialog.DrawUnitLook(Blink: Byte);
@@ -694,16 +735,14 @@ var
   B, S, Land: TBitmap;
   N: Integer;
 begin
-  B := TBitmap.Create;
+  B := Buffer(64, 64, clGreen);
   try
-    B.SetSize(64, 64);
-    Land := ResBitmap('LAND');
+    Land := ScaledBitmap('LAND', 0, FF);
     if Land <> nil then
-      B.Canvas.Brush.Bitmap := Land
-    else
-      B.Canvas.Brush.Color := clGreen;
+      B.Canvas.Brush.Bitmap := Land;
     B.Canvas.Pen.Color := clBlack;
-    B.Canvas.Rectangle(0, 0, 64, 64);
+    B.Canvas.Pen.Width := FF;
+    B.Canvas.Rectangle(FF div 2, FF div 2, 64 * FF - FF div 2, 64 * FF - FF div 2);
     B.Canvas.Brush.Bitmap := nil;
     if Blink <> 0 then
       N := 1300
@@ -713,10 +752,10 @@ begin
       Inc(N, 50 + D.Data[$4E])
     else
       Inc(N, ShortInt(D.Data[$4D]));
-    S := Sprite(N);
+    S := ScaledSprite(N, FF);
     if S <> nil then
-      B.Canvas.Draw(16, 16, S);
-    PictureImage(8, 8, 64, 64).Picture.Assign(B);
+      B.Canvas.Draw(16 * FF, 16 * FF, S);
+    Show(FPicture, Round(8 * FS), Round(8 * FS), 64, 64, B, False);
   finally
     B.Free;
   end;
@@ -732,15 +771,12 @@ begin
   SX := 1;
   if PSmallInt(@D.Data[$2A])^ > 0 then
     SX := PSmallInt(@D.Data[$2A])^ / 237;
-  B := TBitmap.Create;
+  B := Buffer(32, 32, DialogBackground);
   try
-    B.SetSize(32, 32);
-    B.Canvas.Brush.Color := DialogBackground;
-    B.Canvas.FillRect(0, 0, 32, 32);
-    S := Sprite(Id);
+    S := ScaledSprite(Id, FF);
     if S <> nil then
       B.Canvas.Draw(0, 0, S);
-    PictureImage(Trunc(12 * SX + 0.5), Trunc(8 * SX + 0.5), 32, 32).Picture.Assign(B);
+    Show(FPicture, Trunc(12 * SX + 0.5), Trunc(8 * SX + 0.5), 32, 32, B, False);
   finally
     B.Free;
   end;
@@ -779,13 +815,12 @@ begin
     Exit;
   { Bmp_Draw: a BitBlt of 120 x 115 scaled, not stretched; the bitmap is
     120 x 115 and the original's window 296 wide (scale 1): no more of it }
-  W := Min(Trunc(120 * SX + 0.5), Crown.Width);
-  H := Min(Trunc(115 * SY + 0.5), Crown.Height);
-  B := TBitmap.Create;
+  W := Min(Trunc(120 * SX / FS + 0.5), Crown.Width);
+  H := Min(Trunc(115 * SY / FS + 0.5), Crown.Height);
+  B := Buffer(W, H, clBlack);
   try
-    B.SetSize(W, H);
-    B.Canvas.Draw(0, 0, Crown);
-    PictureImage(Trunc(88 * SX + 0.5), Trunc(118 * SY + 0.5), W, H).Picture.Assign(B);
+    B.Canvas.Draw(0, 0, ScaledBitmap('KLEINEKRONE', 0, FF));
+    Show(FPicture, Trunc(88 * SX + 0.5), Trunc(118 * SY + 0.5), W, H, B, False);
   finally
     B.Free;
   end;
@@ -799,40 +834,41 @@ var
   W, X0, I, Kind, Count: Integer;
   Ranged: Boolean;
   Scale: TReal48;
+  LS: Double;
 
   procedure Icon(Id, X, Y: Integer);
   var
     S: TBitmap;
   begin
-    S := Sprite(Id);
+    S := ScaledSprite(Id, FF);
     if S <> nil then
-      Cv.Draw(X, Y, S);
+      Cv.Draw(X * FF, Y * FF, S);
   end;
 
   procedure Text(X, Y: Integer; const T: RawByteString);
   begin
-    Cv.TextOut(X, Y, Utf8(T));
+    Cv.TextOut(X * FF, Y * FF, Utf8(T));
   end;
 
+  { the original's Round(V * scale) with the scale taken back to logical
+    units (the window is FS times larger) }
   function Scaled(V: LongInt): Integer;
   begin
-    Result := R48Round(R48Mul(R48FromLong(V), Scale));
+    if FS = 1 then
+      Result := R48Round(R48Mul(R48FromLong(V), Scale))
+    else
+      Result := Round(V * LS);
   end;
 
 begin
   Move(D.Data[$71D], Scale, SizeOf(Scale));
+  LS := R48ToDouble(Scale) / FS;
   W := Scaled(355);
-  B := TBitmap.Create;
+  B := Buffer(W - 1, 64, DialogBackground);
   try
-    B.SetSize(W - 1, 64);
     Cv := B.Canvas;
-    Cv.Brush.Color := DialogBackground;
-    Cv.FillRect(0, 0, B.Width, B.Height);
     { LOGFONT DS:606c: Comic Sans MS, -12, bold; black, transparent }
-    Cv.Font.Name := 'Comic Sans MS';
-    Cv.Font.Height := -12;
-    Cv.Font.Style := [fsBold];
-    Cv.Font.Color := clBlack;
+    SetPaintFont(Cv, FF);
     Cv.Brush.Style := bsClear;
     if D.Data[$70F] <> 0 then
     begin
@@ -897,23 +933,22 @@ begin
           I := X0 + 200
         else
           I := X0 + 166;
-        Cv.TextOut(I - Cv.TextWidth(Utf8(DSText($53D8 + U.Ability * 25))), 16,
+        Cv.TextOut(I * FF - Cv.TextWidth(Utf8(DSText($53D8 + U.Ability * 25))), 16 * FF,
           Utf8(DSText($53D8 + U.Ability * 25)));
       end;
     end;
+    { the dialog's own colour through it (text drawn into a bitmap shifts
+      Cocoa's colour of the background a little) }
+    B.TransparentColor := DialogBackground;
+    B.Transparent := True;
     if FInfo = nil then
     begin
       FInfo := TImage.Create(Self);
       FInfo.Parent := Self;
       FInfo.OnMouseMove := @GridMouseMove;
     end;
-    FInfo.SetBounds(PSmallInt(@D.Data[$718])^, PSmallInt(@D.Data[$71A])^, W - 1, 64);
-    { the dialog's own colour through it (text drawn into a bitmap shifts
-      Cocoa's colour of the background a little) }
-    B.TransparentColor := DialogBackground;
-    B.Transparent := True;
     FInfo.Transparent := True;
-    FInfo.Picture.Assign(B);
+    Show(FInfo, PSmallInt(@D.Data[$718])^, PSmallInt(@D.Data[$71A])^, W - 1, 64, B, False);
   finally
     B.Free;
   end;
