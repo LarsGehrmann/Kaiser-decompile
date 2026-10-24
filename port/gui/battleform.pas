@@ -26,7 +26,7 @@ interface
 uses
   SysUtils, Classes, Graphics, Controls, Forms, StdCtrls, ExtCtrls, LCLType, LCLIntf,
   Math, IntfGraphics, FPImage, GraphType,
-  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, Rules, Battle, KaiserLCL, HelpView;
+  NERes, KaiserTypes, KaiserDS, KaiserUI, Real48, Rules, Battle, KaiserLCL, HelpView, RGraphics;
 
 const
   MapW = 480;               { 15 cells of 32 pixels }
@@ -48,6 +48,12 @@ type
     FAuto: Boolean;           { autopilot }
     FAutoAi: Boolean;         { the AI plays the human sides }
     FAutoRight: Boolean;      { the scripted right click was done }
+    { remastered: the window FS times larger than the original's, the
+      picture drawn FF times larger (DialogScale / DialogFactor) }
+    FS: Double;
+    FF: Integer;
+    function Z(V: Integer): Integer; inline;
+    procedure Bar(Cv: TCanvas; X1, Y1, X2, Y2: Integer; Fill: TColor);
     procedure FormPaint(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -252,14 +258,16 @@ var
 begin
   inherited CreateNew(AOwner);
   B := W;
+  FS := DialogScale;
+  FF := DialogFactor;
   LoadCursors;
   T := Exe.Dialog('KRIEG');
   Caption := Utf8(T.Caption);
   BorderStyle := bsSingle;
   BorderIcons := [];                          { WS_POPUP | WS_CAPTION: no system menu }
   Position := poScreenCenter;
-  ClientWidth := ClientW;
-  ClientHeight := ClientH;
+  ClientWidth := Round(ClientW * FS);
+  ClientHeight := Round(ClientH * FS);
   Color := DialogBackground;
   DoubleBuffered := True;
   OnPaint := @FormPaint;
@@ -269,23 +277,23 @@ begin
   OnMouseMove := @FormMouseMove;
   Cursor := crStop;
   FScreen := TBitmap.Create;
-  FScreen.SetSize(ClientW, ClientH);
+  FScreen.SetSize(Z(ClientW), Z(ClientH));
   FScreen.Canvas.Brush.Color := DialogBackground;
-  FScreen.Canvas.FillRect(0, 0, ClientW, ClientH);
+  FScreen.Canvas.FillRect(0, 0, Z(ClientW), Z(ClientH));
   { the pattern brush of the map (LAND, in winter SCHNEE: 8 x 8) }
   FGrass := TBitmap.Create;
-  FGrass.SetSize(MapW, MapH);
+  FGrass.SetSize(Z(MapW), Z(MapH));
   if B^.Winter <> 0 then
-    Bmp := ResBitmap('SCHNEE')
+    Bmp := ScaledBitmap('SCHNEE', 0, FF)
   else
-    Bmp := ResBitmap('LAND');
+    Bmp := ScaledBitmap('LAND', 0, FF);
   if Bmp <> nil then
   begin
     Y := 0;
-    while Y < MapH do
+    while Y < Z(MapH) do
     begin
       X := 0;
-      while X < MapW do
+      while X < Z(MapW) do
       begin
         FGrass.Canvas.Draw(X, Y, Bmp);
         Inc(X, Bmp.Width);
@@ -299,7 +307,15 @@ begin
     FButtons[K] := TButton.Create(Self);
     FButtons[K].Parent := Self;
     FButtons[K].Caption := Utf8(PChar(@PByte(@DS)[Captions[K]]));
-    FButtons[K].SetBounds($C9, $160 + K * $1A, $50, $1A);
+    FButtons[K].SetBounds(Round($C9 * FS), Round(($160 + K * $1A) * FS), Round($50 * FS),
+      Round($1A * FS));
+    { the dialog's font (KRIEG: Comic Sans MS 8), as large as the window }
+    FButtons[K].Font.Name := 'Comic Sans MS';
+    {$ifdef darwin}
+    FButtons[K].Font.Size := Round(8 * 96 / 72 * FS);
+    {$else}
+    FButtons[K].Font.Size := Round(8 * FS);
+    {$endif}
     FButtons[K].Tag := $65 + K;
     FButtons[K].OnClick := @ButtonClick;
     FButtons[K].Cursor := crDefault;
@@ -345,9 +361,25 @@ begin
   Invalidate;
 end;
 
+function TBattleForm.Z(V: Integer): Integer;
+begin
+  Result := V * FF;
+end;
+
+{ a filled rectangle in logical coordinates (X2, Y2 excluded) }
+procedure TBattleForm.Bar(Cv: TCanvas; X1, Y1, X2, Y2: Integer; Fill: TColor);
+begin
+  Cv.Brush.Style := bsSolid;
+  Cv.Brush.Color := Fill;
+  Cv.FillRect(Z(X1), Z(Y1), Z(X2), Z(Y2));
+end;
+
 procedure TBattleForm.FormPaint(Sender: TObject);
 begin
-  Canvas.Draw(0, 0, FScreen);
+  if (FScreen.Width = ClientWidth) and (FScreen.Height = ClientHeight) then
+    Canvas.Draw(0, 0, FScreen)
+  else
+    Canvas.StretchDraw(Rect(0, 0, ClientWidth, ClientHeight), FScreen);
 end;
 
 procedure TBattleForm.FormShow(Sender: TObject);
@@ -434,6 +466,8 @@ var
 begin
   if (X < 0) or (Y < 0) or not Enter then
     Exit;
+  X := Trunc(X / FS);                               { the logical pixel }
+  Y := Trunc(Y / FS);
   try
     if Button = mbLeft then
       Battle.WMLButtonDown(B^, Word(X), Word(Y))
@@ -453,7 +487,7 @@ begin
   if (X < 0) or (Y < 0) or not Enter then
     Exit;
   try
-    WMMouseMove(X, Y);
+    WMMouseMove(Trunc(X / FS), Trunc(Y / FS));
   finally
     Leave;
   end;
@@ -619,18 +653,18 @@ var
   Bmp: TBitmap;
 begin
   { Bmp_DrawMasked (1078:00c4): mask Id + 1000 SRCAND, Id SRCPAINT }
-  Bmp := Sprite(Id);
+  Bmp := ScaledSprite(Id, FF);
   if Bmp <> nil then
-    FScreen.Canvas.Draw(X, Y, Bmp);
+    FScreen.Canvas.Draw(Z(X), Z(Y), Bmp);
 end;
 
 procedure TBattleForm.Silhouette(Id: Integer; X, Y: Integer);
 var
   Bmp: TBitmap;
 begin
-  Bmp := SilhouetteBitmap(Id);
+  Bmp := ScaledOf(SilhouetteBitmap(Id), FF);
   if Bmp <> nil then
-    FScreen.Canvas.Draw(X, Y, Bmp);
+    FScreen.Canvas.Draw(Z(X), Z(Y), Bmp);
 end;
 
 { the building or river under a unit (DrawMap, DrawCell) }
@@ -667,16 +701,18 @@ var
 begin
   Snow := 20 * B^.Winter;
   Cv := FScreen.Canvas;
-  Cv.CopyRect(Rect(0, 0, MapW, MapH), FGrass.Canvas, Rect(0, 0, MapW, MapH));
-  { Rectangle(0, 0, 480, 352) with the pen RGB(0, 255, 0), in winter white }
-  Cv.Brush.Style := bsClear;
+  Cv.CopyRect(Rect(0, 0, Z(MapW), Z(MapH)), FGrass.Canvas, Rect(0, 0, Z(MapW), Z(MapH)));
+  { Rectangle(0, 0, 480, 352) with the pen RGB(0, 255, 0), in winter white
+    (the pen inside: four bars) }
   if B^.Winter <> 0 then
-    Cv.Pen.Color := clWhite
+    Snow := clWhite
   else
-    Cv.Pen.Color := $00FF00;
-  Cv.Pen.Width := 1;
-  Cv.Rectangle(0, 0, MapW, MapH);
-  Cv.Brush.Style := bsSolid;
+    Snow := $00FF00;
+  Bar(Cv, 0, 0, MapW, 1, Snow);
+  Bar(Cv, 0, MapH - 1, MapW, MapH, Snow);
+  Bar(Cv, 0, 0, 1, MapH, Snow);
+  Bar(Cv, MapW - 1, 0, MapW, MapH, Snow);
+  Snow := 20 * B^.Winter;
   for X := 0 to 14 do
     for Y := 0 to 10 do
     begin
@@ -713,15 +749,12 @@ begin
   for K := 0 to 1 do
   begin
     X0 := K * $118;
-    Cv.Brush.Color := Grey;
-    Cv.FillRect(X0, $160, X0 + 200, $160 + 80);
+    Bar(Cv, X0, $160, X0 + 200, $160 + 80, Grey);
     { black (2,78)-(2,2)-(198,2), white (2,78)-(198,78)-(198,2) }
-    Cv.Brush.Color := clBlack;
-    Cv.FillRect(X0 + 2, $160 + 3, X0 + 3, $160 + 79);
-    Cv.FillRect(X0 + 2, $160 + 2, X0 + 198, $160 + 3);
-    Cv.Brush.Color := clWhite;
-    Cv.FillRect(X0 + 2, $160 + 78, X0 + 198, $160 + 79);
-    Cv.FillRect(X0 + 198, $160 + 3, X0 + 199, $160 + 79);
+    Bar(Cv, X0 + 2, $160 + 3, X0 + 3, $160 + 79, clBlack);
+    Bar(Cv, X0 + 2, $160 + 2, X0 + 198, $160 + 3, clBlack);
+    Bar(Cv, X0 + 2, $160 + 78, X0 + 198, $160 + 79, clWhite);
+    Bar(Cv, X0 + 198, $160 + 3, X0 + 199, $160 + 79, clWhite);
   end;
 end;
 
@@ -755,13 +788,11 @@ begin
      ((Code >= $8D) and (Code <= $94)) or ((Code >= $97) and (Code <= $9E)) or
      ((Code >= $A1) and (Code <= $A8)) or ((Code >= $AB) and (Code <= $B2)) or
      ((Code >= $B5) and (Code <= $BC)) then
-    Cv.CopyRect(Rect(PX, PY, PX + 32, PY + 32), FGrass.Canvas, Rect(PX, PY, PX + 32, PY + 32))
+    Cv.CopyRect(Rect(Z(PX), Z(PY), Z(PX + 32), Z(PY + 32)), FGrass.Canvas,
+      Rect(Z(PX), Z(PY), Z(PX + 32), Z(PY + 32)))
   else
-  begin
     { nothing is drawn into the new memory bitmap: black }
-    Cv.Brush.Color := clBlack;
-    Cv.FillRect(PX, PY, PX + 32, PY + 32);
-  end;
+    Bar(Cv, PX, PY, PX + 32, PY + 32, clBlack);
   if Code = 0 then
   else if ((Code >= 2) and (Code <= 9)) or ((Code >= $0B) and (Code <= $0D)) then
     Masked(Snow + 1000 + Code, PX, PY)
@@ -837,8 +868,7 @@ end;
 { ClearTargetPanel (1048:196c): the right panel's 180 x 64 area grey }
 procedure TBattleForm.ClearTargetPanel;
 begin
-  FScreen.Canvas.Brush.Color := Grey;
-  FScreen.Canvas.FillRect($122, $168, $122 + $B4, $168 + $40);
+  Bar(FScreen.Canvas, $122, $168, $122 + $B4, $168 + $40, Grey);
   Invalidate;
 end;
 
@@ -876,21 +906,21 @@ var
   var
     Ic: TBitmap;
   begin
-    Ic := ResBitmap(BmpName);
+    Ic := ScaledBitmap(BmpName, 0, FF);
     if Ic <> nil then
-      Cv.Draw(X, Y, Ic);                      { Bmp_Draw (1078:0002): SRCCOPY 12 x 12 }
+      Cv.Draw(Z(X), Z(Y), Ic);                { Bmp_Draw (1078:0002): SRCCOPY 12 x 12 }
   end;
 
   procedure Text(X, Y: Integer; const S: RawByteString; Color: TColor);
   begin
     Cv.Font.Color := Color;
-    Cv.TextOut(X, Y, Utf8(S));
+    Cv.TextOut(Z(X), Z(Y), Utf8(S));
   end;
 
   procedure RightText(X, Y: Integer; const S: RawByteString; Color: TColor);
   begin
     Cv.Font.Color := Color;
-    Cv.TextOut(X - Cv.TextWidth(Utf8(S)), Y, Utf8(S));
+    Cv.TextOut(Z(X) - Cv.TextWidth(Utf8(S)), Z(Y), Utf8(S));
   end;
 
   function Compared(V, Base: Byte): TColor;
@@ -913,14 +943,15 @@ begin
   Show2 := (S = B^.SideToMove) or (Cur^.Level > 1);
   P := TBitmap.Create;
   try
-    P.SetSize($B4, $40);
+    P.SetSize(Z($B4), Z($40));
     Cv := P.Canvas;
-    Cv.Brush.Color := Grey;
-    Cv.FillRect(0, 0, $B4, $40);
+    Bar(Cv, 0, 0, $B4, $40, Grey);
     { LOGFONT DS:606c (Seg10_InitBattleFont): Comic Sans MS, -12, bold }
     Cv.Font.Name := 'Comic Sans MS';
-    Cv.Font.Height := -12;
+    Cv.Font.Height := -12 * FF;
     Cv.Font.Style := [fsBold];
+    if FF > 1 then
+      Cv.Font.Quality := fqAntialiased;
     Cv.Brush.Style := bsClear;
     Text(0, 0, PChar(@U.Name), clBlack);
     if Show1 then
@@ -930,21 +961,21 @@ begin
       if L < 3 then
       begin
         N := L;
-        Ord := ResBitmap('BLACKORDEN');
+        Ord := ScaledBitmap('BLACKORDEN', 0, FF);
       end
       else if L <= 5 then
       begin
         N := L - 3;
-        Ord := ResBitmap('YELLOWORDEN');
+        Ord := ScaledBitmap('YELLOWORDEN', 0, FF);
       end
       else
       begin
         N := 0;
-        Ord := ResBitmap('REDORDEN');
+        Ord := ScaledBitmap('REDORDEN', 0, FF);
       end;
       if Ord <> nil then
         for K := 0 to N do
-          Cv.Draw(K * 12, $10, Ord);
+          Cv.Draw(Z(K * 12), Z($10), Ord);
       if L > 6 then
         Text(N * 12 + $10, $10, '+' + IntToStr(L - 6), clBlack);
     end;
@@ -1003,9 +1034,10 @@ begin
     end;
     Icon('HERZ', 0, $34);
     { the hit point bar: a black frame (14,55)-(115,61) }
-    Cv.Brush.Style := bsSolid;
-    Cv.Brush.Color := clBlack;
-    Cv.FrameRect(Rect($0E, $37, $73, $3D));
+    Bar(Cv, $0E, $37, $73, $38, clBlack);
+    Bar(Cv, $0E, $3C, $73, $3D, clBlack);
+    Bar(Cv, $0E, $37, $0F, $3D, clBlack);
+    Bar(Cv, $72, $37, $73, $3D, clBlack);
     if Show2 then
     begin
       if U.MaxHp = 0 then
@@ -1023,7 +1055,7 @@ begin
           Cv.Brush.Color := $00FF00;
         { Rectangle(15, 56, pct + 15, 61) without a pen }
         if Pct > 1 then
-          Cv.FillRect($0F, $38, Pct + $0E, $3C);
+          Bar(Cv, $0F, $38, Pct + $0E, $3C, Cv.Brush.Color);
       end;
       if U.BlindRounds > 0 then
         Icon('BLIND', $78, $34);
@@ -1054,9 +1086,9 @@ begin
     if (U.Ability <> 0) and Show2 then
       RightText($B4, $10, PChar(@PByte(@DS)[$53D8 + U.Ability * $19]), clBlack);
     if Panel <> 0 then
-      FScreen.Canvas.Draw($0A, $168, P)
+      FScreen.Canvas.Draw(Z($0A), Z($168), P)
     else
-      FScreen.Canvas.Draw($122, $168, P);
+      FScreen.Canvas.Draw(Z($122), Z($168), P);
   finally
     P.Free;
   end;
