@@ -333,6 +333,10 @@ function TReplayUI.Call(const Name: string; const Args: array of TUIArg): SmallI
 var
   Entry, R: string;
 begin
+  { InvalidateRect of the main window: an emulated no-op on the original's
+    side, not recorded }
+  if Name = 'InvalidateRect' then
+    Exit(0);
   Entry := Format('%s(%s)', [Name, FormatArgs(Args)]);
   R := Take(Entry);
   if R = '!' then

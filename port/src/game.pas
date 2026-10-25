@@ -103,6 +103,7 @@ begin
         UI.Call('ShowEmailHandOver', [APtr(Parent), APtr(@Players[Target]), APtr(nil)]);
         UI.Call('SaveGame', [APtr(nil), APtr(@Players), APtr(nil)]);
         GameState := 0;
+        UI.Call('InvalidateRect', []);
         Exit;                        { (no Ai_EndTurn) }
       end;
       ResolveWar(Parent, Players, Target);
@@ -120,6 +121,7 @@ begin
   with DS.Game do
   begin
     GameState := 2;
+    UI.Call('InvalidateRect', []);     { the main window: the pattern }
     Ai_ArrangeArmies(Players[CurrentPlayer], 1);
     R := Byte(UI.Call('Battle', [APtr(Parent), APtr(@Players[CurrentPlayer]),
       APtr(@Players[Target]), AByte(CurrentPlayer), AByte(Target), AByte(0)]));
@@ -131,6 +133,7 @@ begin
     else
       AddNews(Players, NumPlayers, Target, CurrentPlayer, 9);
     GameState := 1;
+    UI.Call('InvalidateRect', []);
   end;
 end;
 
@@ -139,6 +142,8 @@ begin
   with DS.Game do
   begin
     GameState := 6;
+    { the main window greyed (the pattern) during the turn start's reports }
+    UI.Call('InvalidateRect', []);
     if PlayerTurnStart(Parent, HWnd, Players, CurrentPlayer, NumPlayers, Year) then
       GameState := 1
     else
@@ -146,6 +151,7 @@ begin
       UI.Call('ShowPasswordFail', [APtr(Parent)]);
       GameState := 0;
     end;
+    UI.Call('InvalidateRect', []);
     { autosave.ksr (the original passes its save buffers) }
     if (DS.OptAutosave <> 0) and (EmailGameQ = 0) then
       UI.Call('SaveGame', [APtr(nil), APtr(@Players), APtr(nil)]);
