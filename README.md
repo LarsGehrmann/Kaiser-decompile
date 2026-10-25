@@ -20,30 +20,52 @@ The game itself is in German.
 
 ## Download and play
 
-Get the zip for your system from the
+The game is not signed by a registered Apple or Microsoft developer, so macOS and Windows
+distrust a zip downloaded in the browser (macOS may refuse to open it at all). The easiest way
+is one command that downloads and installs the latest release; downloads made this way are
+not flagged.
+
+**macOS** (11 or newer, Apple Silicon M1 and later; Intel Macs are not supported yet). In
+*Terminal*:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/LarsGehrmann/Kaiser-decompile/main/install-mac.sh | bash
+```
+
+This puts `Kaiser Remastered.app` into *Applications* and starts it. For Kaiser Classic, end
+the command with `| bash -s classic`.
+
+**Windows** (10 / 11, 64-bit). In *PowerShell* (Start menu → type "PowerShell"):
+
+```powershell
+irm https://raw.githubusercontent.com/LarsGehrmann/Kaiser-decompile/main/install-windows.ps1 | iex
+```
+
+This installs Kaiser Remastered into your user folder (`%LOCALAPPDATA%\Programs`), adds it to
+the Start menu and starts it. For Kaiser Classic, run `$env:KAISER_EDITION = 'Classic'` first.
+
+**Or download the zip** from the
 [Releases page](https://github.com/LarsGehrmann/Kaiser-decompile/releases):
 
 | File | System |
 |---|---|
-| `Kaiser-Remastered-<version>-macOS-arm64.zip` | macOS 11 or newer on Apple Silicon (M1 and later) |
+| `Kaiser-Remastered-<version>-macOS-arm64.zip` | macOS 11 or newer on Apple Silicon |
 | `Kaiser-Remastered-<version>-Windows-x64.zip` | Windows 10 / 11, 64-bit |
 | `Kaiser-Classic-<version>-macOS-arm64.zip` | as above, the faithful port |
 | `Kaiser-Classic-<version>-Windows-x64.zip` | as above, the faithful port |
 
+- macOS: unzip and move the app to *Applications*. If macOS refuses to open it, open
+  *System Settings → Privacy & Security* and click *Open Anyway* below the message about Kaiser,
+  or run `xattr -dr com.apple.quarantine "/Applications/Kaiser Remastered.app"` in Terminal.
+- Windows: unzip the whole folder and start `Kaiser Remastered.exe`; keep the `Kaiser` and
+  `docs` folders next to it. If SmartScreen warns about an unknown publisher: *More info →
+  Run anyway*.
+
 The downloads contain everything needed to play, including the files of the original game
-that the port reads its graphics, dialogs and music from.
-
-**macOS.** Unzip and move `Kaiser Remastered.app` to *Applications*. The app is not notarized
-by Apple, so the first start is refused: open *System Settings → Privacy & Security* and click
-*Open Anyway* below the message about Kaiser (or, in Terminal:
-`xattr -dr com.apple.quarantine "/Applications/Kaiser Remastered.app"`). Intel Macs are not
-supported yet.
-
-**Windows.** Unzip the whole folder and start `Kaiser Remastered.exe`; keep the `Kaiser` and
-`docs` folders next to it. SmartScreen may warn about an unknown publisher: *More info → Run
-anyway*. The Windows builds are cross-compiled on a Mac and have not been tested on a real
-Windows machine yet; please [open an issue](https://github.com/LarsGehrmann/Kaiser-decompile/issues)
-if something does not work.
+that the port reads its graphics, dialogs and music from. The Windows builds are
+cross-compiled on a Mac and have been tried on Windows only briefly; please
+[open an issue](https://github.com/LarsGehrmann/Kaiser-decompile/issues) if something does
+not work.
 
 **Playing.** *Datei → Neues Spiel* starts a game; *Hilfe* opens the original manual
 (German), also reachable from the "?" button of every dialog. The rules are documented in
