@@ -174,8 +174,10 @@ Data layouts: `tools/kaiser_structs.py` (TGameHeader, TPlayer, TUnit) and
   ([docs/phase3.md](docs/phase3.md#how-much-of-the-original-the-tests-run)).
 - Windows builds: not yet tested on Windows.
 
-## Legal
+## License
 
-*Kaiser* and its graphics, texts, music and manual are © Stefan Maday. The original game
+The port's code, the tools and the documentation of this repository are released under the
+[MIT License](LICENSE). This does not cover the original game: *Kaiser* and its graphics,
+texts, music and manual are © Stefan Maday. The original game
 files are not part of this repository. This is a non-commercial fan project to keep the game
 playable on current systems; if you are the rights holder and object, please open an issue.
