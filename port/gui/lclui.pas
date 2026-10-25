@@ -314,7 +314,15 @@ begin
     end;
   end
   else if Name = 'Randomize' then
-    Real48.RandSeed := LongInt(GetTickCount64);      { the clock, like Borland's Randomize }
+    Real48.RandSeed := LongInt(GetTickCount64)       { the clock, like Borland's Randomize }
+  else if Name = 'InvalidateRect' then
+    { the main window after a game state change (the turn start's pattern):
+      painted before the next dialog shows }
+    if MainForm <> nil then
+    begin
+      MainForm.Invalidate;
+      MainForm.Update;
+    end;
 end;
 
 end.
