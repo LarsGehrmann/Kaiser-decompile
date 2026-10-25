@@ -485,6 +485,9 @@ end;
 function TLogicDialog.Buffer(LW, LH: Integer; Back: TColor): TBitmap;
 begin
   Result := TBitmap.Create;
+  { no alpha channel: on Windows what GDI draws into a 32-bit bitmap keeps
+    alpha 0 and read back (ToPix) came out as transparent black }
+  Result.PixelFormat := pf24bit;
   Result.SetSize(Max(1, LW * FF), Max(1, LH * FF));
   Result.Canvas.Brush.Color := Back;
   Result.Canvas.FillRect(0, 0, Result.Width, Result.Height);

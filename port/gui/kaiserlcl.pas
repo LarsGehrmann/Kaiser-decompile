@@ -286,7 +286,7 @@ begin
       begin
         B := TBitmap.Create;
         try
-          B.PixelFormat := pf32bit;
+          B.PixelFormat := pf24bit;           { (opaque on Windows too: Buffer) }
           B.SetSize(Ico.Width, Ico.Height);
           B.Canvas.Brush.Color := DialogBackground;
           B.Canvas.FillRect(0, 0, B.Width, B.Height);
