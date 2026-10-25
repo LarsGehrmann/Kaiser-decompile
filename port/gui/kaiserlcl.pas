@@ -134,7 +134,10 @@ begin
     if ParamStr(I) = '-exe' then
       Exit(ParamStr(I + 1));
   Dir := ExtractFilePath(ParamStr(0));
-  for Result in [Dir + 'kaiser.exe', Dir + 'Kaiser/kaiser.exe', Dir + '../Kaiser/kaiser.exe',
+  { (the releases: in the macOS app's Resources, in Kaiser\ next to the
+    Windows program; the repository: Kaiser/ at its top, not in git) }
+  for Result in [Dir + 'kaiser.exe', Dir + 'Kaiser/kaiser.exe', Dir + '../Resources/Kaiser/kaiser.exe',
+                 Dir + '../Kaiser/kaiser.exe',
                  Dir + '../../Kaiser/kaiser.exe', Dir + '../../../../Kaiser/kaiser.exe',
                  Dir + '../../../../../Kaiser/kaiser.exe'] do
     { (on Windows the port itself may be called Kaiser.exe) }

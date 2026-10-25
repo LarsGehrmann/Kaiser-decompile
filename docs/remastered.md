@@ -83,3 +83,8 @@ Seen and kept: the dark bars when the window's shape differs from the game's; th
 
 Test hooks: `KAISER_WINDOWSIZE=WxH` (start size), `KAISER_RESIZE=WxH` (resized after 3 s),
 `KAISER_STAY=1` (the window stays open after the autopilot, also the help window).
+
+## Downloads
+
+`port/package-mac.sh Remastered VERSION` and `port/package-win.sh Remastered VERSION` build the
+release zips (README.md, "Download and play"); the same scripts on `main` build Kaiser Classic.

@@ -2,21 +2,21 @@
   topic number from the dialogs' "?" buttons, the battle's right click, the
   menu "Hilfe"). Here the topics come from the manual converted by
   tools/help_to_md.py (docs/manual.md, an anchor per context string) and the
-  number -> context string map of extracted/help/KAISER.hpj ([MAP]); a topic
-  is shown as text in a window with its links. }
+  number -> context string map of the help project KAISER.HPJ ([MAP], in
+  docs/help-map.txt); a topic is shown as text in a window with its links. }
 unit HelpView;
 
 {$mode objfpc}{$H+}
 
 interface
 
-{ a file of the repository (docs/manual.md, ...) next to the program or up
-  to six directories above it; '' if missing }
+{ a file of the repository (docs/manual.md, ...) next to the program, up to
+  six directories above it or in the macOS app's Resources; '' if missing }
 function FindDataFile(const Rel: string): string;
 { WinHelp(.., HELP_CONTEXT, Ctx): the topic in a window (False: unknown) }
 function ShowHelpTopic(Ctx: LongInt): Boolean;
-{ the menu "Hilfe": the contents (remastered: in the game, not in another
-  program, which on Windows has none for .md) }
+{ the menu "Hilfe": the contents in the help window (not in another program,
+  which on Windows has none for .md) }
 function ShowHelpContents: Boolean;
 
 implementation
@@ -34,6 +34,8 @@ var
   I: Integer;
 begin
   Dir := ExtractFilePath(ParamStr(0));
+  if FileExists(Dir + '../Resources/' + Rel) then
+    Exit(ExpandFileName(Dir + '../Resources/' + Rel));
   for I := 0 to 6 do
   begin
     if FileExists(Dir + Rel) then
@@ -59,7 +61,6 @@ var
   Hpj: TStringList;
   F, L: string;
   I, P: Integer;
-  InMap: Boolean;
 begin
   if Manual <> nil then
     Exit(True);
@@ -69,19 +70,16 @@ begin
   Manual := TStringList.Create;
   Manual.LoadFromFile(F);
   Map := TStringList.Create;
-  F := FindDataFile('extracted/help/KAISER.hpj');
+  F := FindDataFile('docs/help-map.txt');
   if F <> '' then
   begin
     Hpj := TStringList.Create;
     try
       Hpj.LoadFromFile(F);
-      InMap := False;
       for I := 0 to Hpj.Count - 1 do
       begin
         L := Trim(Hpj[I]);
-        if Copy(L, 1, 1) = '[' then
-          InMap := L = '[MAP]'
-        else if InMap and (L <> '') then
+        if (L <> '') and (L[1] <> ';') then             { 'CONTEXT number' }
         begin
           P := Pos(' ', L);
           if P > 0 then
