@@ -65,8 +65,8 @@ var
   S: RawByteString;
   I: Integer;
 begin
-  if not FileExists(FileName) then
-    Exit;
+  { a missing file gives the defaults, as GetPrivateProfileString does (a
+    fresh installation: autosave, sound and music on) }
   Ini := TIniFile.Create(FileName);
   try
     DS.OptAutosave := OnOff(Ini, 'Geschichtsschreibung', 'an');

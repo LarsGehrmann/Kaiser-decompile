@@ -5,7 +5,7 @@ program KaiserGui;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, Forms, Graphics, SysUtils, MacAppearance, KaiserIni, NERes, KaiserDS, KaiserUI, KaiserLCL, KaiserDlgs, LclUI, MainForm;
+  Interfaces, Forms, Graphics, SysUtils, LCLType, MacAppearance, KaiserIni, NERes, KaiserDS, KaiserUI, KaiserLCL, KaiserDlgs, LclUI, MainForm;
 
 { -snapshot DIALOG OUT.png: the dialog built from its template, as an image
   (checks the rendering without a screen capture) }
@@ -35,6 +35,18 @@ var
 begin
   Application.Initialize;
   UseLightAppearance;
+  if not FileExists(FindExe) then
+  begin
+    { the port draws with the original's resources: they are not in the
+      repository (README.md, "Building from source") }
+    Application.MessageBox(PChar('kaiser.exe (Kaiser 1.23) wurde nicht gefunden.' + LineEnding +
+      LineEnding + 'Legt das Originalspiel in einen Ordner "Kaiser" neben das Programm ' +
+      'oder startet es mit -exe PFAD/kaiser.exe.' + LineEnding + LineEnding +
+      'kaiser.exe (Kaiser 1.23) was not found. Put the original game into a folder ' +
+      '"Kaiser" next to the program or start it with -exe PATH/kaiser.exe.'),
+      'Kaiser', MB_OK or MB_ICONERROR);
+    Halt(1);
+  end;
   Exe := TNEFile.Create(FindExe);
   ResetDataSegment;
   InitGlobals;

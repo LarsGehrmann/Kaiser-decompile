@@ -108,7 +108,10 @@ begin
     if ParamStr(I) = '-exe' then
       Exit(ParamStr(I + 1));
   Dir := ExtractFilePath(ParamStr(0));
-  for Result in [Dir + 'kaiser.exe', Dir + 'Kaiser/kaiser.exe', Dir + '../Kaiser/kaiser.exe',
+  { (the releases: in the macOS app's Resources, in Kaiser\ next to the
+    Windows program; the repository: Kaiser/ at its top, not in git) }
+  for Result in [Dir + 'kaiser.exe', Dir + 'Kaiser/kaiser.exe', Dir + '../Resources/Kaiser/kaiser.exe',
+                 Dir + '../Kaiser/kaiser.exe',
                  Dir + '../../Kaiser/kaiser.exe', Dir + '../../../../Kaiser/kaiser.exe',
                  Dir + '../../../../../Kaiser/kaiser.exe'] do
     { (on Windows the port itself may be called Kaiser.exe) }
@@ -399,9 +402,12 @@ begin
     end
     else if (It.ClassName = 'STATIC') and (It.Style and $F = 3) then
     begin
-      { SS_ICON: the bitmap (or icon) of that name }
+      { SS_ICON: the icon of that name (Windows loads only icons: BOMBE
+        and LAGER are also smaller / grey bitmaps), else a bitmap }
       C := TImage.Create(Self);
-      Bmp := ResBitmap(It.Text);
+      Bmp := nil;
+      if Exe.IconFile(It.Text) = nil then
+        Bmp := ResBitmap(It.Text);
       if Bmp <> nil then
       begin
         TImage(C).Picture.Assign(Bmp);

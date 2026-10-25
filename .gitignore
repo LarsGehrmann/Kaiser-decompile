@@ -13,3 +13,8 @@ tools/lazarus/
 tools/emu/coverage/
 tools/fpcsrc/
 tools/fpcwin/
+
+# the original game and what is generated from it (README.md: not redistributed in git)
+/Kaiser/
+/extracted/
+/ghidra_out/

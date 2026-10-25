@@ -9,7 +9,7 @@ interface
 
 uses
   SysUtils, Classes, Graphics, Controls, Forms, Menus, Dialogs, ExtCtrls, LCLType, LCLIntf,
-  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music;
+  NERes, MainPaint, KaiserTypes, KaiserDS, KaiserSave, KaiserUI, Turn, Game, Actions, KaiserLCL, KaiserIni, Annals, Troops, Intel, Census, Reports, Real48, Music, HelpView;
 
 type
   TKaiserForm = class(TForm)
@@ -304,28 +304,11 @@ begin
 end;
 
 procedure TKaiserForm.CmHilfe;
-var
-  Dir, F: string;
-  I: Integer;
 begin
   { CmHilfe / CmUeberDieHilfe (1000:38ed / 38cf) call WinHelp on
-    KAISER.HLP; here the manual converted by tools/help_to_md.py }
-  if GetEnvironmentVariable('KAISER_AUTOPILOT') <> '' then
-    Exit;
-  Dir := ExtractFilePath(ParamStr(0));
-  F := '';
-  for I := 0 to 6 do
-  begin
-    if FileExists(Dir + 'docs/manual.md') then
-    begin
-      F := ExpandFileName(Dir + 'docs/manual.md');
-      Break;
-    end;
-    Dir := Dir + '../';
-  end;
-  if F <> '' then
-    OpenDocument(F)
-  else
+    KAISER.HLP; here the contents of the manual converted by
+    tools/help_to_md.py, in the help window }
+  if not ShowHelpContents then
     Application.MessageBox('Die Hilfe (KAISER.HLP) ist in dieser Fassung nicht enthalten; ' +
       'docs/manual.md wurde nicht gefunden.', 'Kaiser', MB_OK);
 end;

@@ -104,8 +104,8 @@ GUI links with `-k-ld_classic`.
   (501, 503: WinHelp KAISER.HLP) opens `docs/manual.md` (tools/help_to_md.py) when found next to
   the program or in a parent folder, else a message. The **"?" buttons** of the dialogs and the
   battle's right click (WinHelp HELP_CONTEXT, topic n) show the topic in a window
-  (`port/gui/helpview.pas`: the number → context string map of `extracted/help/KAISER.hpj`
-  [MAP], the anchor of `docs/manual.md`); the dialog types whose port does not keep the help
+  (`port/gui/helpview.pas`: the number → context string map of the help project KAISER.HPJ
+  [MAP], kept as `docs/help-map.txt`, the anchor of `docs/manual.md`); the dialog types whose port does not keep the help
   context (+0x2e) take the constants of their `HelpDlg.Init` calls.
 - **Right click** on a unit of the map: `ShowUnitLookDlg` (1040:330f).
 - **Scroll bars** on macOS: `port/gui/winscroll.pas` draws them like Windows 3.1 (arrows one
@@ -186,14 +186,21 @@ fourth line of RANGLISTENDLG (7 units high in the template).
   appearance. Floating point: `Extended` is `Double` on win64 as on arm64; the game's
   arithmetic is the integer Real48 emulation anyway.
 - **Build and package.** `port/build-win.sh` → `port/bin/win64/` (Kaiser.exe, ksrtool,
-  ksrsim, ksrbattle, real48test, ruletest); `port/package-win.sh` → `port/bin/Kaiser-win64/`
-  and the zip: `KaiserPort.exe` (Windows ignores case, so not `Kaiser.exe` next to the
-  original's `kaiser.exe`), the original in `Kaiser\`, the vectors in `tests\`, the help
-  (`docs\manual.md`, `extracted\help\KAISER.hpj`) and `run-tests.bat` (the checks of
-  "Running").
+  ksrsim, ksrbattle, real48test, ruletest). `port/package-win.sh EDITION VERSION` → the
+  download `port/bin/release/Kaiser-EDITION-VERSION-Windows-x64.zip`: `Kaiser EDITION.exe`,
+  the original's `kaiser.exe` and `kaiser.mid` in `Kaiser\`, the help in `docs\`.
+  `port/package-win.sh --tests` → `port/bin/Kaiser-win64-tests.zip`: the test programs, the
+  vectors in `tests\`, the savegames and `run-tests.bat` (the checks of "Running").
+- **macOS download.** `port/package-mac.sh EDITION VERSION` →
+  `port/bin/release/Kaiser-EDITION-VERSION-macOS-arm64.zip`: the app with the original's
+  `kaiser.exe` and `kaiser.mid` and the help in `Contents/Resources` (`FindExe` and
+  `FindDataFile` look there).
 - **Open:** running `run-tests.bat` and a game on Windows 11 (or under Wine).
 
 ## Running
+
+The tests need the original game and its savegames in `Kaiser/` at the top of the repository
+(not in git: copy your Kaiser 1.23 folder there).
 
 ```sh
 port/build.sh                                   # needs: brew install fpc
