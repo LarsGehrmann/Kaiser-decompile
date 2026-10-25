@@ -503,13 +503,16 @@ var
 begin
   { the dialog colour made transparent: macOS converts a stretched bitmap's
     colours differently from the window's own background (a lighter box
-    around the troop grids) }
+    around the troop grids). Not on Windows: there the colours match, and a
+    picture transparent all over (the empty unit card) showed black }
   P := ToPix(B);
+  {$ifdef darwin}
   Key := $FF000000 or (LongWord(Red(DialogBackground)) shl 16) or
     (LongWord(Green(DialogBackground)) shl 8) or LongWord(Blue(DialogBackground));
   for I := 0 to High(P.Px) do
     if P.Px[I] = Key then
       P.Px[I] := 0;
+  {$endif}
   T := FromPix(P);
   if Img = nil then
   begin
